@@ -88,13 +88,13 @@ class SubmeshHelperSubset:
         self.referenced_verts = referenced_verts
 
     def add_triangle(self, tri_idx:int):
-        self.referenced_triangles.add(int)
+        self.referenced_triangles.add(tri_idx)
         for vert_idx in self.base.triangles[tri_idx]:
             self.referenced_verts.add(vert_idx)
 
     @staticmethod
     def empty(base: SubmeshHelper):
-        return SubmeshHelperSubset(base, set(), set())
+        return SubmeshHelperSubset(base, set([]), set([]))
     @staticmethod
     def complete(base: SubmeshHelper):
         return SubmeshHelperSubset(base, set(range(len(base.triangles))), set(range(len(base.vertices))))
@@ -336,10 +336,11 @@ class GMDExporter:
 
                     def bonesplit(x: SubmeshHelperSubset):
                         bones = set()
+                        print(x.referenced_triangles)
                         for tri in x.referenced_triangles:
                             tri_bones = x.base.triangle_referenced_bones(tri)
                             if len(tri_bones) + len(bones) < 32:
-                                bones += tri_bones
+                                bones = bones.union(tri_bones)
 
                         x_withbones = SubmeshHelperSubset.empty(x.base)
                         x_withoutbones = SubmeshHelperSubset.empty(x.base)

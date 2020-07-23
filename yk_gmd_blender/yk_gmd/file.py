@@ -333,7 +333,12 @@ class GMDFileIOAbstraction:
     def submeshes(self, submeshes: List[GMDSubmesh]):
        self._submeshes = submeshes
 
-
+    @property
+    def texture_names(self):
+        return self._texture_names[:]
+    @texture_names.setter
+    def texture_names(self, new_texture_names):
+        self._texture_names = new_texture_names
     # @property
     # def parts(self) -> List[GMDPart]:
     #     return self._parts[:]
@@ -355,6 +360,7 @@ class GMDFileIOAbstraction:
         self.build_abstract_vertex_buffers()
         self.build_abstract_materials()
         self.build_abstract_parts_and_submeshes()
+        self._texture_names = [t.text for t in self.structs.texture_names]
 
         #self.unk10_strs = self.header.unk10.extract_strings(self.data)
         #self.submesh_bone_lists = self.header.submesh_bone_lists.extract_strings(self.data)
@@ -539,6 +545,18 @@ class GMDFileIOAbstraction:
             new_unk10_bytes += struct.pack(">H", item)
         self.structs.unk10.items = [ctypes.c_uint8(x) for x in new_unk10_bytes]
         print(self.structs.unk10.items)
+
+        for (i,t) in enumerate(self._texture_names):
+            encoded_bytes = bytearray(t.encode("ascii"))
+            if len(encoded_bytes) < 30:
+                encoded_bytes += bytearray([0] * (30 - len(encoded_bytes)))
+            print(encoded_bytes)
+            print(bytes(encoded_bytes))
+            self.structs.texture_names.items[i] = IdStringStruct()
+            self.structs.texture_names.items[i].text_internal = bytes(encoded_bytes)
+            print(self.structs.texture_names.items[i].text_internal)
+            self.structs.texture_names.items[i].id = sum(encoded_bytes)
+        print(self.structs.texture_names.items)
 
         # Packing into a file should
             # - Update vertex buffers
