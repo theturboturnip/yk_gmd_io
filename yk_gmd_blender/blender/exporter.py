@@ -277,7 +277,7 @@ class GMDExporter:
                         weights_list[3],
                     )
 
-                    v.uv = uv_blender_to_yk_space(l[uv_layer].uv)
+                    v.uv0 = uv_blender_to_yk_space(l[uv_layer].uv)
 
                     return v
 
@@ -403,7 +403,8 @@ class GMDExporter:
                         new_v.pos = v.pos
                         new_v.normal = v.normal
                         new_v.tangent = v.tangent
-                        new_v.uv = v.uv
+                        new_v.uv0 = v.uv0
+                        new_v.uv1 = v.uv1
                         new_v.col0 = v.col0
                         new_v.col1 = v.col1
                         new_v.weights = ((

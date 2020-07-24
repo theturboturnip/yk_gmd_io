@@ -14,6 +14,14 @@ class Vec3:
     def as_array(self) -> List[float]:
         return [self.x, self.y, self.z]
 
+    def as_fixed_point(self, is_normal: bool) -> List[int]:
+        if is_normal:
+            return [int((self.x + 1) / 2 * 255),
+                    int((self.y + 1) / 2 * 255),
+                    int((self.z + 1) / 2 * 255),
+                    ]
+        return [int(self.x * 255), int(self.y * 255), int(self.z * 255)]
+
     def __getitem__(self, item) -> float:
         return [self.x, self.y, self.z][item]
 
@@ -31,6 +39,7 @@ class Vec3:
 
     def min(self, other):
         return Vec3(min(self.x, other.x), min(self.y, other.y), min(self.z, other.z))
+
     def max(self, other):
         return Vec3(max(self.x, other.x), max(self.y, other.y), max(self.z, other.z))
 
@@ -52,6 +61,16 @@ class Vec4(Vec3):
 
     def as_array(self) -> List[float]:
         return [self.x, self.y, self.z, self.w]
+
+    def as_fixed_point(self, is_normal: bool) -> List[int]:
+        # Normals and tangents are stored in the file with 0.5 at the midpoint i.e. 0 => -1, 0.5 => 0, 1 => 1
+        if is_normal:
+            return [int((self.x + 1) / 2 * 255),
+                    int((self.y + 1) / 2 * 255),
+                    int((self.z + 1) / 2 * 255),
+                    int((self.w + 1) / 2 * 255),
+                    ]
+        return [int(self.x * 255), int(self.y * 255), int(self.z * 255), int(self.w * 255)]
 
     def __getitem__(self, item) -> float:
         return [self.x, self.y, self.z, self.w][item]

@@ -223,27 +223,28 @@ class GMDImporter:
             # TODO Ignoring tangents
 
             # TODO Color0
-            if vertex_layout.col0_en:
-                col0_layer = bm.loops.layers.color.new("color0")
+            if vertex_layout.col0_type:
+                col0_layer = bm.loops.layers.color.new("col0")
                 for face in bm.faces:
                     for loop in face.loops:
                         color = submesh.vertices[loop.vert.index].col0
                         loop[col0_layer] = (color.x, color.y, color.z, color.w)
 
             # TODO Color1
-            if vertex_layout.col1_en:
-                col1_layer = bm.loops.layers.color.new("color1")
+            if vertex_layout.col1_type:
+                col1_layer = bm.loops.layers.color.new("col1")
                 for face in bm.faces:
                     for loop in face.loops:
                         color = submesh.vertices[loop.vert.index].col1
                         loop[col1_layer] = (color.x, color.y, color.z, color.w)
 
             # If UVs are present, add them
-            if vertex_layout.uv_en:
+            # TODO add the second set of UVs
+            if vertex_layout.uv_type:
                 uv_layer = bm.loops.layers.uv.new("Texcoords")
                 for face in bm.faces:
                     for loop in face.loops:
-                        original_uv = submesh.vertices[loop.vert.index].uv
+                        original_uv = submesh.vertices[loop.vert.index].uv0
                         loop[uv_layer].uv = uv_yk_to_blender_space(original_uv)
 
             bmeshes.append(bm)

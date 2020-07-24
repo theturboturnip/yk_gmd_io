@@ -66,9 +66,9 @@ class VertexBufferLayoutStruct(BaseBigEndianStructure):
         if name == "unk":
             result = self.get_vector_type(0x11)
             return result if result != 4 else 3
-        if name == "diffuse":
+        if name == "col0":
             return self.get_vector_type(0x16)
-        if name == "specular":
+        if name == "col1":
             return self.get_vector_type(0x19)
         if name == "uv":
             if not vertex_packing & (1 << 0x1B):
@@ -109,14 +109,14 @@ class VertexBufferLayoutStruct(BaseBigEndianStructure):
             ("normal", 0x400),
             ("tangent", 0x2000),
             ("unk", 0x10000),
-            ("diffuse", 0x0020_0000),
-            ("specular", 0x0100_0000),
+            ("col0", 0x0020_0000),
+            ("col1", 0x0100_0000),
             ("uv",   0xf000_0000),
         ]
 
         for (name, bitmask) in vertex_layout_bits:
             vertex_elems[name] = 0 if int(self.vertex_packing) & bitmask else -1
-        for (name) in vertex_elems:
+        for name in vertex_elems:
             if vertex_elems[name] == -1:
                 vertex_elems[name] = 0
                 continue
@@ -131,7 +131,7 @@ class VertexBufferLayoutStruct(BaseBigEndianStructure):
             normal_type=vertex_elems["normal"],
             tangent_type=vertex_elems["tangent"],
             unk_type=vertex_elems["unk"],
-            diffuse_type=vertex_elems["diffuse"],
-            specular_type=vertex_elems["specular"],
+            col0_type=vertex_elems["col0"],
+            col1_type=vertex_elems["col1"],
             uv_type=vertex_elems["uv"],
         )
