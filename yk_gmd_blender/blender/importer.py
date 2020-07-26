@@ -182,13 +182,15 @@ class GMDImporter:
             for i,v in enumerate(submesh.vertices):
                 idxs.append((bmesh_idx, i))
                 vert = bm.verts.new(yk_to_blender_space(v.pos))
-                vert.normal = yk_to_blender_space(v.normal)
+                if vertex_layout.normal_type:
+                    vert.normal = yk_to_blender_space(v.normal)
                 #if vertex_layout.tangent_en:
                 #    vert.tangent = pos_to_blender(v.tangent)
                 if self.load_bones:
-                    for bone_weight in v.weights:
-                        if bone_weight.weight > 0:
-                            vert[deform][submesh.relevant_bones[bone_weight.bone]] = bone_weight.weight
+                    if vertex_layout.weights_type:
+                        for bone_weight in v.weights:
+                            if bone_weight.weight > 0:
+                                vert[deform][submesh.relevant_bones[bone_weight.bone]] = bone_weight.weight
                 #bmesh_idx += 1
             # Set up the indexing table inside the bmesh so lookups work
             bm.verts.ensure_lookup_table()
@@ -224,7 +226,7 @@ class GMDImporter:
 
             # TODO Color0
             if vertex_layout.col0_type:
-                col0_layer = bm.loops.layers.color.new("col0")
+                col0_layer = bm.loops.layers.color.new("color0")
                 for face in bm.faces:
                     for loop in face.loops:
                         color = submesh.vertices[loop.vert.index].col0
@@ -232,7 +234,7 @@ class GMDImporter:
 
             # TODO Color1
             if vertex_layout.col1_type:
-                col1_layer = bm.loops.layers.color.new("col1")
+                col1_layer = bm.loops.layers.color.new("color1")
                 for face in bm.faces:
                     for loop in face.loops:
                         color = submesh.vertices[loop.vert.index].col1

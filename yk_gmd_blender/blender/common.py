@@ -17,6 +17,9 @@ def blender_to_yk_space(vec: Vector):
 def blender_to_yk_space_vec4(vec: Vector, w: float):
     return Vec4(vec[0], vec[2], vec[1], w)
 
+def blender_to_yk_color(vec: Vector):
+    return Vec4(vec[0], vec[1], vec[2], vec[3])
+
 def uv_yk_to_blender_space(uv: Tuple[float, float]):
     return (uv[0], 1 - uv[1])
 

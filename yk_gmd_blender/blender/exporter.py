@@ -6,7 +6,7 @@ from typing import Dict, List, Callable, Tuple, Set, Generator
 
 import bmesh
 from yk_gmd_blender.blender.common import root_name_for_gmd_file, material_name, blender_to_yk_space, \
-    uv_blender_to_yk_space, blender_to_yk_space_vec4
+    uv_blender_to_yk_space, blender_to_yk_space_vec4, blender_to_yk_color
 from yk_gmd_blender.blender.error import GMDError
 from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
 from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
@@ -243,12 +243,12 @@ class GMDExporter:
 
                     # TODO: Color0, Color1
                     if col0_layer:
-                        v.col0 = l[col0_layer]
+                        v.col0 = blender_to_yk_color(l[col0_layer])
                     else:
                         v.col0 = Vec4(1, 1, 1, 1)
 
                     if col1_layer:
-                        v.col1 = l[col1_layer]
+                        v.col1 = blender_to_yk_color(l[col1_layer])
                     else:
                         v.col1 = Vec4(1, 1, 1, 1)
 
