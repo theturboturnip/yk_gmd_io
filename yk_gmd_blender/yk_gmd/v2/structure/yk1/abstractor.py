@@ -250,7 +250,8 @@ def _generate_legacy_submesh_list(scene: GMDScene) -> List[GMDSubmesh]:
     v = GMDVertex()
     v.pos = Vec3(0, 0, 0)
     v.normal = v.tangent = Vec4(0, 0, 0, 1)
-    v.uv = (0, 0)
+    v.uv0 = (0, 0)
+    v.uv1 = (0, 0)
     v.col0 = Vec4(0, 0, 0, 0)
     v.col1 = Vec4(0, 0, 0, 0)
     v.weights = (
