@@ -242,11 +242,18 @@ class GMDImporter:
 
             # If UVs are present, add them
             # TODO add the second set of UVs
-            if vertex_layout.uv_type:
-                uv_layer = bm.loops.layers.uv.new("Texcoords")
+            if vertex_layout.uv0_type:
+                uv_layer = bm.loops.layers.uv.new("TexCoords0")
                 for face in bm.faces:
                     for loop in face.loops:
                         original_uv = submesh.vertices[loop.vert.index].uv0
+                        loop[uv_layer].uv = uv_yk_to_blender_space(original_uv)
+
+            if vertex_layout.uv1_type:
+                uv_layer = bm.loops.layers.uv.new("TexCoords1")
+                for face in bm.faces:
+                    for loop in face.loops:
+                        original_uv = submesh.vertices[loop.vert.index].uv1
                         loop[uv_layer].uv = uv_yk_to_blender_space(original_uv)
 
             bmeshes.append(bm)

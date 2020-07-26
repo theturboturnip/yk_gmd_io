@@ -1,8 +1,19 @@
 import struct
 from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import Tuple, List, Optional
 
 from .vector import Vec3, Vec4
+
+
+class VecTypes(IntEnum):
+    FIXED_POINT = 1
+    VECTOR2 = 2
+    VECTOR3 = 3
+    VECTOR4 = 4
+    VECTOR2_HALF = 5
+    VECTOR3_HALF = 6
+    VECTOR4_HALF = 7
 
 
 @dataclass
@@ -37,107 +48,69 @@ class GMDVertex:
 class GMDVertexBufferLayout:
     pos_type: int
     weights_type: int
-    bones_en: int
+    bones_type: int
     normal_type: int
     tangent_type: int
     unk_type: int
     col0_type: int
     col1_type: int
-    uv_type: int
+    uv0_type: int
+    uv1_type: int
 
-    def get_vector_format_string(self, value):
-        format_string = ""
-        for i in range(value):
-            if value >= 3:
-                format_string += "f"
-            elif value == 2:
-                format_string += "ee"
-            else:
-                format_string += "BBBB"
-        return format_string
+    @staticmethod
+    def get_vector_format_string(value):
+        if value == VecTypes.FIXED_POINT:
+            return "BBBB"
+        if value == VecTypes.VECTOR2:
+            return "ff"
+        if value == VecTypes.VECTOR3:
+            return "fff"
+        if value == VecTypes.VECTOR4:
+            return "ffff"
+        if value == VecTypes.VECTOR2_HALF:
+            return "ee"
+        if value == VecTypes.VECTOR3_HALF:
+            return "eee"
+        if value == VecTypes.VECTOR4_HALF:
+            return "eeee"
+        return ""
 
     def get_type_format_string(self, name):
-        format_string = ">"
         if name == "pos":
-            for i in range(self.pos_type):
-                format_string += "f" if self.pos_type - 2 > 0 else "e"
+            return self.get_vector_format_string(int(self.pos_type))
         if name == "weights":
-            format_string += self.get_vector_format_string(self.weights_type)
+            return self.get_vector_format_string(int(self.weights_type))
         if name == "bones":
-            format_string += "BBBB"
+            return self.get_vector_format_string(int(self.bones_type))
         if name == "normal":
-            format_string += self.get_vector_format_string(self.normal_type)
+            return self.get_vector_format_string(int(self.normal_type))
         if name == "tangent":
-            format_string += self.get_vector_format_string(self.tangent_type)
+            return self.get_vector_format_string(int(self.tangent_type))
         if name == "unk":
-            format_string += self.get_vector_format_string(self.unk_type)
+            return self.get_vector_format_string(int(self.unk_type))
         if name == "col0":
-            format_string += self.get_vector_format_string(self.col0_type)
+            return self.get_vector_format_string(int(self.col0_type))
         if name == "col1":
-            format_string += self.get_vector_format_string(self.col1_type)
-        if name == "uv":
-            format_string = ""
-            index = [(self.uv_type >> 4, 0), (self.uv_type >> 12, 1), (self.uv_type >> 20, 2)]
-            index.sort(key=lambda tup: tup[0], reverse=True)
-            for i in range(len(index)):
-                if index[i][1] == 0:
-                    if self.uv_type & 0x0F:
-                        for t in range(self.uv_type & 0x0F):
-                            format_string += "BBxx"
-                        format_string += "/"
-                elif index[i][1] == 1:
-                    if (self.uv_type >> 8) & 0x0F:
-                        for t in range((self.uv_type >> 8) & 0x0F):
-                            format_string += "ee"
-                        format_string += "/"
-                else:
-                    if (self.uv_type >> 16) & 0x0F:
-                        for t in range((self.uv_type >> 16) & 0x0F):
-                            format_string += "ff"
-                        format_string += "/"
-        return format_string
+            return self.get_vector_format_string(int(self.col1_type))
+        if name == "uv0":
+            return self.get_vector_format_string(int(self.uv0_type))
+        if name == "uv1":
+            return self.get_vector_format_string(int(self.uv1_type))
+        return ""
 
     def calc_bytes_per_vertex(self):
         bpv = 0
-        if self.pos_type:
-            # pos can be 3 or 4 * 16bit or 32bit floats
-            bpv += 4 * self.pos_type if self.pos_type != 1 else 6
-        if self.weights_type:
-            # weights can be 4 * 16bit or 32bit floats, or 4 * 8bit fixed point
-            bpv += 4 * self.weights_type
-        if self.bones_en:
-            # bone ids are 4 * 1 byte
-            bpv += 4 * self.bones_en
-        if self.normal_type:
-            # normal can be 4 * 16bit or 3 * 32bit floats, or 4 * 8bit fixed point
-            bpv += 4 * self.normal_type
-        if self.tangent_type:
-            # tangent can be 4 * 16bit or 3 * 32bit floats, or 4 * 8bit fixed point
-            bpv += 4 * self.tangent_type
-        if self.unk_type:
-            # unk can be 4 * 16bit or 3 * 32bit floats, or 4 * 8bit fixed point
-            bpv += 4 * self.unk_type
-        if self.col0_type:
-            # col0 can be 4 * 16bit or 32bit floats, or 4 * 8bit fixed point
-            # col0 is diffuse and opacity for GMD versions up to 0x03000B
-            bpv += 4 * self.col0_type
-        if self.col1_type:
-            # col1 can be 4 * 16bit or 32bit floats, or 4 * 8bit fixed point
-            # col1 is specular for GMD versions up to 0x03000B
-            bpv += 4 * self.col1_type
-        if self.uv_type:
-            # uv can be 2 * 16bit or 32bit floats, or 4 * 8bit fixed point
-            # there can be multiple uv for a single vertex
-            bpv += 4 * (self.uv_type & 0x0F)
-            bpv += 4 * ((self.uv_type >> 8) & 0x0F)
-            bpv += 8 * ((self.uv_type >> 16) & 0x0F)
+        for vec_type in vars(self).values():
+            if vec_type:
+                bpv += struct.calcsize(">" + self.get_vector_format_string(int(vec_type)))
         return bpv
 
     def unpack_vertices(self, vertex_count: int, data: bytes, start_offset=0) -> List[GMDVertex]:
         bpv = self.calc_bytes_per_vertex()
         format_strings = {}
-        for name in ["pos", "weights", "normal", "tangent", "col0", "col1", "uv"]:
-            format_strings[name] = (self.get_type_format_string(name))
+        for name in ["pos", "weights", "normal", "tangent", "col0", "col1", "uv0", "uv1"]:
+            # TODO change ">" to account for different endianness
+            format_strings[name] = ">" + self.get_type_format_string(name)
 
         vertices: List[GMDVertex] = [None] * vertex_count
         for i in range(vertex_count):
@@ -157,6 +130,8 @@ class GMDVertexBufferLayout:
                 else:
                     weight_bytes = Vec4(*[x for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
                 offset += struct.calcsize(format_string)
+
+                # this assumes that bones are present whenever weights are
                 bone_bytes = struct.unpack_from(">BBBB", vtx_data, offset=offset)
                 vertex.weights = (
                     BoneWeight(bone=bone_bytes[0], weight=weight_bytes[0]),
@@ -186,36 +161,31 @@ class GMDVertexBufferLayout:
             if self.col0_type:
                 format_string = format_strings["col0"]
                 if "B" in format_string:
-                    vertex.col0 = Vec4(
-                        *[x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
+                    vertex.col0 = Vec4(*[x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
                 else:
                     vertex.col0 = Vec4(*[x for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
                 offset += struct.calcsize(format_string)
             if self.col1_type:
                 format_string = format_strings["col1"]
                 if "B" in format_string:
-                    vertex.col1 = Vec4(
-                        *[x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
+                    vertex.col1 = Vec4(*[x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
                 else:
                     vertex.col1 = Vec4(*[x for x in struct.unpack_from(format_string, vtx_data, offset=offset)])
                 offset += struct.calcsize(format_string)
-            if self.uv_type:
-                format_string = format_strings["uv"]
-                format_list = format_string.split("/")
-                if "B" in format_list[0]:
-                    vertex.uv0 = [x / 255.0 for x in struct.unpack_from(">" + format_list[0], vtx_data, offset=offset)]
+            if self.uv0_type:
+                format_string = format_strings["uv0"]
+                if "B" in format_string:
+                    vertex.uv0 = [x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)]
                 else:
-                    vertex.uv0 = [x for x in struct.unpack_from(">" + format_list[0], vtx_data, offset=offset)]
-
-                offset += struct.calcsize(">" + format_list[0])
-                vertex.uv1 = [0, 0]
-                if len(format_list) > 2:
-                    if "B" in format_list[1]:
-                        vertex.uv1 = [x / 255.0 for x in
-                                      struct.unpack_from(">" + format_list[1], vtx_data, offset=offset)]
-                    else:
-                        vertex.uv1 = [x for x in struct.unpack_from(">" + format_list[1], vtx_data, offset=offset)]
-                    offset += struct.calcsize(">" + format_list[1])
+                    vertex.uv0 = [x for x in struct.unpack_from(format_string, vtx_data, offset=offset)]
+                offset += struct.calcsize(format_string)
+            if self.uv1_type:
+                format_string = format_strings["uv1"]
+                if "B" in format_string:
+                    vertex.uv1 = [x / 255.0 for x in struct.unpack_from(format_string, vtx_data, offset=offset)]
+                else:
+                    vertex.uv1 = [x for x in struct.unpack_from(format_string, vtx_data, offset=offset)]
+                offset += struct.calcsize(format_string)
 
             vertices[i] = vertex
         return vertices
@@ -223,8 +193,9 @@ class GMDVertexBufferLayout:
     def pack_vertices(self, vertices: List[GMDVertex]) -> bytes:
         bs = bytearray()
         format_strings = {}
-        for name in ["pos", "weights", "normal", "tangent", "col0", "col1", "uv"]:
-            format_strings[name] = (self.get_type_format_string(name))
+        for name in ["pos", "weights", "normal", "tangent", "col0", "col1", "uv0", "uv1"]:
+            # TODO change ">" to account for different endianness
+            format_strings[name] = ">" + self.get_type_format_string(name)
 
         for vertex in vertices:
             if self.pos_type:
@@ -284,20 +255,18 @@ class GMDVertexBufferLayout:
                 else:
                     bs += struct.pack(format_string, vertex.col1.x, vertex.col1.y, vertex.col1.z,
                                       vertex.col1.w)
-            if self.uv_type:
-                format_string = format_strings["uv"]
-                format_list = format_string.split("/")
-
-                if "B" in format_list[0]:
-                    bs += struct.pack(">" + format_list[0], int(vertex.uv0[0] * 255), int(vertex.uv0[1] * 255))
+            if self.uv0_type:
+                format_string = format_strings["uv0"]
+                if "B" in format_string:
+                    bs += struct.pack(format_string, int(vertex.uv0[0] * 255), int(vertex.uv0[1] * 255))
                 else:
-                    bs += struct.pack(">" + format_list[0], vertex.uv0[0], vertex.uv0[1])
-
-                if len(format_list) > 2:
-                    if "B" in format_list[0]:
-                        bs += struct.pack(">" + format_list[1], int(vertex.uv1[0] * 255), int(vertex.uv1[1] * 255))
-                    else:
-                        bs += struct.pack(">" + format_list[1], vertex.uv1[0], vertex.uv1[1])
+                    bs += struct.pack(format_string, vertex.uv0[0], vertex.uv0[1])
+            if self.uv1_type:
+                format_string = format_strings["uv1"]
+                if "B" in format_string:
+                    bs += struct.pack(format_string, int(vertex.uv1[0] * 255), int(vertex.uv1[1] * 255))
+                else:
+                    bs += struct.pack(format_string, vertex.uv1[0], vertex.uv1[1])
         return bytes(bs)
 
 

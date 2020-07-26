@@ -219,12 +219,11 @@ class GMDExporter:
 
             material_submeshes = [SubmeshHelper() for m in self.gmd_file.materials]
 
-            uv_layer = bm.loops.layers.uv.active
-            if not uv_layer:
-                raise GMDError(f"Mesh '{mesh_obj.name}' doesn't have UV coordinates")
             deform_layer = bm.verts.layers.deform.active
             col0_layer = bm.loops.layers.color["color0"] if "color0" in bm.loops.layers.color else None
             col1_layer = bm.loops.layers.color["color1"] if "color1" in bm.loops.layers.color else None
+            uv0_layer = bm.loops.layers.uv["TexCoords0"] if "TexCoords0" in bm.loops.layers.uv else None
+            uv1_layer = bm.loops.layers.uv["TexCoords1"] if "TexCoords1" in bm.loops.layers.uv else None
 
             for tri_loops in bm.calc_loop_triangles():
                 l0 = tri_loops[0]
@@ -277,7 +276,15 @@ class GMDExporter:
                         weights_list[3],
                     )
 
-                    v.uv0 = uv_blender_to_yk_space(l[uv_layer].uv)
+                    if uv0_layer:
+                        v.uv0 = uv_blender_to_yk_space(l[uv0_layer].uv)
+                    else:
+                        v.uv0 = (0, 0)
+
+                    if uv1_layer:
+                        v.uv1 = uv_blender_to_yk_space(l[uv1_layer].uv)
+                    else:
+                        v.uv1 = (0, 0)
 
                     return v
 
