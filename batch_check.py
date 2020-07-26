@@ -2,7 +2,7 @@ import argparse
 import glob
 from pathlib import Path
 
-from yk_gmd_blender.yk_gmd.file import GMDFile
+from yk_gmd_blender.yk_gmd import GMDFile
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

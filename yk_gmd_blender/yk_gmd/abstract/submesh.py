@@ -22,7 +22,7 @@ class GMDSubmesh:
     vertices: List[GMDVertex]
 
     triangle_indices: List[int]
-    triangle_strip_indices1: List[int]
-    triangle_strip_indices2: List[int]
+    triangle_strip_noreset_indices: List[int]
+    triangle_strip_reset_indices: List[int]
 
     # TODO: columns 12 and 13 in the struct aren't present

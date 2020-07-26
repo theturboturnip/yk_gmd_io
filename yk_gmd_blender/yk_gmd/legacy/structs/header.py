@@ -1,6 +1,6 @@
 from ctypes import *
 
-from yk_gmd_blender.yk_gmd.structs.transform_12float import Transform12Float
+from .transform_12float import Transform12Float
 from .varlen_data_array_ptr import VarLenDataArrayPtrStruct
 from .array_pointer import array_pointer_of
 from ._base.base_structure import BaseBigEndianStructure

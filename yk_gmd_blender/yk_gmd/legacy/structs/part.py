@@ -1,6 +1,6 @@
 from ctypes import *
 
-from yk_gmd_blender.yk_gmd.structs.transform_12float import Transform12Float
+from .transform_12float import Transform12Float
 from ._base.base_structure import BaseBigEndianStructure
 
 

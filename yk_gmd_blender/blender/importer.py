@@ -1,11 +1,12 @@
+import bpy
 import math
 from typing import Dict, List
 
 from yk_gmd_blender.blender.common import material_name, uv_yk_to_blender_space, yk_to_blender_space
 from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterialTextureIndex
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec4
-from yk_gmd_blender.yk_gmd.file import GMDFile, GMDFileIOAbstraction
-import bpy
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 
 
 class GMDImporter:
@@ -20,7 +21,11 @@ class GMDImporter:
         with open(self.filepath, "rb") as in_file:
             data = in_file.read()
 
-        self.gmd_file = GMDFileIOAbstraction(GMDFile(data).structs)
+        header, big_endian = extract_base_header(data)
+        self.big_endian = big_endian
+        contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
+        self.scene = convert_YK1_to_legacy_abstraction(contents)
+        #self.gmd_file = #GMDFileIOAbstraction(GMDFile(data).structs)
 
     def check(self) -> bool:
         pass # TODO: Do checks here?
@@ -31,8 +36,8 @@ class GMDImporter:
 
         pos_to_blender = lambda p: (p.x, p.z, p.y)
 
-        armature = bpy.data.armatures.new(f"{self.gmd_file.name}")
-        armature_object = bpy.data.objects.new(f"{self.gmd_file.name}", armature)
+        armature = bpy.data.armatures.new(f"{self.scene.name}")
+        armature_object = bpy.data.objects.new(f"{self.scene.name}", armature)
         bpy.context.scene.collection.objects.link(armature_object)
 
         bpy.context.view_layer.objects.active = armature_object
@@ -93,7 +98,7 @@ class GMDImporter:
             for child_bone_gmd in bone_gmd.children:
                 recursive_bone_create(bone, bone_gmd_transform, child_bone_gmd)
 
-        for root in self.gmd_file.bone_roots:
+        for root in self.scene.bone_roots:
             recursive_bone_create(None, None, root)
 
         # Exit edit mode
@@ -109,7 +114,7 @@ class GMDImporter:
         import os.path
 
         blender_material_list = []
-        for material in self.gmd_file.materials:
+        for material in self.scene.materials:
             blender_name = material_name(material)
 
             if blender_name in bpy.data.materials:
@@ -147,12 +152,8 @@ class GMDImporter:
         return blender_material_list
 
     def add_items(self, context: bpy.types.Context):
-        from mathutils import Vector
-        from bpy_extras.object_utils import object_data_add
-        from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-        from yk_gmd_blender.yk_gmd.abstract.vector import Mat4, Vec3
 
-        self.root_obj = bpy.data.objects.new(self.gmd_file.name, None )
+        self.root_obj = bpy.data.objects.new(self.scene.name, None )
         bpy.context.scene.collection.objects.link( self.root_obj )
 
         if self.load_bones:
@@ -166,7 +167,7 @@ class GMDImporter:
         # Import all meshes into a single mesh blob
         import bmesh
         bmeshes = []
-        for sm_index, submesh in enumerate(self.gmd_file.submeshes):
+        for sm_index, submesh in enumerate(self.scene.submeshes):
             print(f"Loading submesh with {len(submesh.vertices)} verts")
             vertex_layout = submesh.material.vertex_buffer_layout
 
@@ -182,13 +183,15 @@ class GMDImporter:
             for i,v in enumerate(submesh.vertices):
                 idxs.append((bmesh_idx, i))
                 vert = bm.verts.new(yk_to_blender_space(v.pos))
-                vert.normal = yk_to_blender_space(v.normal)
+                if vertex_layout.normal_type:
+                    vert.normal = yk_to_blender_space(v.normal)
                 #if vertex_layout.tangent_en:
                 #    vert.tangent = pos_to_blender(v.tangent)
                 if self.load_bones:
-                    for bone_weight in v.weights:
-                        if bone_weight.weight > 0:
-                            vert[deform][submesh.relevant_bones[bone_weight.bone]] = bone_weight.weight
+                    if vertex_layout.weights_type:
+                        for bone_weight in v.weights:
+                            if bone_weight.weight > 0:
+                                vert[deform][submesh.relevant_bones[bone_weight.bone]] = bone_weight.weight
                 #bmesh_idx += 1
             # Set up the indexing table inside the bmesh so lookups work
             bm.verts.ensure_lookup_table()
@@ -204,26 +207,29 @@ class GMDImporter:
                 if 0xFFFF in tri_idxs:
                     continue
                 self.add_face_to_bmesh(bm, submesh, tri_idxs)
-            for i in range(len(submesh.triangle_strip_indices1)-3):
-                tri_idxs = submesh.triangle_strip_indices1[i:i + 3]
-                if len(set(tri_idxs)) != 3:
-                    continue
-                if 0xFFFF in tri_idxs:
-                    continue
-                self.add_face_to_bmesh(bm, submesh, tri_idxs)
 
-            for i in range(len(submesh.triangle_strip_indices2)-3):
-                tri_idxs = submesh.triangle_strip_indices2[i:i + 3]
-                if len(set(tri_idxs)) != 3:
-                    continue
-                if 0xFFFF in tri_idxs:
-                    continue
-                self.add_face_to_bmesh(bm, submesh, tri_idxs)
+            # These faces are repeats of the previous faces, so don't import then
+            if False:
+                for i in range(len(submesh.triangle_strip_noreset_indices)-3):
+                    tri_idxs = submesh.triangle_strip_noreset_indices[i:i + 3]
+                    if len(set(tri_idxs)) != 3:
+                        continue
+                    if 0xFFFF in tri_idxs:
+                        continue
+                    self.add_face_to_bmesh(bm, submesh, tri_idxs)
+
+                for i in range(len(submesh.triangle_strip_reset_indices)-3):
+                    tri_idxs = submesh.triangle_strip_reset_indices[i:i + 3]
+                    if len(set(tri_idxs)) != 3:
+                        continue
+                    if 0xFFFF in tri_idxs:
+                        continue
+                    self.add_face_to_bmesh(bm, submesh, tri_idxs)
 
             # TODO Ignoring tangents
 
             # TODO Color0
-            if vertex_layout.col0_en:
+            if vertex_layout.col0_type:
                 col0_layer = bm.loops.layers.color.new("color0")
                 for face in bm.faces:
                     for loop in face.loops:
@@ -231,7 +237,7 @@ class GMDImporter:
                         loop[col0_layer] = (color.x, color.y, color.z, color.w)
 
             # TODO Color1
-            if vertex_layout.col1_en:
+            if vertex_layout.col1_type:
                 col1_layer = bm.loops.layers.color.new("color1")
                 for face in bm.faces:
                     for loop in face.loops:
@@ -239,11 +245,19 @@ class GMDImporter:
                         loop[col1_layer] = (color.x, color.y, color.z, color.w)
 
             # If UVs are present, add them
-            if vertex_layout.uv_en:
-                uv_layer = bm.loops.layers.uv.new("Texcoords")
+            # TODO add the second set of UVs
+            if vertex_layout.uv0_type:
+                uv_layer = bm.loops.layers.uv.new("TexCoords0")
                 for face in bm.faces:
                     for loop in face.loops:
-                        original_uv = submesh.vertices[loop.vert.index].uv
+                        original_uv = submesh.vertices[loop.vert.index].uv0
+                        loop[uv_layer].uv = uv_yk_to_blender_space(original_uv)
+
+            if vertex_layout.uv1_type:
+                uv_layer = bm.loops.layers.uv.new("TexCoords1")
+                for face in bm.faces:
+                    for loop in face.loops:
+                        original_uv = submesh.vertices[loop.vert.index].uv1
                         loop[uv_layer].uv = uv_yk_to_blender_space(original_uv)
 
             bmeshes.append(bm)
@@ -258,10 +272,10 @@ class GMDImporter:
                 overall_bm.from_mesh(temp_mesh)
                 pass
             bpy.data.meshes.remove(temp_mesh)
-            self.create_object_from_bmesh(overall_bm, f"{self.gmd_file.name}_merged_mesh")
+            self.create_object_from_bmesh(overall_bm, f"{self.scene.name}_merged_mesh")
         else:
             for sm_index,bm in enumerate(bmeshes):
-                self.create_object_from_bmesh(bm, f"{self.gmd_file.name}_mesh_{sm_index}")
+                self.create_object_from_bmesh(bm, f"{self.scene.name}_mesh_{sm_index}")
                 pass
 
     def create_object_from_bmesh(self, bm, name):
@@ -277,7 +291,7 @@ class GMDImporter:
         mesh_obj = bpy.data.objects.new(name, mesh)
         if self.load_bones:
             mesh_obj.parent = self.armature_object
-            for bone in self.gmd_file.bones_in_order:
+            for bone in self.scene.bones_in_order():
                 mesh_obj.vertex_groups.new(name=bone.name)
             modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
             modifier.object = self.armature_object

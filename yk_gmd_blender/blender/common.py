@@ -1,10 +1,9 @@
-import math
-from typing import Tuple, Collection, Iterable
+from typing import Tuple, Iterable
 
 from mathutils import Vector
 from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
 from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Vec4
-from yk_gmd_blender.yk_gmd.file import GMDFileIOAbstraction
+from yk_gmd_blender.yk_gmd.abstract.scene import GMDScene
 
 
 def yk_to_blender_space(vec: Vec3):
@@ -16,6 +15,9 @@ def blender_to_yk_space(vec: Vector):
 
 def blender_to_yk_space_vec4(vec: Vector, w: float):
     return Vec4(vec[0], vec[2], vec[1], w)
+
+def blender_to_yk_color(vec: Vector):
+    return Vec4(vec[0], vec[1], vec[2], vec[3])
 
 def uv_yk_to_blender_space(uv: Tuple[float, float]):
     return (uv[0], 1 - uv[1])
@@ -31,10 +33,10 @@ def uv_make_01(x):
 def uv_blender_to_yk_space(uv: Tuple[float, float]):
     return (uv_make_01(uv[0]), uv_make_01(1 - uv[1]))
 
-def root_name_for_gmd_file(gmd_file: GMDFileIOAbstraction):
+def root_name_for_gmd_file(gmd_file: GMDScene):
     return f"{gmd_file.name}"
 
-def armature_name_for_gmd_file(gmd_file: GMDFileIOAbstraction):
+def armature_name_for_gmd_file(gmd_file: GMDScene):
     return f"{gmd_file.name}_armature"
 
 def material_name(material: GMDMaterial):

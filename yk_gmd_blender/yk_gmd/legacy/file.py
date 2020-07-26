@@ -1,18 +1,18 @@
 import collections
 import ctypes
 import struct
-from typing import List, Generic, TypeVar, Type, Dict, Optional, Tuple, Set
+from typing import List, Generic, TypeVar, Type, Dict, Tuple, Set
 
 from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
 from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial, GMDMaterialTextureIndex
 from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh, GMDPart
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat, Mat4, Vec4
+from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat, Vec4
 from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout, GMDVertex, BoneWeight
-from yk_gmd_blender.yk_gmd.structs import *
-from yk_gmd_blender.yk_gmd.structs.submesh import IndicesStruct
-from yk_gmd_blender.yk_gmd.structs.transform_12float import Transform12Float
-from yk_gmd_blender.yk_gmd.structs.varlen_data_array_ptr import VarLenDataArrayPtrStruct
-from yk_gmd_blender.yk_gmd.util import false_ranges_in
+from yk_gmd_blender.yk_gmd.legacy.structs import *
+from .structs.submesh import IndicesStruct
+from .structs.transform_12float import Transform12Float
+from .structs.varlen_data_array_ptr import VarLenDataArrayPtrStruct
+from yk_gmd_blender.yk_gmd.legacy.util import false_ranges_in
 
 T = TypeVar('T')
 
@@ -639,8 +639,8 @@ class GMDFileIOAbstraction:
                 relevant_bones=relevant_bones,
                 vertices=vertices,
                 triangle_indices=triangle_indices,
-                triangle_strip_indices1=triangle_strip_indices1,
-                triangle_strip_indices2=triangle_strip_indices2,
+                triangle_strip_noreset_indices=triangle_strip_indices1,
+                triangle_strip_reset_indices=triangle_strip_indices2,
                 #parent_part=parent_part
             )
 

@@ -1,5 +1,7 @@
 from typing import List, Optional
 
+from mathutils import Matrix
+
 from .vector import Vec3, Quat, Mat4
 
 
@@ -16,7 +18,7 @@ class GMDBone:
 
     tail: Vec3
 
-    matrix_world_to_local: Optional[Mat4]
+    matrix_world_to_local: Optional[Matrix]
 
     def __init__(self, id: int, name: str, pos: Vec3, rot: Quat, scl: Vec3):
         self.id = id
@@ -28,7 +30,7 @@ class GMDBone:
 
         self.matrix_world_to_local = None
 
-    def set_matrix(self, matrix_world_to_local: Mat4):
+    def set_matrix(self, matrix_world_to_local: Matrix):
         self.matrix_world_to_local = matrix_world_to_local
 
     def set_hierarchy_props(self, parent: Optional['GMDBone'], children: List['GMDBone']):

@@ -5,17 +5,19 @@ from dataclasses import dataclass
 from typing import Dict, List, Callable, Tuple, Set, Generator
 
 import bmesh
+import bpy
+
 from yk_gmd_blender.blender.common import root_name_for_gmd_file, material_name, blender_to_yk_space, \
-    uv_blender_to_yk_space, blender_to_yk_space_vec4
+    uv_blender_to_yk_space, blender_to_yk_space_vec4, blender_to_yk_color
 from yk_gmd_blender.blender.error import GMDError
 from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
 from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
 from yk_gmd_blender.yk_gmd.abstract.vector import Vec4
 from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertex, BoneWeight
-from yk_gmd_blender.yk_gmd.file import GMDFileIOAbstraction, GMDFile
-
-import bpy
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
+    package_legacy_abstraction_to_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 
 
 @dataclass(frozen=False)
@@ -135,7 +137,10 @@ class GMDExporter:
         with open(self.filepath, "rb") as in_file:
             data = in_file.read()
 
-        self.gmd_file = GMDFileIOAbstraction(GMDFile(data).structs)
+        header, big_endian = extract_base_header(data)
+        self.big_endian = big_endian
+        self.initial_contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
+        self.scene = convert_YK1_to_legacy_abstraction(self.initial_contents)
 
     def check(self):
         #if bpy.context.object.mode != "OBJECT":
@@ -154,7 +159,7 @@ class GMDExporter:
             raise GMDError("The selected object should have exactly one child, which should be an armature")
         if self.strict:
             # Check that the name of the file == the name of the selected object
-            expected_name = root_name_for_gmd_file(self.gmd_file)
+            expected_name = root_name_for_gmd_file(self.scene)
             if root.name != expected_name:
                 raise GMDError(f"Strict Check: The name of the selected object should match the file name: {expected_name}")
 
@@ -173,7 +178,7 @@ class GMDExporter:
                 check_bone_sets_match(name, blender_bone.children, gmd_bone.children)
 
         self.armature = armature_obj.data
-        check_bone_sets_match("root", [b for b in self.armature.bones if not b.parent], self.gmd_file.bone_roots)
+        check_bone_sets_match("root", [b for b in self.armature.bones if not b.parent], self.scene.bone_roots)
 
         # Gather a list of all of the meshes connected to the selected armature
         # Must be MESH type objects that have an ARMATURE modifier
@@ -183,7 +188,7 @@ class GMDExporter:
             raise GMDError(f"All armature children must be meshes and actually deformed by the armature.")
 
         # Collect all of the blender materials for the GMDFile material
-        self.blender_mat_name_map: Dict[str, int] = {material_name(material):material.id for material in self.gmd_file.materials}
+        self.blender_mat_name_map: Dict[str, int] = {material_name(material):material.id for material in self.scene.materials}
 
         pass
 
@@ -207,7 +212,8 @@ class GMDExporter:
             obj_mat_slot_to_gmd_id: List[int] = [self.blender_mat_name_map[m.name] for i,m in enumerate(mesh_obj.material_slots)]
             # Mapping of vertex group ID -> bone ID in the GMD file
             # Bones have already been checked, this mesh is a child of a correct armature so the bones in blender == the bones in the file
-            obj_vertex_group_to_gmd_id = {i:self.gmd_file.bone_id_from_name(group.name) for i,group in enumerate(mesh_obj.vertex_groups)}
+            # TODO - However, the object itself may still contain other vertex groups
+            obj_vertex_group_to_gmd_id = {i:self.scene.bone_name_map[group.name].id for i,group in enumerate(mesh_obj.vertex_groups)}
 
             # Generate a mesh with modifiers applied, and put it into a bmesh
             mesh = mesh_obj.evaluated_get(depsgraph).data
@@ -217,14 +223,13 @@ class GMDExporter:
             bm.verts.ensure_lookup_table()
             bm.verts.index_update()
 
-            material_submeshes = [SubmeshHelper() for m in self.gmd_file.materials]
+            material_submeshes = [SubmeshHelper() for m in self.scene.materials]
 
-            uv_layer = bm.loops.layers.uv.active
-            if not uv_layer:
-                raise GMDError(f"Mesh '{mesh_obj.name}' doesn't have UV coordinates")
             deform_layer = bm.verts.layers.deform.active
             col0_layer = bm.loops.layers.color["color0"] if "color0" in bm.loops.layers.color else None
             col1_layer = bm.loops.layers.color["color1"] if "color1" in bm.loops.layers.color else None
+            uv0_layer = bm.loops.layers.uv["TexCoords0"] if "TexCoords0" in bm.loops.layers.uv else None
+            uv1_layer = bm.loops.layers.uv["TexCoords1"] if "TexCoords1" in bm.loops.layers.uv else None
 
             for tri_loops in bm.calc_loop_triangles():
                 l0 = tri_loops[0]
@@ -243,12 +248,12 @@ class GMDExporter:
 
                     # TODO: Color0, Color1
                     if col0_layer:
-                        v.col0 = l[col0_layer]
+                        v.col0 = blender_to_yk_color(l[col0_layer])
                     else:
                         v.col0 = Vec4(1, 1, 1, 1)
 
                     if col1_layer:
-                        v.col1 = l[col1_layer]
+                        v.col1 = blender_to_yk_color(l[col1_layer])
                     else:
                         v.col1 = Vec4(1, 1, 1, 1)
 
@@ -277,7 +282,15 @@ class GMDExporter:
                         weights_list[3],
                     )
 
-                    v.uv = uv_blender_to_yk_space(l[uv_layer].uv)
+                    if uv0_layer:
+                        v.uv0 = uv_blender_to_yk_space(l[uv0_layer].uv)
+                    else:
+                        v.uv0 = (0, 0)
+
+                    if uv1_layer:
+                        v.uv1 = uv_blender_to_yk_space(l[uv1_layer].uv)
+                    else:
+                        v.uv1 = (0, 0)
 
                     return v
 
@@ -404,7 +417,8 @@ class GMDExporter:
                         new_v.pos = v.pos
                         new_v.normal = v.normal
                         new_v.tangent = v.tangent
-                        new_v.uv = v.uv
+                        new_v.uv0 = v.uv0
+                        new_v.uv1 = v.uv1
                         new_v.col0 = v.col0
                         new_v.col1 = v.col1
                         new_v.weights = ((
@@ -416,40 +430,77 @@ class GMDExporter:
                         return new_v
 
                     vertices = [remap_vertex(v) for v in sm.vertices]
-                    # TODO: Better strip handling
 
-                    # triangle_strip_1 = [sm.triangles[0][0], sm.triangles[0][2], sm.triangles[0][1]]
-                    # triangle_strip_2 = [sm.triangles[1][0], sm.triangles[1][2], sm.triangles[1][1]]
-                    # triangle_indices = []
-                    # for t in sm.triangles[2:]:
-                    #     # Blender uses reversed winding order?
-                    #     triangle_indices.append(t[0])
-                    #     triangle_indices.append(t[2])
-                    #     triangle_indices.append(t[1])
-                    triangle_indices = [sm.triangles[0][0], sm.triangles[0][2], sm.triangles[0][1]]
-                    triangle_strip_1 = [sm.triangles[1][0], sm.triangles[1][2], sm.triangles[1][1]]
-                    # TODO: triangle_strip_2 is the only thing rendered?
-                    triangle_strip_2 = functools.reduce(lambda a,b: a + [0xFFFF] + b, [[t[0], t[2], t[1]] for t in sm.triangles])
+                    # TODO: Better strip handling?
+                    # The newer games only render triangle_strip_reset_indices, but the file should contain all variants
+                    # TODO: Enable configurable import for each triangle strip type - import only one type, or all?
+                    triangle_indices = []
+                    triangle_strip_noreset_indices = []
+                    triangle_strip_reset_indices = []
+                    for t in sm.triangles:
+                        # Blender uses reversed winding order
+                        triangle_indices.append(t[0])
+                        triangle_indices.append(t[2])
+                        triangle_indices.append(t[1])
+
+                        # If we can continue the strip, do so
+                        if not triangle_strip_noreset_indices:
+                            # Add the triangle as normal
+                            triangle_strip_noreset_indices.append(t[0])
+                            triangle_strip_noreset_indices.append(t[2])
+                            triangle_strip_noreset_indices.append(t[1])
+                        elif (triangle_strip_noreset_indices[-2] == t[0] and
+                                triangle_strip_noreset_indices[-1] == t[2]):
+                            triangle_strip_noreset_indices.append(t[1])
+                        else:
+                            # Two extra verts to create a degenerate triangle, signalling the end of the strip
+                            triangle_strip_noreset_indices.append(triangle_strip_noreset_indices[-1])
+                            triangle_strip_noreset_indices.append(t[0])
+                            # Add the triangle as normal
+                            triangle_strip_noreset_indices.append(t[0])
+                            triangle_strip_noreset_indices.append(t[2])
+                            triangle_strip_noreset_indices.append(t[1])
+
+                        # If we can continue the strip, do so
+                        if not triangle_strip_reset_indices:
+                            # Add the triangle as normal
+                            triangle_strip_reset_indices.append(t[0])
+                            triangle_strip_reset_indices.append(t[2])
+                            triangle_strip_reset_indices.append(t[1])
+                        elif (triangle_strip_reset_indices[-2] == t[0] and
+                                triangle_strip_reset_indices[-1] == t[2]):
+                            triangle_strip_reset_indices.append(t[1])
+                        else:
+                            # Reset index signalling the end of the strip
+                            triangle_strip_reset_indices.append(0xFFFF)
+                            # Add the triangle as normal
+                            triangle_strip_reset_indices.append(t[0])
+                            triangle_strip_reset_indices.append(t[2])
+                            triangle_strip_reset_indices.append(t[1])
+
+                    # triangle_indices = [sm.triangles[0][0], sm.triangles[0][2], sm.triangles[0][1]]
+                    # triangle_strip_noreset_indices = [sm.triangles[1][0], sm.triangles[1][2], sm.triangles[1][1]]
+                    # triangle_strip_reset_indices = functools.reduce(lambda a,b: a + [0xFFFF] + b, [[t[0], t[2], t[1]] for t in sm.triangles])
 
                     gmd_submeshes.append(GMDSubmesh(
-                        material=self.gmd_file.materials[material_id],
+                        material=self.scene.materials[material_id],
 
                         relevant_bones=relevant_bone_list,
 
                         vertices=vertices,
 
                         triangle_indices=triangle_indices,
-                        triangle_strip_indices1=triangle_strip_1,
-                        triangle_strip_indices2=triangle_strip_2,
+                        triangle_strip_noreset_indices=triangle_strip_noreset_indices,
+                        triangle_strip_reset_indices=triangle_strip_reset_indices,
                     ))
                     # Remove the submesh data, avoid massive memory usage
                     del sm
             pass
 
         # Put the submesh list into self.gmd_file
-        self.gmd_file.submeshes = gmd_submeshes
+        self.scene.submeshes = gmd_submeshes
 
-        print(f"Built list of submeshes: {len(self.gmd_file.submeshes)}")
+        print(f"Built list of submeshes: {len(self.scene.submeshes)}")
 
         # Convert back to normal pose
         if old_pose_position != "REST":
@@ -458,6 +509,8 @@ class GMDExporter:
         pass
 
     def overwrite_file_with_abstraction(self):
-        data_bytes = self.gmd_file.repack_into_bytes()
+        new_contents = package_legacy_abstraction_to_YK1(self.big_endian, self.initial_contents, self.scene)
+        new_data = bytearray()
+        FilePacker_YK1.pack(self.big_endian, new_contents, new_data)
         with open(self.filepath, "wb") as out_file:
-            out_file.write(data_bytes)
+            out_file.write(new_data)
