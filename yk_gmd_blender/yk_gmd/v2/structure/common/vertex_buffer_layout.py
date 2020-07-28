@@ -7,21 +7,6 @@ from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64
 from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBufferLayout, VecTypes, GMDVertexBuffer
 
 
-# class ComponentType(Enum):
-#     Fixed = 'B',
-#     Half = 'e',
-#     Full = 'f',
-#
-#
-# @dataclass(frozen=True)
-# class VectorLayout:
-#     type: ComponentType
-#     length: int
-#
-#     def get_format_string(self):
-#         return self.type.value * self.length
-
-
 @dataclass(frozen=True)
 class VertexBufferLayoutStruct:
     index: int
