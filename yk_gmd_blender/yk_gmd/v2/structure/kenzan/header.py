@@ -5,73 +5,73 @@ import mathutils
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32
-from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointer, ArrayPointerUnpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsData_Kenzan, BoundsData_Kenzan_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeader, GMDHeaderUnpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import Node
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import Object_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointer, SizedPointerUnpack
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import Material_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayout_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan, BoundsDataStruct_Kenzan_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct, GMDHeaderStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct, SizedPointerStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan
 
 
 @dataclass(frozen=True)
-class GMDHeader_Kenzan(GMDHeader):
-    node_arr: ArrayPointer[Node]
-    obj_arr: ArrayPointer[Object_Kenzan]
-    mesh_arr: ArrayPointer[Mesh]
-    attribute_arr: ArrayPointer[Attribute]
-    material_arr: ArrayPointer[Material_Kenzan]
-    matrix_arr: ArrayPointer[mathutils.Matrix]
-    vertex_buffer_arr: ArrayPointer[VertexBufferLayout_Kenzan]
-    vertex_data: SizedPointer  # byte data
-    texture_arr: ArrayPointer[ChecksumStr]
-    shader_arr: ArrayPointer[ChecksumStr]
-    node_name_arr: ArrayPointer[ChecksumStr]
-    index_data: ArrayPointer[int]
-    meshset_data: SizedPointer
-    mesh_matrix_bytestrings: SizedPointer
+class GMDHeader_Kenzan(GMDHeaderStruct):
+    node_arr: ArrayPointerStruct[NodeStruct]
+    obj_arr: ArrayPointerStruct[ObjectStruct_Kenzan]
+    mesh_arr: ArrayPointerStruct[MeshStruct]
+    attribute_arr: ArrayPointerStruct[AttributeStruct]
+    material_arr: ArrayPointerStruct[MaterialStruct_Kenzan]
+    matrix_arr: ArrayPointerStruct[mathutils.Matrix]
+    vertex_buffer_arr: ArrayPointerStruct[VertexBufferLayoutStruct_Kenzan]
+    vertex_data: SizedPointerStruct  # byte data
+    texture_arr: ArrayPointerStruct[ChecksumStrStruct]
+    shader_arr: ArrayPointerStruct[ChecksumStrStruct]
+    node_name_arr: ArrayPointerStruct[ChecksumStrStruct]
+    index_data: ArrayPointerStruct[int]
+    meshset_data: SizedPointerStruct
+    mesh_matrix_bytestrings: SizedPointerStruct
 
-    overall_bounds: BoundsData_Kenzan
+    overall_bounds: BoundsDataStruct_Kenzan
 
-    unk12: ArrayPointer[List[float]]
-    unk13: ArrayPointer[int]
-    unk14: ArrayPointer[List[int]]
+    unk12: ArrayPointerStruct[List[float]]
+    unk13: ArrayPointerStruct[int]
+    unk14: ArrayPointerStruct[List[int]]
     flags: List[int]
 
 
 GMDHeader_Kenzan_Unpack = StructureUnpacker(
     GMDHeader_Kenzan,
     fields=[
-        ("node_arr", ArrayPointerUnpack),
-        ("obj_arr", ArrayPointerUnpack),
-        ("mesh_arr", ArrayPointerUnpack),
-        ("attribute_arr", ArrayPointerUnpack),
-        ("material_arr", ArrayPointerUnpack),
-        ("matrix_arr", ArrayPointerUnpack),
+        ("node_arr", ArrayPointerStruct_Unpack),
+        ("obj_arr", ArrayPointerStruct_Unpack),
+        ("mesh_arr", ArrayPointerStruct_Unpack),
+        ("attribute_arr", ArrayPointerStruct_Unpack),
+        ("material_arr", ArrayPointerStruct_Unpack),
+        ("matrix_arr", ArrayPointerStruct_Unpack),
 
-        ("vertex_buffer_arr", ArrayPointerUnpack),
-        ("vertex_data", SizedPointerUnpack),
+        ("vertex_buffer_arr", ArrayPointerStruct_Unpack),
+        ("vertex_data", SizedPointerStruct_Unpack),
 
-        ("texture_arr", ArrayPointerUnpack),
-        ("shader_arr", ArrayPointerUnpack),
-        ("node_name_arr", ArrayPointerUnpack),
+        ("texture_arr", ArrayPointerStruct_Unpack),
+        ("shader_arr", ArrayPointerStruct_Unpack),
+        ("node_name_arr", ArrayPointerStruct_Unpack),
 
-        ("index_data", ArrayPointerUnpack),
-        ("meshset_data", SizedPointerUnpack),
-        ("mesh_matrix_bytestrings", SizedPointerUnpack),
+        ("index_data", ArrayPointerStruct_Unpack),
+        ("meshset_data", SizedPointerStruct_Unpack),
+        ("mesh_matrix_bytestrings", SizedPointerStruct_Unpack),
 
-        ("overall_bounds", BoundsData_Kenzan_Unpack),
+        ("overall_bounds", BoundsDataStruct_Kenzan_Unpack),
 
-        ("unk12", ArrayPointerUnpack),
-        ("unk13", ArrayPointerUnpack),
-        ("unk14", ArrayPointerUnpack),
+        ("unk12", ArrayPointerStruct_Unpack),
+        ("unk13", ArrayPointerStruct_Unpack),
+        ("unk14", ArrayPointerStruct_Unpack),
         ("flags", FixedSizeArrayUnpacker(c_uint32, 6)),
     ],
     base_class_unpackers={
-        GMDHeader: GMDHeaderUnpack
+        GMDHeaderStruct: GMDHeaderStruct_Unpack
     }
 )

@@ -11,14 +11,14 @@ from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
 from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat
 from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout
 
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType, NodeStackOp, Node
-from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType, NodeStackOp, NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
 
 
-def extract_legacy_materials(attribute_arr: List[Attribute], shader_arr: List[ChecksumStr], texture_arr: List[ChecksumStr], mesh_arr: List[Mesh], abstract_vertex_buffers: List[GMDVertexBuffer]) -> List[GMDMaterial]:
+def extract_legacy_materials(attribute_arr: List[AttributeStruct], shader_arr: List[ChecksumStrStruct], texture_arr: List[ChecksumStrStruct], mesh_arr: List[MeshStruct], abstract_vertex_buffers: List[GMDVertexBuffer]) -> List[GMDMaterial]:
     materials = []
     shader_vb_layouts = {}
 
@@ -46,7 +46,7 @@ def extract_legacy_materials(attribute_arr: List[Attribute], shader_arr: List[Ch
     return materials
 
 def extract_legacy_submeshes(big_endian: bool,
-                             mesh_arr: List[Mesh], mesh_matrix_bytestrings: bytes, index_data: List[int], materials: List[GMDMaterial],
+                             mesh_arr: List[MeshStruct], mesh_matrix_bytestrings: bytes, index_data: List[int], materials: List[GMDMaterial],
                              vertex_buffers: List[GMDVertexBuffer], relative_indices_used: bool, vertex_offset_used: bool, bytestrings_are_16bit: bool) -> List[GMDSubmesh]:
     submeshes = []
 
@@ -124,7 +124,7 @@ def extract_legacy_submeshes(big_endian: bool,
         # parent_part.submeshes.append(submesh)
     return submeshes
 
-def extract_legacy_vertex_buffers(vertex_buffer_arr: List[VertexBufferLayout], vertex_data: bytes, vertex_big_endian: bool) -> Tuple[List[GMDVertexBuffer], Dict[GMDVertexBufferLayout, VertexBufferLayout]]:
+def extract_legacy_vertex_buffers(vertex_buffer_arr: List[VertexBufferLayoutStruct], vertex_data: bytes, vertex_big_endian: bool) -> Tuple[List[GMDVertexBuffer], Dict[GMDVertexBufferLayout, VertexBufferLayoutStruct]]:
     vertex_buffers = []
     vertex_buffer_layouts = {}
     vertex_bytes = vertex_data
@@ -151,7 +151,7 @@ def extract_legacy_vertex_buffers(vertex_buffer_arr: List[VertexBufferLayout], v
 
     return vertex_buffers, vertex_buffer_layouts
 
-def extract_legacy_node_heirarchy(node_arr: List[Node], node_name_arr: List[ChecksumStr], matrix_arr: List[Matrix]) -> Dict[int, GMDBone]:
+def extract_legacy_node_heirarchy(node_arr: List[NodeStruct], node_name_arr: List[ChecksumStrStruct], matrix_arr: List[Matrix]) -> Dict[int, GMDBone]:
     parent_stack: Deque[int] = collections.deque()
     bone_index_to_object = {}
 

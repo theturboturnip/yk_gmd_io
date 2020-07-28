@@ -3,11 +3,11 @@ from typing import List
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import *
-from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBase
+from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
 
 
 @dataclass(frozen=True)
-class Material_Kenzan(MaterialBase):
+class MaterialStruct_Kenzan(MaterialBaseStruct):
     diffuse: List[int]
     opacity: float
     specular: List[int]
@@ -20,8 +20,8 @@ class Material_Kenzan(MaterialBase):
     padding: int
 
 
-Material_Kenzan_Unpack = StructureUnpacker(
-    Material_Kenzan,
+MaterialStruct_Kenzan_Unpack = StructureUnpacker(
+    MaterialStruct_Kenzan,
     fields=[
         # TODO: These two are probs wrong
         ("power", c_float16),

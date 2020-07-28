@@ -2,7 +2,7 @@ import argparse
 import math
 from pathlib import Path
 
-from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderUnpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         data = in_file.read()
 
     big_endian = True
-    base_header, _ = GMDHeaderUnpack.unpack(big_endian, data=data, offset=0)
+    base_header, _ = GMDHeaderStruct_Unpack.unpack(big_endian, data=data, offset=0)
     if base_header.file_endian_check == 0:
         big_endian = False
     elif base_header.file_endian_check == 1:
@@ -171,7 +171,7 @@ if __name__ == '__main__':
     else:
         raise Exception(f"Unknown base_header file endian check {base_header.file_endian_check}")
 
-    base_header, _ = GMDHeaderUnpack.unpack(big_endian, data=data, offset=0)
+    base_header, _ = GMDHeaderStruct_Unpack.unpack(big_endian, data=data, offset=0)
 
     # Version check
     # version_properties = base_header.get_version_properties()

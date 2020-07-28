@@ -8,7 +8,7 @@ from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor
 from yk_gmd_blender.structurelib.primitives import c_int32
 from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
 from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec4Unpacker, QuatUnpacker
 
 
@@ -25,7 +25,7 @@ class NodeType(IntEnum):
 
 
 @dataclass(frozen=True)
-class Node:
+class NodeStruct:
     index: int
     parent_of: int
     sibling_of: int
@@ -44,8 +44,8 @@ class Node:
     padding: Vector
 
 
-Node_Unpack = StructureUnpacker(
-    Node,
+NodeStruct_Unpack = StructureUnpacker(
+    NodeStruct,
     fields=[
         ("index", c_int32),
         ("parent_of", c_int32),

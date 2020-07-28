@@ -7,18 +7,18 @@ from typing import List
 
 from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterialTextureIndex, GMDMaterial
 from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
 
 
 @dataclass(frozen=True)
-class TextureIndex_YK1:
+class TextureIndexStruct:
     tex_index: int
     padding: int = 0
 
 
-TextureIndex_YK1_Unpack = StructureUnpacker(
-    TextureIndex_YK1,
+TextureIndexStruct_Unpack = StructureUnpacker(
+    TextureIndexStruct,
     fields=[
         ("padding", c_uint16),
         ("tex_index", c_int16)
@@ -27,7 +27,7 @@ TextureIndex_YK1_Unpack = StructureUnpacker(
 
 
 @dataclass(frozen=True)
-class Attribute:
+class AttributeStruct:
     index: int
     material_index: int
     shader_index: int
@@ -43,23 +43,23 @@ class Attribute:
     # Observed to be 0x0000, 0x0001, 0x2001, 0x8001
     flags: int
 
-    texture_diffuse: TextureIndex_YK1  # Usually has textures with _di postfix
-    texture_refl_cubemap: TextureIndex_YK1  # Observed to have a cubemap texture for one eye-related material
-    texture_multi: TextureIndex_YK1
+    texture_diffuse: TextureIndexStruct  # Usually has textures with _di postfix
+    texture_refl_cubemap: TextureIndexStruct  # Observed to have a cubemap texture for one eye-related material
+    texture_multi: TextureIndexStruct
     # Never filled
-    texture_unk1: TextureIndex_YK1
-    texture_unk2: TextureIndex_YK1
-    texture_normal: TextureIndex_YK1  # Usually has textures with _tn postfix
-    texture_rt: TextureIndex_YK1  # Usually has textures with _rt postfix
-    texture_rd: TextureIndex_YK1  # Usually has textures with _rd postfix
+    texture_unk1: TextureIndexStruct
+    texture_unk2: TextureIndexStruct
+    texture_normal: TextureIndexStruct  # Usually has textures with _tn postfix
+    texture_rt: TextureIndexStruct  # Usually has textures with _rt postfix
+    texture_rd: TextureIndexStruct  # Usually has textures with _rd postfix
 
     extra_properties: List[float]  # Could be scale (x,y) pairs for the textures, although 0 is present a lot.
 
     padding: int = 0
 
 
-Attribute_Unpack = StructureUnpacker(
-    Attribute,
+AttributeStruct_Unpack = StructureUnpacker(
+    AttributeStruct,
     fields=[
         ("index", c_uint32),
         ("material_index", c_uint32),
@@ -72,14 +72,14 @@ Attribute_Unpack = StructureUnpacker(
         ("flags", c_uint16),
         ("padding", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
 
-        ("texture_diffuse", TextureIndex_YK1_Unpack),
-        ("texture_refl_cubemap", TextureIndex_YK1_Unpack),
-        ("texture_multi", TextureIndex_YK1_Unpack),
-        ("texture_unk1", TextureIndex_YK1_Unpack),
-        ("texture_unk2", TextureIndex_YK1_Unpack),
-        ("texture_normal", TextureIndex_YK1_Unpack),
-        ("texture_rt", TextureIndex_YK1_Unpack),
-        ("texture_rd", TextureIndex_YK1_Unpack),
+        ("texture_diffuse", TextureIndexStruct_Unpack),
+        ("texture_refl_cubemap", TextureIndexStruct_Unpack),
+        ("texture_multi", TextureIndexStruct_Unpack),
+        ("texture_unk1", TextureIndexStruct_Unpack),
+        ("texture_unk2", TextureIndexStruct_Unpack),
+        ("texture_normal", TextureIndexStruct_Unpack),
+        ("texture_rt", TextureIndexStruct_Unpack),
+        ("texture_rd", TextureIndexStruct_Unpack),
 
         ("extra_properties", FixedSizeArrayUnpacker(c_float32, 16))
     ]

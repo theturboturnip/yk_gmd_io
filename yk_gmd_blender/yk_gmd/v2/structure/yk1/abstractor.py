@@ -9,16 +9,16 @@ from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.structure.common.abstractor import extract_legacy_node_heirarchy, \
     extract_legacy_vertex_buffers, extract_legacy_materials, extract_legacy_submeshes
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
+from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh, Indices
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStackOp, Node, NodeType
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct, IndicesStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStackOp, NodeStruct, NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.version import FileProperties
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import Mesh_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import Object_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayout_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
 from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial, GMDMaterialTextureIndex
 from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
@@ -139,7 +139,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
     # Check that the indices are in a [0...n] range
     if [n.index for n in nodes] != [x for x in range(len(nodes))]:
         raise Exception("stripping non-bone nodes from initial data led to index discrepancy")
-    global_object_node = Node(
+    global_object_node = NodeStruct(
         index=len(nodes),
         parent_of=-1,
         sibling_of=-1,
@@ -157,7 +157,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
         bone_axis=Quaternion(),
         padding=Vector((0, 0, 0, 0))
     )
-    node_names.append(ChecksumStr.make_from_str("[l0]global_object"))
+    node_names.append(ChecksumStrStruct.make_from_str("[l0]global_object"))
     nodes.append(global_object_node)
 
     total_submeshes = _generate_legacy_submesh_list(scene)
@@ -172,7 +172,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
     total_submeshes = sum((sms for vbl, sms in vb_layout_submeshes), [])
 
     # HACK - This puts all meshes under a single object
-    global_object = Object_YK1(
+    global_object = ObjectStruct_YK1(
         index=0,
         node_index_1=global_object_node.index,
         node_index_2=global_object_node.index,
@@ -188,10 +188,10 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
     drawlist_bytes = bytes(global_drawlist)
     object_arr = [global_object]
 
-    vertex_buffer_layout_structs: List[VertexBufferLayout_YK1] = []
+    vertex_buffer_layout_structs: List[VertexBufferLayoutStruct_YK1] = []
     overall_vertex_buffer_data = bytearray()
     overall_index_buffer_data: List[int] = []
-    submesh_structs: List[Mesh] = []
+    submesh_structs: List[MeshStruct] = []
     submesh_bonelists = bytearray()
 
     for abstract_layout, vb_submeshes in vb_layout_submeshes:
@@ -202,7 +202,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
         layout_vertex_data_offset = len(overall_vertex_buffer_data)
         layout_vertex_data_length = layout_vertex_count * original.bytes_per_vertex
 
-        layout_struct = VertexBufferLayout_YK1(
+        layout_struct = VertexBufferLayoutStruct_YK1(
             index=layout_index,
             vertex_count=layout_vertex_count,
             vertex_packing_flags=original.vertex_packing_flags,
@@ -236,7 +236,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
                 pack_index = lambda x: 0xFFFF if x == 0xFFFF else (x + vertex_offset)
 
             # Set up the pointer for the next set of indices
-            triangle_indices = Indices(
+            triangle_indices = IndicesStruct(
                 index_offset=len(overall_index_buffer_data),
                 index_count=len(s.triangle_indices)
             )
@@ -244,7 +244,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
             overall_index_buffer_data += [pack_index(x) for x in s.triangle_indices]
 
             # Set up the pointer for the next set of indices
-            triangle_strip_noreset_indices = Indices(
+            triangle_strip_noreset_indices = IndicesStruct(
                 index_offset=len(overall_index_buffer_data),
                 index_count=len(s.triangle_strip_noreset_indices)
             )
@@ -252,7 +252,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
             overall_index_buffer_data += [pack_index(x) for x in s.triangle_strip_noreset_indices]
 
             # Set up the pointer for the next set of indices
-            triangle_strip_reset_indices = Indices(
+            triangle_strip_reset_indices = IndicesStruct(
                 index_offset=len(overall_index_buffer_data),
                 index_count=len(s.triangle_strip_reset_indices)
             )
@@ -273,7 +273,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
             else:
                 submesh_bonelists += bytes([len(s.relevant_bones)] + s.relevant_bones)
 
-            submesh_structs.append(Mesh_YK1(
+            submesh_structs.append(MeshStruct_YK1(
                 index=len(submesh_structs),
                 attribute_index=s.material.id,
                 vertex_buffer_index=layout_struct.index,
@@ -298,7 +298,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
     for i, attribute in enumerate(initial_data.attribute_arr):
         # TODO: It seems that this doesn't matter
         indices_using_mat = [i for i, s in enumerate(total_submeshes) if s.material.id == attribute.index]
-        new_attribute_packs.append(Attribute(
+        new_attribute_packs.append(AttributeStruct(
             index=i,
             material_index=attribute.material_index,
             shader_index=attribute.shader_index,

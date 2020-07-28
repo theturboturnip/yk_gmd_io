@@ -23,7 +23,7 @@ from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBufferLayout
 
 
 @dataclass(frozen=True)
-class VertexBufferLayout:
+class VertexBufferLayoutStruct:
     index: int
 
     vertex_count: int

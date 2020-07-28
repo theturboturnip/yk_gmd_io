@@ -10,7 +10,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 #class ParsedScene:
 #    scene: GMDScene
 #    big_endian: bool
-from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderUnpack, GMDHeader
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack, GMDHeaderStruct
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
@@ -29,16 +29,16 @@ def _get_file_data(data: Union[Path, str, bytes]) -> bytes:
         return data
 
 
-def _extract_base_header(data: bytes) -> Tuple[bool, GMDHeader]:
+def _extract_base_header(data: bytes) -> Tuple[bool, GMDHeaderStruct]:
     big_endian = True
-    base_header, _ = GMDHeaderUnpack.unpack(big_endian, data=data, offset=0)
+    base_header, _ = GMDHeaderStruct_Unpack.unpack(big_endian, data=data, offset=0)
     big_endian = check_is_file_big_endian(base_header.file_endian_check)
     # Reimport the header with the correct endianness
-    base_header, _ = GMDHeaderUnpack.unpack(big_endian, data=data, offset=0)
+    base_header, _ = GMDHeaderStruct_Unpack.unpack(big_endian, data=data, offset=0)
     return big_endian, base_header
 
 
-def can_read_from(data: Union[Path, str, bytes]) -> Tuple[bool, GMDHeader]:
+def can_read_from(data: Union[Path, str, bytes]) -> Tuple[bool, GMDHeaderStruct]:
     big_endian, base_header = _extract_base_header(_get_file_data(data))
 
     if base_header.get_version_properties().major_version in [GMDVersion.Kiwami1, GMDVersion.Kenzan]:
@@ -65,7 +65,7 @@ def read_to_legacy(data: Union[Path, str, bytes]) -> Tuple[FileData_Common, GMDS
         raise Exception(f"File format version {version_props.version_str} is unreadable")
 
 
-def can_write_over(data: Union[Path, str, bytes]) -> Tuple[bool, GMDHeader]:
+def can_write_over(data: Union[Path, str, bytes]) -> Tuple[bool, GMDHeaderStruct]:
     big_endian, base_header = _extract_base_header(_get_file_data(data))
 
     if base_header.get_version_properties().major_version in [GMDVersion.Kiwami1, GMDVersion.Kenzan]:

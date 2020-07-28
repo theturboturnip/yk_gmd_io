@@ -3,11 +3,11 @@ from typing import List
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import *
-from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBase
+from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
 
 
 @dataclass(frozen=True)
-class Material_YK1(MaterialBase):
+class MaterialStruct_YK1(MaterialBaseStruct):
     diffuse: List[int]
     opacity: int
     specular: List[int]
@@ -19,8 +19,8 @@ class Material_YK1(MaterialBase):
 
 
 # These are best guesses, we don't have a textdump of this like we do for Kenzan
-Material_YK1_Unpack = StructureUnpacker(
-    Material_YK1,
+MaterialStruct_YK1_Unpack = StructureUnpacker(
+    MaterialStruct_YK1,
     fields=[
         ("unk1", FixedSizeArrayUnpacker(c_uint8, 4)),
 

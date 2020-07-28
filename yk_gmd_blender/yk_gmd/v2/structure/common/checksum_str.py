@@ -5,17 +5,17 @@ from yk_gmd_blender.structurelib.primitives import c_uint16
 
 
 @dataclass(frozen=True)
-class ChecksumStr:
+class ChecksumStrStruct:
     checksum: int
     text: str
 
     @staticmethod
     def make_from_str(text: str):
-        return ChecksumStr(sum(text.encode("ascii")), text)
+        return ChecksumStrStruct(sum(text.encode("ascii")), text)
 
 
-ChecksumStr_Unpack = StructureUnpacker(
-    ChecksumStr,
+ChecksumStrStruct_Unpack = StructureUnpacker(
+    ChecksumStrStruct,
     fields=[
         ("checksum", c_uint16),
         ("text", FixedSizeASCIIUnpacker(30))
