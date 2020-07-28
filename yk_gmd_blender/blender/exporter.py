@@ -204,7 +204,9 @@ class GMDExporter:
         gmd_submeshes = []
         # Extract mesh data while in the rest pose
         for mesh_obj in self.mesh_objs:
-            # Check the mesh only uses approved materials
+            # Check the mesh uses at least one approved materials
+            if len(mesh_obj.material_slots) == 0:
+                raise GMDError(f"Mesh {mesh_obj.name} doesn't use any materials! Each mesh must use at least one material")
             unexpected_material_names = {m.name for m in mesh_obj.material_slots if m.name not in self.blender_mat_name_map}
             if unexpected_material_names:
                 raise GMDError(f"Mesh {mesh_obj.name} uses materials {unexpected_material_names} which are not already present in the file")
@@ -213,7 +215,14 @@ class GMDExporter:
             # Mapping of vertex group ID -> bone ID in the GMD file
             # Bones have already been checked, this mesh is a child of a correct armature so the bones in blender == the bones in the file
             # TODO - However, the object itself may still contain other vertex groups
-            obj_vertex_group_to_gmd_id = {i:self.scene.bone_name_map[group.name].id for i,group in enumerate(mesh_obj.vertex_groups)}
+            obj_vertex_group_to_gmd_id = {i:self.scene.bone_name_map[group.name].id for i,group in enumerate(mesh_obj.vertex_groups) if group.name in self.scene.bone_name_map}
+            if len(obj_vertex_group_to_gmd_id) != len(mesh_obj.vertex_groups):
+                # TODO: Report!
+                blender_vgroups = set(g.name for g in mesh_obj.vertex_groups)
+                mesh_vgroups = set(self.scene.bone_name_map.keys())
+                expected_groups = mesh_vgroups.difference(blender_vgroups)
+                new_groups = blender_vgroups.difference(mesh_vgroups)
+                print(f"Mesh {mesh_obj.name} is missing vertex groups for {expected_groups}, and has extra groups {new_groups}")
 
             # Generate a mesh with modifiers applied, and put it into a bmesh
             mesh = mesh_obj.evaluated_get(depsgraph).data
@@ -226,16 +235,47 @@ class GMDExporter:
             material_submeshes = [SubmeshHelper() for m in self.scene.materials]
 
             deform_layer = bm.verts.layers.deform.active
-            col0_layer = bm.loops.layers.color["color0"] if "color0" in bm.loops.layers.color else None
-            col1_layer = bm.loops.layers.color["color1"] if "color1" in bm.loops.layers.color else None
-            uv0_layer = bm.loops.layers.uv["TexCoords0"] if "TexCoords0" in bm.loops.layers.uv else None
-            uv1_layer = bm.loops.layers.uv["TexCoords1"] if "TexCoords1" in bm.loops.layers.uv else None
+
+            # TODO: In situations where >2 layers are present, do we want to prompt the user to remove one?
+            # TODO: Make sure, if we're doing this, to remember that the else: blocks also cover len(layers) == 0
+
+            if len(bm.loops.layers.color) == 1:
+                col0_layer = bm.loops.layers.color[0]
+                col1_layer = None
+            elif len(bm.loops.layers.color) == 2:
+                col0_layer = bm.loops.layers.color[0]
+                col1_layer = bm.loops.layers.color[1]
+            else:
+                col0_layer = bm.loops.layers.color["color0"] if "color0" in bm.loops.layers.color else None
+                col1_layer = bm.loops.layers.color["color1"] if "color1" in bm.loops.layers.color else None
+
+            if len(bm.loops.layers.uv) == 1:
+                uv0_layer = bm.loops.layers.uv[0]
+                uv1_layer = None
+            elif len(bm.loops.layers.uv) == 2:
+                uv0_layer = bm.loops.layers.uv[0]
+                uv1_layer = bm.loops.layers.uv[1]
+            else:
+                uv0_layer = bm.loops.layers.uv["TexCoords0"] if "TexCoords0" in bm.loops.layers.uv else None
+                uv1_layer = bm.loops.layers.uv["TexCoords1"] if "TexCoords1" in bm.loops.layers.uv else None
+
+            # TODO: Check vertex layout against expected layers?
+            print(f"Exporting {mesh_obj.name}:")
+            print(f"\tmaterial slot mapping: {obj_mat_slot_to_gmd_id}")
+            print(f"\tvertex group mapping: {obj_vertex_group_to_gmd_id}")
+            print(f"\tdeform_layer: {deform_layer.name}")
+            print(f"\tuv_layers: {uv0_layer.name if uv0_layer else None} {uv1_layer.name if uv1_layer else None}")
+            print(f"\tcolor_layers: {col0_layer.name if col0_layer else None} {col1_layer.name if col1_layer else None}")
 
             for tri_loops in bm.calc_loop_triangles():
                 l0 = tri_loops[0]
                 l1 = tri_loops[1]
                 l2 = tri_loops[2]
 
+                if not (0 <= l0.face.material_index < len(obj_mat_slot_to_gmd_id)):
+                    # TODO: Report
+                    print(f"Mesh {mesh_obj.name} has a face with out-of-bounds material index {l0.face.material_index}. It will be skipped!")
+                    continue
                 material_id = obj_mat_slot_to_gmd_id[l0.face.material_index]
                 sm = material_submeshes[material_id]
 
