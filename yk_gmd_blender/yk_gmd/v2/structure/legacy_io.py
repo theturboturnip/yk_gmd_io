@@ -12,10 +12,10 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 #    big_endian: bool
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack, GMDHeaderStruct
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.abstractor import convert_Kenzan_to_legacy_abstraction
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1, FileData_YK1
 

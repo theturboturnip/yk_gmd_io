@@ -6,7 +6,7 @@ import mathutils
 from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32
 from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan, BoundsDataStruct_Kenzan_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct, GMDHeaderStruct_Unpack

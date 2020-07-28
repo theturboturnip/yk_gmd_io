@@ -5,7 +5,7 @@ import mathutils
 
 from yk_gmd_blender.structurelib.base import BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct_Unpack, AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct_Unpack, ChecksumStrStruct

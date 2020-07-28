@@ -4,7 +4,7 @@ from typing import List, Tuple, Union, Type
 import mathutils
 
 from yk_gmd_blender.structurelib.base import BaseUnpacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct_Unpack, AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, FilePacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct

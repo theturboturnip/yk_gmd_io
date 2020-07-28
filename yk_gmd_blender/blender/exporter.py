@@ -17,7 +17,7 @@ from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertex, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
 from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy, write_from_legacy, \
     can_write_over
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 

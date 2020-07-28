@@ -7,9 +7,9 @@ from mathutils import Vector, Quaternion
 
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.yk_gmd.v2.structure.common.abstractor import extract_legacy_node_heirarchy, \
+from yk_gmd_blender.yk_gmd.v2.structure.common.legacy_abstractor import extract_legacy_node_heirarchy, \
     extract_legacy_vertex_buffers, extract_legacy_materials, extract_legacy_submeshes
-from yk_gmd_blender.yk_gmd.v2.structure.common.attributestruct import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct, IndicesStruct
