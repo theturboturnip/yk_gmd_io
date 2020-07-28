@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from yk_gmd_blender import GMDError
 from yk_gmd_blender.blender.common import material_name, uv_yk_to_blender_space, yk_to_blender_space
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterialTextureIndex
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterialTextureIndex
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
 from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction
@@ -32,8 +32,8 @@ class GMDImporter:
         pass # TODO: Do checks here?
 
     def make_armature_object(self) -> bpy.types.Object:
-        from yk_gmd_blender.yk_gmd.abstract.vector import Mat4, Vec3
-        from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
+        from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Mat4, Vec3
+        from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
 
         pos_to_blender = lambda p: (p.x, p.z, p.y)
 

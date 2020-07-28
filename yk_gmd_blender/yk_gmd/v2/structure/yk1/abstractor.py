@@ -19,12 +19,12 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import Mesh_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import Object_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayout_YK1
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial, GMDMaterialTextureIndex
-from yk_gmd_blender.yk_gmd.abstract.scene import GMDScene
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat, Vec4
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout, GMDVertex, BoneWeight
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial, GMDMaterialTextureIndex
+from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat, Vec4
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout, GMDVertex, BoneWeight
 
 __all__ = [
     "convert_YK1_to_legacy_abstraction",

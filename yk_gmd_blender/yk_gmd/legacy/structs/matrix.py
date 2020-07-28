@@ -1,6 +1,6 @@
 from ctypes import *
 
-from yk_gmd_blender.yk_gmd.abstract.vector import Mat4, Vec4
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Mat4, Vec4
 from ._base.base_structure import BaseBigEndianStructure
 
 

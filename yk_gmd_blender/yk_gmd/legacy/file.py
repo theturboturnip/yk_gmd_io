@@ -3,11 +3,11 @@ import ctypes
 import struct
 from typing import List, Generic, TypeVar, Type, Dict, Tuple, Set
 
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial, GMDMaterialTextureIndex
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh, GMDPart
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat, Vec4
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout, GMDVertex, BoneWeight
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial, GMDMaterialTextureIndex
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh, GMDPart
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat, Vec4
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout, GMDVertex, BoneWeight
 from yk_gmd_blender.yk_gmd.legacy.structs import *
 from .structs.submesh import IndicesStruct
 from .structs.transform_12float import Transform12Float

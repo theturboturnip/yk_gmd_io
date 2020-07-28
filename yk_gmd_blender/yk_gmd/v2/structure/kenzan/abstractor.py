@@ -1,4 +1,4 @@
-from yk_gmd_blender.yk_gmd.abstract.scene import GMDScene
+from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.structure.common.abstractor import extract_legacy_node_heirarchy, \
     extract_legacy_vertex_buffers, extract_legacy_materials, extract_legacy_submeshes
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan

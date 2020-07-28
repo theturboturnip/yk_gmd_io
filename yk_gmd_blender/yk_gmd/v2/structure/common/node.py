@@ -6,8 +6,8 @@ from typing import List, Dict, Deque
 from mathutils import Vector, Quaternion, Matrix
 from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor
 from yk_gmd_blender.structurelib.primitives import c_int32
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec4Unpacker, QuatUnpacker
 

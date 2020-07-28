@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Union, Tuple, cast
 
-from yk_gmd_blender.yk_gmd.abstract.scene import GMDScene
+from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 
 

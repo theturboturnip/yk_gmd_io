@@ -5,8 +5,8 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_int16, c_uint32, 
 
 from typing import List
 
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterialTextureIndex, GMDMaterial
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterialTextureIndex, GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
 

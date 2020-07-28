@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from typing import List, Dict
 
 from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayout
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout
 
 
 @dataclass(repr=False)

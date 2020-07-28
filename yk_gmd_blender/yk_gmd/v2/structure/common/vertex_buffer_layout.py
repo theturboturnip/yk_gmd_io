@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple, Dict
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBufferLayout, VecTypes, GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBufferLayout, VecTypes, GMDVertexBuffer
 
 
 # class ComponentType(Enum):

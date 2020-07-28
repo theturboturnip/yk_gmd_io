@@ -5,11 +5,11 @@ from mathutils import Matrix
 
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial, GMDMaterialTextureIndex
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Quat
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial, GMDMaterialTextureIndex
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer, GMDVertexBufferLayout
 
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr

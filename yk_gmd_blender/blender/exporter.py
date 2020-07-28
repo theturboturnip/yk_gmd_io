@@ -10,10 +10,10 @@ import bpy
 from yk_gmd_blender.blender.common import root_name_for_gmd_file, material_name, blender_to_yk_space, \
     uv_blender_to_yk_space, blender_to_yk_space_vec4, blender_to_yk_color
 from yk_gmd_blender.blender.error import GMDError
-from yk_gmd_blender.yk_gmd.abstract.bone import GMDBone
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec4
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertex, BoneWeight
+from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec4
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertex, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
 from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy, write_from_legacy, \
     can_write_over

@@ -1,9 +1,9 @@
 from typing import Tuple, Iterable
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
-from yk_gmd_blender.yk_gmd.abstract.vector import Vec3, Vec4
-from yk_gmd_blender.yk_gmd.abstract.scene import GMDScene
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Vec4
+from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
 
 
 def yk_to_blender_space(vec: Vec3):

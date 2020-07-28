@@ -1,6 +1,6 @@
 from ctypes import *
 
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBufferLayout, VecTypes
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBufferLayout, VecTypes
 from ._base.base_structure import BaseBigEndianStructure
 
 

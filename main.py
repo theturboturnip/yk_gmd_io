@@ -9,7 +9,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_p
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
-from yk_gmd_blender.yk_gmd.abstract.vector import Quat
+from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Quat
 from yk_gmd_blender.yk_gmd.legacy.file import GMDFile, GMDFileIOAbstraction
 
 
