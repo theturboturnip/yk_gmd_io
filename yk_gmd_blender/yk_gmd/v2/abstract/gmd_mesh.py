@@ -9,24 +9,6 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDBone
 
 
 @dataclass
-class BoneWeight:
-    bone: int
-    weight: float
-
-
-@dataclass
-class GMDVertex:
-    pos: Vector
-    weights: Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]
-    normal: Vector
-    tangent: Vector
-    col0: Vector
-    col1: Vector
-    uv0: Tuple[float, float]
-    uv1: Tuple[float, float]
-
-
-@dataclass
 class GMDMesh:
     relevant_bones: List[GMDBone]
 
