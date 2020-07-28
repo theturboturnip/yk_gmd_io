@@ -2,11 +2,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Type, Union, Tuple, List
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, BaseUnpacker
+from yk_gmd_blender.structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
 from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointer
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeader
 from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointer
+from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian, check_are_vertices_big_endian
+from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, FileProperties, \
+    get_combined_version_properties
 
 
 class PackType(Enum):
@@ -19,9 +22,18 @@ class FileData_Common:
     magic: str
     file_endian_check: int
     vertex_endian_check: int
-    version: int
+    version_combined: int
 
     name: ChecksumStr
+
+    def file_is_big_endian(self):
+        return check_is_file_big_endian(self.file_endian_check)
+
+    def vertices_are_big_endian(self):
+        return check_are_vertices_big_endian(self.vertex_endian_check)
+
+    def parse_version(self) -> FileProperties:
+        return get_combined_version_properties(self.version_combined)
 
     @classmethod
     def header_pointer_fields(cls) -> List[Tuple[str, Union[BaseUnpacker, Type[bytes]]]]:
@@ -44,7 +56,7 @@ class FileData_Common:
             "magic",
             "file_endian_check",
             "vertex_endian_check",
-            "version",
+            "version_combined",
 
             "name"
         ]
@@ -72,6 +84,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
             # 4. Concatenate the bytes
                 # No intervention required
 
+        # TODO: Pad header_size to a constant value like the games do
         header_size = self.header_packer.sizeof()
         collective_data = bytearray()
 
@@ -90,8 +103,11 @@ class FilePacker(BaseUnpacker[FileData_Common]):
                 if not isinstance(attr, list):
                     raise TypeError(
                         f"Header field {name} was expected as list, because {self.python_type.__name__} specified it to be packed by {packer}")
-                for item in attr:
-                    packer.pack(big_endian, item, collective_data)
+                for i,item in enumerate(attr):
+                    try:
+                        packer.pack(big_endian, item, collective_data)
+                    except PackingValidationError as e:
+                        raise PackingValidationError(f"Element {i}: {e}")
                 return ArrayPointer(sized_ptr=sized_pointer)
             else:
                 raise TypeError(f"Unexpected packer type {packer}")
@@ -102,7 +118,10 @@ class FilePacker(BaseUnpacker[FileData_Common]):
 
         element_pointers = {}
         for name, packer in self.python_type.header_pointer_fields():
-            element_pointers[name] = pack_data(name, packer, collective_data)
+            try:
+                element_pointers[name] = pack_data(name, packer, collective_data)
+            except PackingValidationError as e:
+                raise PackingValidationError(f"File Element {name}: {e}")
 
         header = self.header_packer.python_type(
             **header_copies,
@@ -153,7 +172,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
 
         return file_data, -1
 
-    def validate_value(self, value: FileData_Common) -> bool:
+    def validate_value(self, value: FileData_Common):
         raise NotImplementedError()
 
     # TODO: Better way of doing this would be to have sizeof relegated to BaseConstantSizeUnpacker?

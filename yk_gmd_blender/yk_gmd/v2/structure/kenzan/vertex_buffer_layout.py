@@ -6,12 +6,12 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import Verte
 
 
 @dataclass(frozen=True)
-class VertexBufferLayout_YK1(VertexBufferLayout):
+class VertexBufferLayout_Kenzan(VertexBufferLayout):
     padding: int = 0
 
 
-VertexBufferLayout_YK1_Unpack = StructureUnpacker(
-    VertexBufferLayout_YK1,
+VertexBufferLayout_Kenzan_Unpack = StructureUnpacker(
+    VertexBufferLayout_Kenzan,
     fields=[
         ("index", c_uint32),
         ("vertex_count", c_uint32),

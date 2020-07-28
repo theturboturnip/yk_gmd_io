@@ -8,11 +8,12 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr, ChecksumStr_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, FilePacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBase
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh_Unpack, Mesh
+from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import Node_Unpack, Node
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsData_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack, UNK12_Unpack, UNK14_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import Material_YK1_Unpack, c_uint16
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import Mesh_YK1, Mesh_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import Object_YK1, Object_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayout_YK1_Unpack, VertexBufferLayout_YK1
 
@@ -23,7 +24,7 @@ class FileData_YK1(FileData_Common):
 
     node_arr: List[Node]
     obj_arr: List[Object_YK1]
-    mesh_arr: List[Mesh]
+    mesh_arr: List[Mesh_YK1]
     attribute_arr: List[Attribute]
     material_arr: List[MaterialBase]
     matrix_arr: List[mathutils.Matrix]
@@ -42,7 +43,7 @@ class FileData_YK1(FileData_Common):
     # # 0x92 = 146 => this is likely a bone address
     # # 24 elements in total
     unk14: List[List[int]]
-    finish: List[float]
+    flags: List[int]
 
     def __str__(self):
         s = "{\n"
@@ -58,10 +59,10 @@ class FileData_YK1(FileData_Common):
         return FileData_Common.header_pointer_fields() + [
             ("node_arr", Node_Unpack),
             ("obj_arr", Object_YK1_Unpack),
-            ("mesh_arr", Mesh_Unpack),
+            ("mesh_arr", Mesh_YK1_Unpack),
             ("attribute_arr", Attribute_Unpack),
             ("material_arr", Material_YK1_Unpack),
-            ("matrix_arr", Mesh_Unpack),
+            ("matrix_arr", MatrixUnpacker),
             ("vertex_buffer_arr", VertexBufferLayout_YK1_Unpack),
             ("vertex_data", bytes),
             ("texture_arr", ChecksumStr_Unpack),
@@ -79,7 +80,7 @@ class FileData_YK1(FileData_Common):
     def header_fields_to_copy(cls) -> List[str]:
         return FileData_Common.header_fields_to_copy() + [
             "overall_bounds",
-            "finish"
+            "flags"
         ]
 
 

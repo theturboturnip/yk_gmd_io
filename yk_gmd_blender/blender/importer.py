@@ -2,9 +2,11 @@ import bpy
 import math
 from typing import Dict, List
 
+from yk_gmd_blender import GMDError
 from yk_gmd_blender.blender.common import material_name, uv_yk_to_blender_space, yk_to_blender_space
 from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterialTextureIndex
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
+from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 
@@ -21,11 +23,10 @@ class GMDImporter:
         with open(self.filepath, "rb") as in_file:
             data = in_file.read()
 
-        header, big_endian = extract_base_header(data)
-        self.big_endian = big_endian
-        contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
-        self.scene = convert_YK1_to_legacy_abstraction(contents)
-        #self.gmd_file = #GMDFileIOAbstraction(GMDFile(data).structs)
+        can_read, base_header = can_read_from(data)
+        if not can_read:
+            raise GMDError(f"Can't read files with version {base_header.version_str()}")
+        self.initial_data, self.scene = read_to_legacy(data)
 
     def check(self) -> bool:
         pass # TODO: Do checks here?
@@ -168,7 +169,7 @@ class GMDImporter:
         import bmesh
         bmeshes = []
         for sm_index, submesh in enumerate(self.scene.submeshes):
-            print(f"Loading submesh with {len(submesh.vertices)} verts")
+            print(f"Loading submesh {sm_index} with {len(submesh.vertices)} verts")
             vertex_layout = submesh.material.vertex_buffer_layout
 
             # (bmesh_idx, submesh_idx) pairs

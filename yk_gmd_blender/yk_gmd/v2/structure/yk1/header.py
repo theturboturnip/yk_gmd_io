@@ -46,7 +46,7 @@ class GMDHeader_YK1(GMDHeader):
     # # 0x92 = 146 => this is likely a bone address
     # # 24 elements in total
     unk14: ArrayPointer[List[int]]
-    finish: List[float]
+    flags: List[int]
 
 
 GMDHeader_YK1_Unpack = StructureUnpacker(
@@ -75,7 +75,7 @@ GMDHeader_YK1_Unpack = StructureUnpacker(
         ("unk12", ArrayPointerUnpack),
         ("unk13", ArrayPointerUnpack),
         ("unk14", ArrayPointerUnpack),
-        ("finish", FixedSizeArrayUnpacker(c_float32, 6)),
+        ("flags", FixedSizeArrayUnpacker(c_uint32, 6)),
     ],
     base_class_unpackers={
         GMDHeader: GMDHeaderUnpack

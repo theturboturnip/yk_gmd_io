@@ -3,14 +3,17 @@ import math
 from pathlib import Path
 
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderUnpack
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
+from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 from yk_gmd_blender.yk_gmd.abstract.vector import Quat
 from yk_gmd_blender.yk_gmd.legacy.file import GMDFile, GMDFileIOAbstraction
 
+
+from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import *
 
 def quaternion_to_euler_angle(q: Quat):
     ysqr = q.y * q.y
@@ -171,21 +174,41 @@ if __name__ == '__main__':
     base_header, _ = GMDHeaderUnpack.unpack(big_endian, data=data, offset=0)
 
     # Version check
-    if base_header.version == GMDVersion.Kiwami1.value:
-        contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
+    # version_properties = base_header.get_version_properties()
+    # if version_properties.major_version == GMDVersion.Kiwami1:
+    #     contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
+    #
+    #     #print("Trying identity transformation")
+    #     scene = convert_YK1_to_legacy_abstraction(contents, version_properties)
+    #     new_contents = package_legacy_abstraction_to_YK1(big_endian, contents, scene)
+    #     new_data = bytearray()
+    #     FilePacker_YK1.pack(big_endian, new_contents, new_data)
+    #
+    #     unpacked_new_data, _ = FilePacker_YK1.unpack(big_endian, data=new_data, offset=0)
+    #
+    #     if args.output_dir:
+    #         with open(args.output_dir / args.file_to_poke, "wb") as out_file:
+    #             out_file.write(new_data)
+    # elif version_properties.major_version == GMDVersion.Kenzan:
+    #     contents, _ = FilePacker_Kenzan.unpack(big_endian, data=data, offset=0)
+    #
+    #     scene = convert_Kenzan_to_legacy_abstraction(contents, version_properties)
+    # else:
+    #     raise Exception(f"Unknown base_header version {base_header.version_str()}")
 
-        #print("Trying identity transformation")
-        scene = convert_YK1_to_legacy_abstraction(contents)
-        new_contents = package_legacy_abstraction_to_YK1(big_endian, contents, scene)
-        new_data = bytearray()
-        FilePacker_YK1.pack(big_endian, new_contents, new_data)
+    can_read, header = can_read_from(data)
+    if can_read_from:
+        contents, scene = read_to_legacy(data)
 
-        unpacked_new_data, _ = FilePacker_YK1.unpack(big_endian, data=new_data, offset=0)
+        can_write, _ = can_write_over(data)
+        if can_write:
+            new_bytes = write_from_legacy(contents, scene)
+            new_contents, new_scene = read_to_legacy(new_bytes)
 
-        if args.output_dir:
-            with open(args.output_dir / args.file_to_poke, "wb") as out_file:
-                out_file.write(new_data)
-    elif base_header.version == GMDVersion.Kenzan.value:
-        contents, _ = FilePacker_Kenzan.unpack(big_endian, data=data, offset=0)
+            if args.output_dir:
+                with open(args.output_dir / args.file_to_poke, "wb") as out_file:
+                    out_file.write(new_bytes)
+        else:
+            print(f"Can't write to version {header.version_str()}")
     else:
-        raise Exception(f"Unknown base_header version {base_header.version}")
+        print(f"Can't read from version {header.version_str()}")

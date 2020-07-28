@@ -15,6 +15,8 @@ from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
 from yk_gmd_blender.yk_gmd.abstract.vector import Vec4
 from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertex, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
+from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy, write_from_legacy, \
+    can_write_over
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
@@ -137,10 +139,10 @@ class GMDExporter:
         with open(self.filepath, "rb") as in_file:
             data = in_file.read()
 
-        header, big_endian = extract_base_header(data)
-        self.big_endian = big_endian
-        self.initial_contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
-        self.scene = convert_YK1_to_legacy_abstraction(self.initial_contents)
+        can_write, base_header = can_write_over(data)
+        if not can_write:
+            raise GMDError(f"Can't write over files with version {base_header.version_str()}")
+        self.initial_data, self.scene = read_to_legacy(data)
 
     def check(self):
         #if bpy.context.object.mode != "OBJECT":
@@ -549,8 +551,6 @@ class GMDExporter:
         pass
 
     def overwrite_file_with_abstraction(self):
-        new_contents = package_legacy_abstraction_to_YK1(self.big_endian, self.initial_contents, self.scene)
-        new_data = bytearray()
-        FilePacker_YK1.pack(self.big_endian, new_contents, new_data)
+        new_data = write_from_legacy(self.initial_data, self.scene)
         with open(self.filepath, "wb") as out_file:
             out_file.write(new_data)

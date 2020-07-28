@@ -54,7 +54,7 @@ class HeaderStruct(BaseBigEndianStructure):
         # 0x92 = 146 => this is likely a bone address
         # 24 elements in total
         ("unk14", array_pointer_of(Unk14)),
-        ("finish", c_float * 6)
+        ("flags", c_float * 6)
     ]
 
     def set_field(self, name: str, data):

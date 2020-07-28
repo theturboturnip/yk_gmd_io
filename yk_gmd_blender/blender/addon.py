@@ -79,15 +79,22 @@ class ImportGMD(Operator, ImportHelper):
         from yk_gmd_blender.blender.importer import GMDImporter
         import time
 
-        start_time = time.time()
-        importer = GMDImporter(filepath, import_settings)
-        importer.read()
-        importer.check()
-        importer.add_items(context)
-        elapsed_s = "{:.2f}s".format(time.time() - start_time)
-        print("GMD import finished in " + elapsed_s)
+        try:
+            start_time = time.time()
 
-        return {'FINISHED'}
+            importer = GMDImporter(filepath, import_settings)
+            importer.read()
+            importer.check()
+            importer.add_items(context)
+
+            elapsed_s = "{:.2f}s".format(time.time() - start_time)
+            print("GMD import finished in " + elapsed_s)
+
+            return {'FINISHED'}
+        except GMDError as error:
+            print("Catching Error")
+            self.report({"ERROR"}, str(error))
+        return {'CANCELLED'}
 
 def menu_func_import(self, context):
     self.layout.operator(ImportGMD.bl_idname, text='Yakuza GMD (.gmd)')

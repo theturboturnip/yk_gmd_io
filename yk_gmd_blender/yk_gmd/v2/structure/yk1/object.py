@@ -12,6 +12,7 @@ class Object_YK1:
     node_index_2: int
     drawlist_rel_ptr: int
 
+    # TODO: 010 template says this is a matrix
     bbox: BoundsData_YK1
 
 
