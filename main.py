@@ -202,8 +202,13 @@ if __name__ == '__main__':
 
         can_write, _ = can_write_over(data)
         if can_write:
-            new_bytes = write_from_legacy(contents, scene)
+            contents.unk13 = []#[0xFF] * len(contents.unk13)
+            new_bytes = bytearray()
+            FilePacker_YK1.pack(contents.file_is_big_endian(), contents, new_bytes)
+            new_bytes = bytes(new_bytes)
+            #new_bytes = write_from_legacy(contents, scene)
             new_contents, new_scene = read_to_legacy(new_bytes)
+            print(new_contents.unk13)
 
             if args.output_dir:
                 with open(args.output_dir / args.file_to_poke, "wb") as out_file:

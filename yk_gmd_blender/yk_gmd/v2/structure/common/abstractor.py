@@ -64,8 +64,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         # if node is instance of GMDObject
             # object_id_node_index_mapping[id(node)] = node
     # make sure to maintain original object order for scene
-        # involves making sure the DFA happens with children in order []
-
+        # involves making sure the DFA happens with objects in order
     # Note - flags
         # many bones flag is important, but so are the others - look into which ones are supposed to be there
         # is relative-indexing set in a flag?

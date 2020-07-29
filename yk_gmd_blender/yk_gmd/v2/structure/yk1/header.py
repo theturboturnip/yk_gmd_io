@@ -40,12 +40,9 @@ class GMDHeader_YK1(GMDHeaderStruct):
 
     overall_bounds: BoundsDataStruct_YK1
 
-    unk12: ArrayPointerStruct[List[float]]
-    unk13: ArrayPointerStruct[int]  # Is sequence 00, 7C, 7D, 7E... 92 in Kiwami bob
-    # # 0x7C = 124
-    # # 0x92 = 146 => this is likely a bone address
-    # # 24 elements in total
-    unk14: ArrayPointerStruct[List[int]]
+    unk12: ArrayPointerStruct[List[float]] # Material properties
+    unk13: ArrayPointerStruct[int] # List of root node indices - those without parents
+    unk14: ArrayPointerStruct[List[int]] # Material properties
     flags: List[int]
 
 
