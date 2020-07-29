@@ -133,6 +133,7 @@ def extract_legacy_vertex_buffers(vertex_buffer_arr: List[VertexBufferLayoutStru
 
         if abstract_layout.calc_bytes_per_vertex() != layout.bytes_per_vertex:
             print(f"BPV mismatch: {abstract_layout.calc_bytes_per_vertex()} != layout BPV {layout.bytes_per_vertex}")
+            print(f"flags: 0x{layout.vertex_packing_flags:08x} created layout {abstract_layout}")
 
         #print(abstract_layout)
         if layout.vertex_count > 2 ** 20:

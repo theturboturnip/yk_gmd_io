@@ -18,16 +18,20 @@ class GMDNode:
     rot: Quaternion
     scale: Vector
 
+    matrix: Optional[Matrix]
+
     parent: Optional['GMDNode']
     children: List['GMDNode']
 
-    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector, parent: Optional['GMDNode']):
+    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector, matrix: Optional[Matrix], parent: Optional['GMDNode']):
         self.name = name
         self.node_type = node_type
 
         self.pos = pos
         self.rot = rot
         self.scale = scale
+
+        self.matrix = matrix
 
         self.parent = parent
         self.children = []
@@ -37,26 +41,34 @@ class GMDBone(GMDNode):
     bone_pos: Vector
     bone_axis: Quaternion
 
-    matrix: Matrix
-
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
                  bone_pos: Vector,
                  bone_axis: Quaternion,
                  matrix: Matrix,
 
                  parent: Optional['GMDBone']):
-        super().__init__(name, node_type, pos, rot, scale, parent)
+        super().__init__(name, node_type, pos, rot, scale, matrix, parent)
 
         self.bone_pos = bone_pos
         self.bone_axis = bone_axis
-        self.matrix = matrix
 
 
-class GMDObject(GMDNode):
+class GMDUnskinnedObject(GMDNode):
+    mesh_list: List[GMDMesh]
+
+    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
+                 parent: GMDNode,
+                 matrix: Matrix,
+                 mesh_list: List[GMDMesh]):
+        super().__init__(name, node_type, pos, rot, scale, matrix, parent)
+        self.mesh_list = mesh_list
+
+
+class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
                  parent: GMDNode,
                  mesh_list: List[GMDMesh]):
-        super().__init__(name, node_type, pos, rot, scale, parent)
+        super().__init__(name, node_type, pos, rot, scale, matrix=None, parent=parent)
         self.mesh_list = mesh_list

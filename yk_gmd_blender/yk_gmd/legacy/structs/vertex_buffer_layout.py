@@ -109,7 +109,7 @@ class VertexBufferLayoutStruct(BaseBigEndianStructure):
             ("bones", 0x200),
             ("normal", 0x400),
             ("tangent", 0x2000),
-            ("unk", 0x10000),
+            ("unk", 0x1_0000),
             ("col0", 0x0020_0000),
             ("col1", 0x0100_0000),
             ("uv0", 0xf000_0000),

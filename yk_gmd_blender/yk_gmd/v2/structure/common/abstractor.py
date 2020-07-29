@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple, Iterable, TypeVar, Callable
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDObject, GMDNode
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
@@ -14,7 +14,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeStack
 class RearrangedData:
     nodes_arr: List[Tuple[GMDNode, NodeStackOp]]
     object_id_to_node_index: Dict[int, int]
-    objects: List[GMDObject]
+    objects: List[GMDSkinnedObject]
 
     texture_names: List[ChecksumStrStruct]
     texture_names_index: Dict[str, int]

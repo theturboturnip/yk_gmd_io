@@ -4,8 +4,8 @@ from enum import IntEnum
 from typing import List, Dict, Deque
 
 from mathutils import Vector, Quaternion, Matrix
-from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor
-from yk_gmd_blender.structurelib.primitives import c_int32
+from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor, FixedSizeArrayUnpacker
+from yk_gmd_blender.structurelib.primitives import c_int32, c_uint32
 from yk_gmd_blender.yk_gmd.legacy.abstract.bone import GMDBone
 from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Quat
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
@@ -42,7 +42,7 @@ class NodeStruct:
 
     bone_pos: Vector
     bone_axis: Quaternion
-    padding: Vector
+    flags: List[int]
 
 
 NodeStruct_Unpack = StructureUnpacker(
@@ -71,6 +71,6 @@ NodeStruct_Unpack = StructureUnpacker(
 
         ("bone_pos", Vec4Unpacker),
         ("bone_axis", QuatUnpacker),
-        ("padding", Vec4Unpacker),
+        ("flags", FixedSizeArrayUnpacker(c_uint32, 4)),
     ]
 )
