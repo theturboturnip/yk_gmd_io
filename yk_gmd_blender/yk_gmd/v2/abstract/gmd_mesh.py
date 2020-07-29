@@ -20,5 +20,5 @@ class GMDMesh:
     triangle_strip_noreset_indices: array.ArrayType
     triangle_strip_reset_indices: array.ArrayType
 
-    material: GMDAttributeSet
+    attribute_set: GMDAttributeSet
 

@@ -36,6 +36,9 @@ class GMDNode:
         self.parent = parent
         self.children = []
 
+        if self.parent:
+            self.parent.children.append(self)
+
 
 class GMDBone(GMDNode):
     bone_pos: Vector
@@ -52,6 +55,9 @@ class GMDBone(GMDNode):
         self.bone_pos = bone_pos
         self.bone_axis = bone_axis
 
+        if self.node_type != NodeType.MatrixTransform:
+            raise TypeError(f"GMDBone expected NodeType.MatrixTransform, got {self.node_type}")
+
 
 class GMDUnskinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
@@ -63,6 +69,8 @@ class GMDUnskinnedObject(GMDNode):
         super().__init__(name, node_type, pos, rot, scale, matrix, parent)
         self.mesh_list = mesh_list
 
+        if self.node_type != NodeType.UnskinnedMesh:
+            raise TypeError(f"GMDUnskinnedObject expected NodeType.UnskinnedMesh, got {self.node_type}")
 
 class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
@@ -72,3 +80,6 @@ class GMDSkinnedObject(GMDNode):
                  mesh_list: List[GMDMesh]):
         super().__init__(name, node_type, pos, rot, scale, matrix=None, parent=parent)
         self.mesh_list = mesh_list
+
+        if self.node_type != NodeType.SkinnedMesh:
+            raise TypeError(f"GMDSkinnedObject expected NodeType.SkinnedMesh, got {self.node_type}")

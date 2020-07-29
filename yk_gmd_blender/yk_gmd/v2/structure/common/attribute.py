@@ -44,11 +44,11 @@ class AttributeStruct:
     flags: int
 
     texture_diffuse: TextureIndexStruct  # Usually has textures with _di postfix
-    texture_refl_cubemap: TextureIndexStruct  # Observed to have a cubemap texture for one eye-related material
+    texture_refl: TextureIndexStruct  # Observed to have a cubemap texture for one eye-related material
     texture_multi: TextureIndexStruct
     # Never filled
     texture_unk1: TextureIndexStruct
-    texture_unk2: TextureIndexStruct
+    texture_ts: TextureIndexStruct # Only present in "rs" shaders
     texture_normal: TextureIndexStruct  # Usually has textures with _tn postfix
     texture_rt: TextureIndexStruct  # Usually has textures with _rt postfix
     texture_rd: TextureIndexStruct  # Usually has textures with _rd postfix
