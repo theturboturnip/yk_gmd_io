@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Iterable, TypeVar, Callable
 
+from mathutils import Matrix
+
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode, GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
@@ -14,7 +16,11 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeStack
 class RearrangedData:
     nodes_arr: List[Tuple[GMDNode, NodeStackOp]]
     object_id_to_node_index: Dict[int, int]
-    objects: List[GMDSkinnedObject]
+    skinned_objects: List[GMDSkinnedObject]
+    unskinned_objects: List[GMDUnskinnedObject]
+    ordered_matrices: List[Matrix]
+    object_id_to_matrix_index: Dict[int, int]
+    root_node_indices: List[int]
 
     texture_names: List[ChecksumStrStruct]
     texture_names_index: Dict[str, int]
@@ -28,6 +34,11 @@ class RearrangedData:
 
     ordered_materials: List[GMDMaterial]
     material_id_to_index: Dict[int, int]
+
+    # This is only for skinned meshes
+    mesh_matrix_index_strings: List[List[int]]
+    # build with build_index_mapping(pool, key=tuple)
+    mesh_matrix_index_strings_index: Dict[Tuple, int]
 
 
 T = TypeVar('T')
@@ -61,8 +72,15 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
 
         # emit (node, stackop)
 
-        # if node is instance of GMDObject
-            # object_id_node_index_mapping[id(node)] = node
+        # if node is instance of GMDObject (skinned or unskinned)
+            # object_id_node_index_mapping[id(node)] = node index
+
+        # if node is bone or unskinned
+            # emit matrix
+            # object_id_to_matrix_index[id(node)] = index
+
+        # if node has no parent
+            # add index to roots
     # make sure to maintain original object order for scene
         # involves making sure the DFA happens with objects in order
     # Note - flags
