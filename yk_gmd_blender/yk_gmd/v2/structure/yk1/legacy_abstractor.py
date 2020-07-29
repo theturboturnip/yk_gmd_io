@@ -147,7 +147,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FilePrope
         matrix_index=len(nodes),  # TODO: Does changing this do anything?
         stack_op=NodeStackOp.PopPush,
         name_index=len(node_names),
-        node_type=NodeType.Skin,
+        node_type=NodeType.SkinnedMesh,
 
         pos=Vector((0, 0, 0, 0)),
         rot=Quaternion(),

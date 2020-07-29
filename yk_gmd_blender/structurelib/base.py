@@ -119,24 +119,26 @@ class BoundedPrimitiveUnpacker(BasePrimitive[T]):
 
 class FixedSizeASCIIUnpacker(BaseUnpacker[str]):
     length: int
+    encoding: str
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, encoding: str = "ascii"):
         super().__init__(str)
         self.length = length
+        self.encoding = encoding
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
         str_data:bytes = data[offset:offset + self.length]
-        return str_data.decode("ascii").rstrip('\x00'), offset + self.length
+        return str_data.decode(self.encoding).rstrip('\x00'), offset + self.length
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
         self.validate_value(value)
-        str_data: bytes = value.encode("ascii")
+        str_data: bytes = value.encode(self.encoding)
         if len(str_data) < self.length:
             str_data += bytes([0] * (self.length - len(str_data)))
         append_to += str_data
 
     def validate_value(self, value: str):
-        encoded = value.encode("ascii")
+        encoded = value.encode(self.encoding)
         if len(encoded) > self.length:
             raise PackingValidationError(f"Encoded string {encoded} is {len(encoded)}, must be <= {self.length}")
 

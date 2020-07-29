@@ -152,7 +152,10 @@ class FilePacker(BaseUnpacker[FileData_Common]):
             elif isinstance(unpacker, BaseUnpacker):
                 if not isinstance(attr, ArrayPointerStruct):
                     raise TypeError(f"Header field {name} was expected as ArrayPointer but was {attr}. Reason: {self.python_type.__name__} specified it to be packed by {unpacker}")
-                return attr.extract(unpacker, big_endian, data)
+                try:
+                    return attr.extract(unpacker, big_endian, data)
+                except Exception as e:
+                    raise Exception(f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
             else:
                 raise TypeError(f"Unexpected unpacker type {unpacker}")
 

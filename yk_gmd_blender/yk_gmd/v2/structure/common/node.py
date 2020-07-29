@@ -20,8 +20,9 @@ class NodeStackOp(IntEnum):
 
 
 class NodeType(IntEnum):
-    NoType = 0,
-    Skin = 2
+    MatrixTransform = 0
+    UnskinnedMesh = 1
+    SkinnedMesh = 2
 
 
 @dataclass(frozen=True)

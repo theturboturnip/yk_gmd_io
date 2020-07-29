@@ -11,13 +11,13 @@ class ChecksumStrStruct:
 
     @staticmethod
     def make_from_str(text: str):
-        return ChecksumStrStruct(sum(text.encode("ascii")), text)
+        return ChecksumStrStruct(sum(text.encode("shift_jis")), text)
 
 
 ChecksumStrStruct_Unpack = StructureUnpacker(
     ChecksumStrStruct,
     fields=[
         ("checksum", c_uint16),
-        ("text", FixedSizeASCIIUnpacker(30))
+        ("text", FixedSizeASCIIUnpacker(30, encoding="shift_jis"))
     ]
 )

@@ -157,7 +157,7 @@ def extract_legacy_node_heirarchy(node_arr: List[NodeStruct], node_name_arr: Lis
 
     for node_struct in node_arr:
         # "Skin" types are objects, and the legacy exporter shouldn't care about objects
-        if node_struct.node_type == NodeType.Skin or node_struct.object_index != -1:
+        if node_struct.node_type == NodeType.SkinnedMesh or node_struct.object_index != -1:
             continue
 
         name = node_name_arr[node_struct.name_index].text
@@ -203,7 +203,7 @@ def extract_legacy_node_heirarchy(node_arr: List[NodeStruct], node_name_arr: Lis
             # if bone_info.part_id != -1:
             #    continue #
             # "Skin" types are objects, and the legacy exporter shouldn't care about objects
-            if bone_info.node_type == NodeType.Skin or bone_info.object_index != -1:
+            if bone_info.node_type == NodeType.SkinnedMesh or bone_info.object_index != -1:
                 continue
 
             if bone_info.parent_of >= 0:
