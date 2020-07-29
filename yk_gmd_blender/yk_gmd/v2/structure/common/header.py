@@ -6,7 +6,7 @@ from yk_gmd_blender.structurelib.base import *
 from yk_gmd_blender.structurelib.primitives import *
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, \
-    get_combined_version_properties, FileProperties
+    get_combined_version_properties, VersionProperties
 
 
 def extract_base_header(data: bytes) -> Tuple['GMDHeaderStruct', bool]:
@@ -38,13 +38,13 @@ class GMDHeaderStruct:
 
     @property
     def version_major(self) -> int:
-        return (self.version_combined >> 16) & 0xFF_FF
+        return (self.version_combined >> 16) & 0xFFFF
 
     @property
     def version_minor(self) -> int:
-        return (self.version_combined >> 0) & 0xFF_FF
+        return (self.version_combined >> 0) & 0xFFFF
 
-    def get_version_properties(self) -> FileProperties:
+    def get_version_properties(self) -> VersionProperties:
         return get_combined_version_properties(self.version_combined)
 
     def version_str(self) -> str:

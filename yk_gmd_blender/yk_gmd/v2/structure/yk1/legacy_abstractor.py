@@ -14,7 +14,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct, IndicesStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStackOp, NodeStruct, NodeType
-from yk_gmd_blender.yk_gmd.v2.structure.version import FileProperties
+from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1
@@ -33,7 +33,7 @@ __all__ = [
 
 
 # NOTE - object indices are important!!! they must be maintained
-def convert_YK1_to_legacy_abstraction(data: FileData_YK1, version_props: FileProperties) -> GMDScene:
+def convert_YK1_to_legacy_abstraction(data: FileData_YK1, version_props: VersionProperties) -> GMDScene:
     # get bones
     node_index_map = extract_legacy_node_heirarchy(data.node_arr, data.node_name_arr, data.matrix_arr)
     node_name_map = {b.name: b for b in node_index_map.values()}
@@ -123,7 +123,7 @@ def _generate_legacy_submesh_list(scene: GMDScene) -> List[GMDSubmesh]:
 # def make_common_built_scene(global_object_name: str) -> IndependentBuiltScene:
 #
 
-def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: FileProperties, initial_data: FileData_YK1, scene: GMDScene) -> FileData_YK1:
+def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: VersionProperties, initial_data: FileData_YK1, scene: GMDScene) -> FileData_YK1:
     # Check vertex endianness
     # TODO: Add function to FileData to do this logic
     vertices_big_endian = initial_data.vertices_are_big_endian()

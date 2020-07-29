@@ -2,7 +2,7 @@ from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.structure.common.legacy_abstractor import extract_legacy_node_heirarchy, \
     extract_legacy_vertex_buffers, extract_legacy_materials, extract_legacy_submeshes
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.version import FileProperties
+from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 
 __all__ = [
     "convert_Kenzan_to_legacy_abstraction",
@@ -10,7 +10,7 @@ __all__ = [
 
 
 # NOTE - object indices are important!!! they must be maintained
-def convert_Kenzan_to_legacy_abstraction(data: FileData_Kenzan, version_props: FileProperties) -> GMDScene:
+def convert_Kenzan_to_legacy_abstraction(data: FileData_Kenzan, version_props: VersionProperties) -> GMDScene:
     vertices_big_endian = data.vertices_are_big_endian()
 
     # get bones

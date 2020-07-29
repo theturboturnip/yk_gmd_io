@@ -12,7 +12,7 @@ class GMDVersion(Enum):
     #Dragon = 4
 
 @dataclass(frozen=True)
-class FileProperties:
+class VersionProperties:
     major_version: GMDVersion
     version_tuple: Tuple[int, int]
     # Are indices relative to the defined "vertex start" in the file?
@@ -27,10 +27,10 @@ class FileProperties:
 def get_major_minor_version(version_combined: int) -> Tuple[int, int]:
     return (version_combined >> 16) & 0xFFFF, (version_combined >> 0) & 0xFFFF
 
-def get_version_properties(version_major: int, version_minor: int) -> FileProperties:
+def get_version_properties(version_major: int, version_minor: int) -> VersionProperties:
     if version_major == 1:
         if version_minor <= 4:
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=True,
@@ -38,7 +38,7 @@ def get_version_properties(version_major: int, version_minor: int) -> FileProper
             )
         else:
             # ex: haruka_on
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
@@ -47,7 +47,7 @@ def get_version_properties(version_major: int, version_minor: int) -> FileProper
     elif version_major == 2:
         # Yakuza 3
         if version_minor == 8:
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kiwami1,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
@@ -55,7 +55,7 @@ def get_version_properties(version_major: int, version_minor: int) -> FileProper
             )
     elif version_major == 3:
         # All 0/Kiwami-era files
-        return FileProperties(
+        return VersionProperties(
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
@@ -63,7 +63,7 @@ def get_version_properties(version_major: int, version_minor: int) -> FileProper
         )
     elif version_major == 4:
         # Dragon engine
-        return FileProperties(
+        return VersionProperties(
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
