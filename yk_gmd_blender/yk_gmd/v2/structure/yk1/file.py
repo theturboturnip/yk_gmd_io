@@ -10,8 +10,9 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, File
 from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct_Unpack, NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, Unk14Struct
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack, UNK12_Unpack, UNK14_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
@@ -37,12 +38,12 @@ class FileData_YK1(FileData_Common):
     meshset_data: bytes
     mesh_matrix_bytestrings: bytes
 
-    unk12: List[List[float]]
+    unk12: List[Unk12Struct]
     unk13: List[int]  # Is sequence 00, 7C, 7D, 7E... 92 in Kiwami bob
     # # 0x7C = 124
     # # 0x92 = 146 => this is likely a bone address
     # # 24 elements in total
-    unk14: List[List[int]]
+    unk14: List[Unk14Struct]
     flags: List[int]
 
     def __str__(self):
@@ -71,9 +72,9 @@ class FileData_YK1(FileData_Common):
             ("index_data", c_uint16),
             ("meshset_data", bytes),
             ("mesh_matrix_bytestrings", bytes),
-            ("unk12", UNK12_Unpack),
+            ("unk12", Unk12Struct_Unpack),
             ("unk13", c_uint16),
-            ("unk14", UNK14_Unpack),
+            ("unk14", Unk14Struct_Unpack),
         ]
 
     @classmethod

@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
@@ -39,11 +39,11 @@ class GMDUnk14(GMDVersionRestricted):
     This consists of 16 uint32, which may or may not be transferrable between engines. They are mostly 0 in Kiwami 1 KiwamiBob.
     We don't know how to edit them, so they are frozen.
     """
-    float_data: List[int]
+    int_data: List[int]
 
 
 @dataclass
-class GMDAttributes:
+class GMDAttributeSet:
     shader: GMDShader
 
     texture_diffuse: str
@@ -55,5 +55,5 @@ class GMDAttributes:
     texture_rd: str
 
     material: GMDMaterial
-    unk12: GMDUnk12
-    unk14: GMDUnk14
+    unk12: Optional[GMDUnk12]
+    unk14: Optional[GMDUnk14]

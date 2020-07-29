@@ -11,15 +11,13 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct, StructureUnpacker, GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 
-
-UNK12_Unpack = FixedSizeArrayUnpacker(c_float32, 32)
-UNK14_Unpack = FixedSizeArrayUnpacker(c_uint32, 32)
 
 @dataclass(frozen=True)
 class GMDHeader_YK1(GMDHeaderStruct):
@@ -40,9 +38,9 @@ class GMDHeader_YK1(GMDHeaderStruct):
 
     overall_bounds: BoundsDataStruct_YK1
 
-    unk12: ArrayPointerStruct[List[float]] # Material properties
+    unk12: ArrayPointerStruct[Unk12Struct] # Material properties
     unk13: ArrayPointerStruct[int] # List of root node indices - those without parents
-    unk14: ArrayPointerStruct[List[int]] # Material properties
+    unk14: ArrayPointerStruct[Unk14Struct] # Material properties
     flags: List[int]
 
 

@@ -1,15 +1,20 @@
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Iterable, TypeVar, Callable
+from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union
 
 from mathutils import Matrix
 
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.structs import MaterialStruct
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode, GMDUnskinnedObject
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode, GMDUnskinnedObject, GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, GMDShader, GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeStackOp
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
+from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
 
 
 @dataclass(frozen=True)
@@ -107,4 +112,40 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # now all arrangements should be made - next is to port into the respective file formats
     # this is for tomorrow tho
 
+    pass
+
+def build_vertex_buffers_from_structs(vertex_layout_arr: List[VertexBufferLayoutStruct],
+
+                                      vertex_bytes: bytes) \
+        -> List[GMDVertexBuffer]:
+    pass
+
+def build_shaders_from_structs(abstract_vertex_buffers: List[GMDVertexBufferLayout],
+
+                               mesh_arr: List[MeshStruct], attribute_arr: List[AttributeStruct]) \
+        -> List[GMDShader]:
+    pass
+
+def build_materials_from_structs(abstract_shaders: List[GMDShader],
+
+                                 attribute_arr: List[AttributeStruct], material_arr: List[MaterialStruct],
+                                 unk12_arr: List[Unk12Struct], unk14_arr: List[Unk14Struct]) \
+        -> List[GMDAttributeSet]:
+    pass
+
+def build_skeleton_nodes(node_arr: List[NodeStruct], matrix_arr: List[Matrix]) \
+        -> Tuple[Dict[int, GMDBone], List[NodeStruct]]:
+    pass
+
+def build_meshes_from_structs(abstract_materials: List[GMDMaterial], abstract_vertex_buffers: List[GMDVertexBuffer],
+                              abstract_bones_index_map: Dict[int, GMDBone],
+
+                              mesh_arr: List[MeshStruct], index_buffer: List[int]) \
+        -> List[GMDMesh]:
+    pass
+
+def build_object_nodes(abstract_meshes: List[GMDMesh],
+
+                       remaining_node_arr: List[NodeStruct], matrix_arr: List[Matrix]) \
+        -> Tuple[List[GMDSkinnedObject], List[GMDUnskinnedObject]]:
     pass
