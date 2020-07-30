@@ -32,7 +32,7 @@ class HierarchyData(Generic[TNode]):
             for node in depth_first_iterate(self.roots)
         }
 
-    def depth_first_iterate(self):
+    def depth_first_iterate(self) -> Generator[TNode, None, None]:
         return depth_first_iterate(self.roots)
 
     @property

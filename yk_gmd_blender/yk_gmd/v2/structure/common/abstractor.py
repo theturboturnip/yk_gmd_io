@@ -1,7 +1,7 @@
 import array
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload, Optional
+from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload, Optional, Set
 
 from mathutils import Matrix
 
@@ -9,7 +9,7 @@ from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet, GMDUnk12, GMDUnk14
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, GMDShader, GMDVertexBuffer, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
@@ -27,9 +27,8 @@ from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProper
 @dataclass(frozen=True)
 class RearrangedData:
     nodes_arr: List[Tuple[GMDNode, NodeStackOp]]
+    bone_id_to_node_index: Dict[int, int]
     object_id_to_node_index: Dict[int, int]
-    skinned_objects: List[GMDSkinnedObject]
-    unskinned_objects: List[GMDUnskinnedObject]
     ordered_matrices: List[Matrix]
     object_id_to_matrix_index: Dict[int, int]
     root_node_indices: List[int]
@@ -41,11 +40,20 @@ class RearrangedData:
     node_names: List[ChecksumStrStruct]
     node_names_index: Dict[str, int]
 
-    ordered_meshes: List[Tuple[GMDVertexBufferLayout, List[GMDMesh]]]
+    # Tuple of (layout, layout_vertex_packing_flags, meshes)
+    vertex_layout_groups: List[Tuple[GMDVertexBufferLayout, int, List[GMDMesh]]]
+    ordered_meshes: List[GMDMesh]
     mesh_id_to_index: Dict[int, int]
+    mesh_id_to_matrixlist: Dict[int, List[int]]
+
+    ordered_attribute_sets: List[GMDAttributeSet]
+    attribute_set_id_to_index: Dict[int, int]
 
     ordered_materials: List[GMDMaterial]
     material_id_to_index: Dict[int, int]
+
+    skinned_objects: List[GMDSkinnedObject]
+    unskinned_objects: List[GMDUnskinnedObject]
 
     # This is only for skinned meshes
     mesh_matrix_index_strings: List[List[int]]
@@ -67,59 +75,196 @@ def build_index_mapping(pool: List[T], key: Callable[[T], TKey] = lambda x: x) -
 def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str, int]]:
     # Given a set of strings, build the list of checksumstrs
     # sort the list by checksum (?) - I think RGG do this
-    # return mapping of string -> index in list (generator)
+    # return mapping of string -> index in list
     pool = [ChecksumStrStruct.make_from_str(s) for s in strs]
     pool.sort(key=lambda css: css.checksum)
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
+def generate_vertex_layout_packing_flags(layout: GMDVertexBufferLayout) -> int:
+    pass
+
 def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
-    # Order the nodes
-    # Depth-first indexing
-    # Track touched nodes in set T(n)
-    # for i in order:
-        # stackop = none
-        # if has parent and all other children of your parent have been touched - stackop += pop
-        # if not leaf: stackop += push
-
-        # emit (node, stackop)
-
-        # if node is instance of GMDObject (skinned or unskinned)
-            # object_id_node_index_mapping[id(node)] = node index
-
-        # if node is bone or unskinned
-            # emit matrix
-            # object_id_to_matrix_index[id(node)] = index
-
-        # if node has no parent
-            # add index to roots
-    # make sure to maintain original object order for scene
-        # involves making sure the DFA happens with objects in order
     # Note - flags
         # many bones flag is important, but so are the others - look into which ones are supposed to be there
         # is relative-indexing set in a flag?
 
+    nodes_arr = []
+    bone_id_to_node_index = {}
+    object_id_to_node_index = {}
+    ordered_matrices = []
+    object_id_to_matrix_index = {}
+    root_node_indices = []
+
+    skinned_objects = list(scene.skinned_objects.depth_first_iterate())
+    unskinned_objects = list(scene.unskinned_objects.depth_first_iterate())
+
+    texture_names = set()
+    shader_names = set()
+    node_names = set()
+
+    # Order the nodes
+    # Depth-first indexing
+    # Track touched nodes in set T(n)?
+    root_gmd_nodes = []
+    if scene.bones:
+        root_gmd_nodes += scene.bones.roots
+    if scene.skinned_objects:
+        root_gmd_nodes += scene.skinned_objects.roots
+    if scene.unskinned_objects:
+        root_gmd_nodes += scene.unskinned_objects.roots
+    for i, gmd_node in enumerate(depth_first_iterate(root_gmd_nodes)):
+        # stackop = none
+        # if has parent and all other children of your parent have been touched - stackop += pop
+        # the depth_first_iterate iterates through children in order
+        #   -> if we are the last child, all others must have been touched
+        want_pop = bool(gmd_node.parent) and gmd_node.parent.children[-1] is gmd_node
+        # if not leaf: stackop += push
+        want_push = bool(gmd_node.children)
+
+        stack_op = NodeStackOp.NoOp
+        if want_pop:
+            stack_op = NodeStackOp.Pop
+            if want_push:
+                stack_op = NodeStackOp.PopPush
+        elif want_push:
+            stack_op = NodeStackOp.Push
+
+        # emit (node, stackop)
+        nodes_arr.append((gmd_node, stack_op))
+
+        # if node is instance of GMDObject (skinned or unskinned) add to object_id_node_index_mapping
+        if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+            object_id_to_node_index[id(gmd_node)] = i
+        elif isinstance(gmd_node, GMDBone):
+            bone_id_to_node_index[id(gmd_node)] = i
+
+        # if node is bone or unskinned, emit a matrix
+        if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
+            object_id_to_matrix_index[id(gmd_node)] = len(ordered_matrices)
+            ordered_matrices.append(gmd_node.matrix)
+
+        # if node has no parent, add index to roots
+        if not gmd_node.parent:
+            root_node_indices.append(i)
+
+        # Add name to node names
+        node_names.add(gmd_node.name)
+
+    # make sure to maintain original object order for scene
+        # involves making sure the DFA happens with objects in order
+
+    # collect meshes
+    meshes: List[GMDMesh] = [
+        mesh
+        for obj in skinned_objects
+        for mesh in obj.mesh_list
+    ] + [
+        mesh
+        for obj in unskinned_objects
+        for mesh in obj.mesh_list
+    ]
+    for mesh in meshes:
+        shader_names.add(mesh.attribute_set.shader.name)
+
+        texture_names.add(mesh.attribute_set.texture_diffuse)
+        texture_names.add(mesh.attribute_set.texture_refl)
+        texture_names.add(mesh.attribute_set.texture_multi)
+        texture_names.add(mesh.attribute_set.texture_unk1)
+        texture_names.add(mesh.attribute_set.texture_rs)
+        texture_names.add(mesh.attribute_set.texture_normal)
+        texture_names.add(mesh.attribute_set.texture_rt)
+        texture_names.add(mesh.attribute_set.texture_rd)
+
     # build texture, shader, node name pools
+    texture_names, texture_names_index = build_pools(texture_names)
+    shader_names, shader_names_index = build_pools(shader_names)
+    node_names, node_names_index = build_pools(node_names)
 
     # ordering meshes:
-    # build list of vertex buffers to use
+    # build list of vertex buffer layouts to use
+    known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
+        mesh.vertices_data.layout
+        for mesh in meshes
+    }
     # sort by descending flags int value (?)
-    # for buffer_layout in buffers:
-        # meshes_for_buffer = [m for m in meshes if m.material.shader.vertex_buffer_layout == buffer_layout]
+    known_vertex_layouts_and_flags = [(l, generate_vertex_layout_packing_flags(l)) for l in known_vertex_layouts_set]
+    known_vertex_layouts_and_flags.sort(key=lambda l_with_flags: l_with_flags[1], reverse=True)
+    vertex_layout_groups = []
+    for layout, flag in known_vertex_layouts_and_flags:
+        meshes_for_buffer = [m for m in meshes if m.attribute_set.shader.vertex_buffer_layout == layout]
         # sort meshes by id(material) - just to group the common materials together
+        meshes_for_buffer.sort(key=lambda m: id(m.attribute_set))
         # emit buffer_layout, meshes_for_buffer
+        vertex_layout_groups.append((layout, flag, meshes_for_buffer))
 
-    # ordered_materials = []
-    # for _,ms in buffer_meshes_pairs:
-        # for m in ms
-            # if m.material != ordered_materials[-1]
-                # ordered_materials.append(m.material)
+    ordered_meshes = sum([ms for _,_,ms in vertex_layout_groups], [])
+    mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
+
+    ordered_attribute_sets = []
+    for m in ordered_meshes:
+        if m.attribute_set != ordered_attribute_sets[-1]:
+            ordered_attribute_sets.append(m.attribute_set)
     # make index mapping for ordered_materials
+    attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)
+
+    material_ids = set()
+    ordered_materials = []
+    for attribute_set in ordered_attribute_sets:
+        if id(attribute_set.material) not in material_ids:
+            ordered_materials.append(attribute_set.material)
+            material_ids.add(id(attribute_set.material))
+    material_id_to_index = build_index_mapping(ordered_materials, key=id)
+
+    # TODO: Build drawlists?
+
+    # Build matrixlists
+    mesh_matrix_index_list_set = set()
+    mesh_id_to_matrixlist: Dict[int, List[int]] = {}
+    for mesh in ordered_meshes:
+        if not isinstance(mesh, GMDSkinnedMesh):
+            continue
+
+        matrix_list = [bone_id_to_node_index[id(bone)] for bone in mesh.relevant_bones]
+        mesh_matrix_index_list_set.add(tuple(matrix_list))
+        mesh_id_to_matrixlist[id(mesh)] = matrix_list
+    mesh_matrix_index_strings = [list(s) for s in mesh_matrix_index_list_set]
+    mesh_matrix_index_strings_index = build_index_mapping(mesh_matrix_index_strings, key=tuple)
 
     # now all arrangements should be made - next is to port into the respective file formats
     # this is for tomorrow tho
 
-    pass
+    return RearrangedData(
+        nodes_arr=nodes_arr,
+        bone_id_to_node_index=bone_id_to_node_index,
+        object_id_to_node_index=object_id_to_node_index,
+        skinned_objects=skinned_objects,
+        unskinned_objects=unskinned_objects,
+        ordered_matrices=ordered_matrices,
+        object_id_to_matrix_index=object_id_to_matrix_index,
+        root_node_indices=root_node_indices,
+
+        texture_names=texture_names,
+        texture_names_index=texture_names_index,
+        shader_names=shader_names,
+        shader_names_index=shader_names_index,
+        node_names=node_names,
+        node_names_index=node_names_index,
+
+        vertex_layout_groups=vertex_layout_groups,
+        ordered_meshes=ordered_meshes,
+        mesh_id_to_index=mesh_id_to_index,
+        mesh_id_to_matrixlist=mesh_id_to_matrixlist,
+
+        ordered_attribute_sets=ordered_attribute_sets,
+        attribute_set_id_to_index=attribute_set_id_to_index,
+
+        ordered_materials=ordered_materials,
+        material_id_to_index=material_id_to_index,
+
+        mesh_matrix_index_strings=mesh_matrix_index_strings,
+        mesh_matrix_index_strings_index=mesh_matrix_index_strings_index,
+    )
 
 
 # Note - checked=False disables bitchecks but the time taken is the same, dw about it
