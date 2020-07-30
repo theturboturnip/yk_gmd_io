@@ -1,6 +1,7 @@
 import array
+import time
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload
+from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload, Optional
 
 from mathutils import Matrix
 
@@ -120,20 +121,25 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
 
     pass
 
-def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVertexBufferLayout:
+
+# Note - checked=False disables bitchecks but the time taken is the same, dw about it
+def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int, checked: bool = True) -> GMDVertexBufferLayout:
     #item_packing_flags = vertex_packing_flags & 0xFFFF_FFFF
     #uv_list_flags = vertex_packing_flags >> 32
 
     # This derived from the 010 template
 
-    touched_packing_bits = set()
+    if checked:
+        touched_packing_bits = set()
 
-    def touch_bits(bit_indices: Iterable[int]):
-        touched_bits = set(bit_indices)
-        if touched_bits.intersection(touched_packing_bits):
-            raise Exception(f"Retouching bits {touched_bits.intersection(touched_packing_bits)}")
-        touched_packing_bits.update(touched_bits)
-
+        def touch_bits(bit_indices: Iterable[int]):
+            touched_bits = set(bit_indices)
+            if touched_bits.intersection(touched_packing_bits):
+                raise Exception(f"Retouching bits {touched_bits.intersection(touched_packing_bits)}")
+            touched_packing_bits.update(touched_bits)
+    else:
+        def touch_bits(bit_indices: Iterable[int]):
+            pass
 
     def extract_bits(start, length):
         touch_bits(range(start, start+length))
@@ -146,14 +152,17 @@ def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVerte
 
         return vertex_packing_flags & bitmask
 
-    def extract_vector_type(start: int, expected_full_precision: VecStorage) -> VecStorage:
-        bits = extract_bits( start, 2)
-        if bits == 0:
-            return expected_full_precision
-        elif bits == 1:
-            return VecStorage.Vec4Half
+    def extract_vector_type(en: bool, start: int, expected_full_precision: VecStorage) -> Optional[VecStorage]:
+        bits = extract_bits(start, 2)
+        if en:
+            if bits == 0:
+                return expected_full_precision
+            elif bits == 1:
+                return VecStorage.Vec4Half
+            else:
+                return VecStorage.Vec4Fixed
         else:
-            return VecStorage.Vec4Fixed
+            return None
 
     # pos can be (3 or 4) * (half or full) floats
     pos_count = extract_bits(0, 3)
@@ -164,25 +173,30 @@ def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVerte
         pos_storage = VecStorage.Vec3Full if pos_count == 3 else VecStorage.Vec4Full
 
     weight_en = extract_bitmask(0x70)
-    weights_storage = extract_vector_type(7, expected_full_precision=VecStorage.Vec4Full) if weight_en else None
+    weights_storage = extract_vector_type(weight_en, 7, expected_full_precision=VecStorage.Vec4Full)
 
     bones_en = extract_bitmask(0x200)
     bones_storage = VecStorage.Vec4Fixed if bones_en else None
 
     normal_en = extract_bitmask(0x400)
-    normal_storage = extract_vector_type(11, expected_full_precision=VecStorage.Vec3Full) if normal_en else None
+    normal_storage = extract_vector_type(normal_en, 11, expected_full_precision=VecStorage.Vec3Full)
 
     tangent_en = extract_bitmask(0x2000)
-    tangent_storage = extract_vector_type(14, expected_full_precision=VecStorage.Vec3Full) if tangent_en else None
+    tangent_storage = extract_vector_type(tangent_en, 14, expected_full_precision=VecStorage.Vec3Full)
 
     unk_en = extract_bitmask(0x0001_0000)
-    unk_storage = extract_vector_type(17, expected_full_precision=VecStorage.Vec3Full) if unk_en else None
+    unk_storage = extract_vector_type(unk_en, 17, expected_full_precision=VecStorage.Vec3Full)
 
-    col0_en = extract_bitmask(0x0020_000)
-    col0_storage = extract_vector_type(22, expected_full_precision=VecStorage.Vec4Full) if col0_en else None
+    # TODO: Are we sure these bits aren't used for something?
+    touch_bits((19, 20))
 
+    # col0 is diffuse and opacity for GMD versions up to 0x03000B
+    col0_en = extract_bitmask(0x0020_0000)
+    col0_storage = extract_vector_type(col0_en, 22, expected_full_precision=VecStorage.Vec4Full)
+
+    # col1 is specular for GMD versions up to 0x03000B
     col1_en = extract_bitmask(0x0100_0000)
-    col1_storage = extract_vector_type(25, expected_full_precision=VecStorage.Vec4Full) if col1_en else None
+    col1_storage = extract_vector_type(col1_en, 25, expected_full_precision=VecStorage.Vec4Full)
 
     # Extract the uv_enable and uv_count bits, to fill out the first 32 bits of the flags
     uv_en = extract_bits(27, 1)
@@ -215,14 +229,26 @@ def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVerte
                     elif bit_count == 4:
                         uv_storages.append(VecStorage.Vec4Half if format_bits else VecStorage.Vec4Full)
 
+                if len(uv_storages) == uv_count:
+                    # Touch the rest of the bits
+                    touch_bits(range(32 + ((i+1)*4), 64))
+                    break
+
             if len(uv_storages) != uv_count:
-                raise Exception(f"Layout Flags {vertex_packing_flags:08x} claimed to have {uv_count} UVs but specified {len(uv_storages)}")
+                raise Exception(f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs but specified {len(uv_storages)}")
         else:
             # Touch all of the uv bits, without doing anything with them
             touch_bits(range(32, 64))
             # TODO: Raise here? This is an unknown item
             uv_storages = [VecStorage.Vec2Full] * uv_count
         pass
+
+    #print(uv_storages)
+
+    if checked:
+        expected_touched_bits = {x for x in range(64)}
+        if touched_packing_bits != expected_touched_bits:
+            raise Exception(f"Incomplete vertex format parse - bits {expected_touched_bits.difference(touched_packing_bits)} were not touched")
 
     return GMDVertexBufferLayout.make_vertex_buffer_layout(
         pos_storage=pos_storage,
@@ -239,20 +265,34 @@ def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVerte
 def build_vertex_buffers_from_structs(version_properties: VersionProperties,
 
                                       vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
-                                      vertices_big_endian: bool) \
+                                      vertices_big_endian: bool,
+
+                                      profile:bool = False) \
         -> List[GMDVertexBuffer]:
 
     abstract_vertex_buffers = []
     vertex_bytes_offset = 0
     for layout_struct in vertex_layout_arr:
+        layout_build_start = time.time()
         abstract_layout = build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags)
         if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
             raise Exception(f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
                             f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
 
+        unpack_start = time.time()
+
         abstract_vertex_buffer, vertex_bytes_offset = \
             abstract_layout.unpack_from(vertices_big_endian, layout_struct.vertex_count,
                                         vertex_bytes, vertex_bytes_offset)
+
+        unpack_finish = time.time()
+
+        unpack_delta = unpack_finish - unpack_start
+        if profile:
+            # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
+            # This profiling is here incase we want to optimize vertex unpacking
+            print(f"Time to build layout: {unpack_start - layout_build_start}")
+            print(f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta/layout_struct.vertex_count * 1000:2f}ms/vert)")
 
         abstract_vertex_buffers.append(abstract_vertex_buffer)
 
@@ -409,6 +449,9 @@ def build_meshes_from_structs(version_properties: VersionProperties,
     # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
 
     def read_bytestring(start_byte: int, length: int):
+        if not mesh_matrix_bytestrings:
+            return []
+
         len_bytes = length * (2 if bytestrings_are_16bit else 1)
         actual_len = mesh_matrix_bytestrings[start_byte]
         if actual_len != length:

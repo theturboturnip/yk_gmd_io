@@ -9,16 +9,16 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject,
 TNode = TypeVar('TNode', bound=GMDNode)
 
 def depth_first_iterate(roots: List[TNode]) -> Generator[TNode, None, None]:
-    queue = LifoQueue[TNode]()
+    queue = []
     # Insert roots in reverse order, so we yield the first root first
     for root in roots[::-1]:
-        queue.put(root)
+        queue.append(root)
 
     while queue:
-        next = queue.get()
+        next = queue.pop()
         yield next
         for child in next.children[::-1]:
-            queue.put(child)
+            queue.append(child)
 
 
 class HierarchyData(Generic[TNode]):
@@ -39,6 +39,7 @@ class HierarchyData(Generic[TNode]):
     def total_elems(self):
         return len(self.elem_from_name.values())
 
+
 @dataclass(repr=False)
 class GMDScene:
     name: str
@@ -51,5 +52,5 @@ class GMDScene:
     unskinned_objects: Optional[HierarchyData[GMDUnskinnedObject]]
 
     def __post_init__(self):
-        if self.skinned_objects.total_elems != len(self.skinned_objects.roots):
+        if self.skinned_objects and self.skinned_objects.total_elems != len(self.skinned_objects.roots):
             raise Exception("Skinned objects are expected to all be at the root of the heirarchy")
