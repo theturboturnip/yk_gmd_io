@@ -2,6 +2,7 @@ import argparse
 import math
 from pathlib import Path
 
+from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_contents
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
@@ -13,7 +14,7 @@ from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Quat
 from yk_gmd_blender.yk_gmd.legacy.file import GMDFile, GMDFileIOAbstraction
 
 
-from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import *
+from yk_gmd_blender.yk_gmd.v2.legacy_io import *
 
 def quaternion_to_euler_angle(q: Quat):
     ysqr = q.y * q.y
@@ -149,16 +150,7 @@ def old_main(args):
         with open(args.output_dir / args.file_to_poke, "wb") as out_file:
             out_file.write(new_data)
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser("GMD Poker")
-
-    parser.add_argument("input_dir", type=Path)
-    parser.add_argument("--output_dir", type=Path)
-    parser.add_argument("file_to_poke", type=Path)
-
-    args = parser.parse_args()
-
+def legacy_abstract_v2_struct_main(args):
     with open(args.input_dir / args.file_to_poke, "rb") as in_file:
         data = in_file.read()
 
@@ -217,3 +209,16 @@ if __name__ == '__main__':
             print(f"Can't write to version {header.version_str()}")
     else:
         print(f"Can't read from version {header.version_str()}")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser("GMD Poker")
+
+    parser.add_argument("input_dir", type=Path)
+    parser.add_argument("--output_dir", type=Path)
+    parser.add_argument("file_to_poke", type=Path)
+
+    args = parser.parse_args()
+
+    version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke)
+    scene = read_abstract_scene_from_contents(version_props, file_data)

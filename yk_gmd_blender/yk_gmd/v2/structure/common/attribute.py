@@ -73,10 +73,10 @@ AttributeStruct_Unpack = StructureUnpacker(
         ("padding", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
 
         ("texture_diffuse", TextureIndexStruct_Unpack),
-        ("texture_refl_cubemap", TextureIndexStruct_Unpack),
+        ("texture_refl", TextureIndexStruct_Unpack),
         ("texture_multi", TextureIndexStruct_Unpack),
         ("texture_unk1", TextureIndexStruct_Unpack),
-        ("texture_unk2", TextureIndexStruct_Unpack),
+        ("texture_ts", TextureIndexStruct_Unpack),
         ("texture_normal", TextureIndexStruct_Unpack),
         ("texture_rt", TextureIndexStruct_Unpack),
         ("texture_rd", TextureIndexStruct_Unpack),
