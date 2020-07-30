@@ -7,7 +7,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
-@dataclass
+@dataclass(repr=False)
 class GMDBone(GMDNode):
     bone_pos: Vector
     bone_axis: Quaternion

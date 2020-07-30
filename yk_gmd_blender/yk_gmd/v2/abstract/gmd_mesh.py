@@ -9,7 +9,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 
-@dataclass
+@dataclass(repr=False)
 class GMDMesh:
     vertices_data: GMDVertexBuffer
 
@@ -21,7 +21,7 @@ class GMDMesh:
     attribute_set: GMDAttributeSet
 
 
-@dataclass
+@dataclass(repr=False)
 class GMDSkinnedMesh(GMDMesh):
     relevant_bones: List[GMDBone]
 

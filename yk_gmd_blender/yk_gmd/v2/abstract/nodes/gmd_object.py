@@ -8,7 +8,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
-@dataclass
+@dataclass(repr=False)
 class GMDUnskinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
 
@@ -25,8 +25,14 @@ class GMDUnskinnedObject(GMDNode):
         if self.node_type != NodeType.UnskinnedMesh:
             raise TypeError(f"GMDUnskinnedObject {name} expected NodeType.UnskinnedMesh, got {self.node_type}")
 
+    def __str__(self):
+        return super().__str__()
 
-@dataclass
+    def __repr__(self):
+        return self.__str__()
+
+
+@dataclass(repr=False)
 class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDSkinnedMesh]
 
