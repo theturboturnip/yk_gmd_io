@@ -129,7 +129,7 @@ def extract_legacy_vertex_buffers(vertex_buffer_arr: List[VertexBufferLayoutStru
     vertex_buffer_layouts = {}
     vertex_bytes = vertex_data
     for layout in vertex_buffer_arr:
-        abstract_layout: GMDVertexBufferLayout = layout.get_vertex_layout()
+        abstract_layout: GMDVertexBufferLayout = layout.get_legacy_vertex_layout()
 
         if abstract_layout.calc_bytes_per_vertex() != layout.bytes_per_vertex:
             print(f"BPV mismatch: {abstract_layout.calc_bytes_per_vertex()} != layout BPV {layout.bytes_per_vertex}")

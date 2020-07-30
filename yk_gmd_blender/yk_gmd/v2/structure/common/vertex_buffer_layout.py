@@ -92,7 +92,7 @@ class VertexBufferLayoutStruct:
                     return VecTypes.VECTOR2
             return 0
 
-    def get_vertex_layout(self) -> GMDVertexBufferLayout:
+    def get_legacy_vertex_layout(self) -> GMDVertexBufferLayout:
         vertex_elems = {}
         vertex_layout_bits = [
             ("pos", 0x07),

@@ -44,7 +44,7 @@ class GMDScene:
     # Node Heirarchy stuff
     overall_heirarchy: HierarchyData[GMDNode]
 
-    skeleton: Optional[HierarchyData[GMDBone]]
+    bones: Optional[HierarchyData[GMDBone]]
     skinned_objects: Optional[HierarchyData[GMDSkinnedObject]]
     unskinned_objects: Optional[HierarchyData[GMDUnskinnedObject]]
 

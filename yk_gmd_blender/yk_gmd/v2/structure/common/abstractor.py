@@ -10,7 +10,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAtt
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_node import GMDSkinnedObject, GMDNode, GMDUnskinnedObject, GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, GMDShader, GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, GMDShader, GMDVertexBuffer, VecStorage
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
@@ -118,12 +118,143 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
 
     pass
 
+def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int) -> GMDVertexBufferLayout:
+    #item_packing_flags = vertex_packing_flags & 0xFFFF_FFFF
+    #uv_list_flags = vertex_packing_flags >> 32
+
+    # This derived from the 010 template
+
+    touched_packing_bits = set()
+
+    def touch_bits(bit_indices: Iterable[int]):
+        touched_bits = set(bit_indices)
+        if touched_bits.intersection(touched_packing_bits):
+            raise Exception(f"Retouching bits {touched_bits.intersection(touched_packing_bits)}")
+        touched_packing_bits.update(touched_bits)
+
+
+    def extract_bits(start, length):
+        touch_bits(range(start, start+length))
+
+        # Extract bits by shifting down to start and generating a mask of `length` 1's in binary
+        return (vertex_packing_flags >> start) & int('1'*length, 2)
+
+    def extract_bitmask(bitmask):
+        touch_bits([i for i in range(32) if ((bitmask >> i) & 1)])
+
+        return vertex_packing_flags & bitmask
+
+    def extract_vector_type(start: int, expected_full_precision: VecStorage) -> VecStorage:
+        bits = extract_bits( start, 2)
+        if bits == 0:
+            return expected_full_precision
+        elif bits == 1:
+            return VecStorage.Vec4Half
+        else:
+            return VecStorage.Vec4Fixed
+
+    # pos can be (3 or 4) * (half or full) floats
+    pos_count = extract_bits(0, 3)
+    pos_precision = extract_bits(3, 1)
+    if pos_precision == 1:
+        pos_storage = VecStorage.Vec3Half if pos_count == 3 else VecStorage.Vec4Half
+    else:
+        pos_storage = VecStorage.Vec3Full if pos_count == 3 else VecStorage.Vec4Full
+
+    weight_en = extract_bitmask(0x70)
+    weights_storage = extract_vector_type(7, expected_full_precision=VecStorage.Vec4Full) if weight_en else None
+
+    bones_en = extract_bitmask(0x200)
+    bones_storage = VecStorage.Vec4Fixed if bones_en else None
+
+    normal_en = extract_bitmask(0x400)
+    normal_storage = extract_vector_type(11, expected_full_precision=VecStorage.Vec3Full) if normal_en else None
+
+    tangent_en = extract_bitmask(0x2000)
+    tangent_storage = extract_vector_type(14, expected_full_precision=VecStorage.Vec3Full) if tangent_en else None
+
+    unk_en = extract_bitmask(0x0001_0000)
+    unk_storage = extract_vector_type(17, expected_full_precision=VecStorage.Vec3Full) if unk_en else None
+
+    col0_en = extract_bitmask(0x0020_000)
+    col0_storage = extract_vector_type(22, expected_full_precision=VecStorage.Vec4Full) if col0_en else None
+
+    col1_en = extract_bitmask(0x0100_0000)
+    col1_storage = extract_vector_type(25, expected_full_precision=VecStorage.Vec4Full) if col1_en else None
+
+    # Extract the uv_enable and uv_count bits, to fill out the first 32 bits of the flags
+    uv_en = extract_bits(27, 1)
+    uv_count = extract_bits(28, 4)
+    uv_storages = []
+    if uv_count:
+        if uv_en:
+            # Iterate over all uv bits, checking for active UV slots
+            for i in range(8):
+                uv_slot_bits = extract_bits(32 + (i * 4), 4)
+                if uv_slot_bits == 0xF:
+                    continue
+
+                format_bits = (uv_slot_bits >> 2) & 0b11
+                if format_bits in [2, 3]:
+                    # This should be formatted as a [-1, 1] range thing
+                    # This is currently set in gmd_shader.py, although really it should be set in here
+                    # TODO: shift make_vector_unpacker logic out of abstract/gmd_shader and into here
+                    uv_storages.append(VecStorage.Vec4Fixed)
+                else:
+                    bit_count_idx = uv_slot_bits & 0b11
+                    bit_count = (2, 3, 4, 1)[bit_count_idx]
+
+                    if bit_count == 1:
+                        raise Exception(f"UV with 1 element encountered - unsure how to proceed")
+                    elif bit_count == 2:
+                        uv_storages.append(VecStorage.Vec2Half if format_bits else VecStorage.Vec2Full)
+                    elif bit_count == 3:
+                        uv_storages.append(VecStorage.Vec3Half if format_bits else VecStorage.Vec3Full)
+                    elif bit_count == 4:
+                        uv_storages.append(VecStorage.Vec4Half if format_bits else VecStorage.Vec4Full)
+
+            if len(uv_storages) != uv_count:
+                raise Exception(f"Layout Flags {vertex_packing_flags:08x} claimed to have {uv_count} UVs but specified {len(uv_storages)}")
+        else:
+            # Touch all of the uv bits, without doing anything with them
+            touch_bits(range(32, 64))
+            # TODO: Raise here? This is an unknown item
+            uv_storages = [VecStorage.Vec2Full] * uv_count
+        pass
+
+    return GMDVertexBufferLayout.make_vertex_buffer_layout(
+        pos_storage=pos_storage,
+        weights_storage=weights_storage,
+        bones_storage=bones_storage,
+        normal_storage=normal_storage,
+        tangent_storage=tangent_storage,
+        unk_storage=unk_storage,
+        col0_storage=col0_storage,
+        col1_storage=col1_storage,
+        uv_storages=uv_storages,
+    )
+
 def build_vertex_buffers_from_structs(version_properties: VersionProperties,
 
-                                      vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes) \
+                                      vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
+                                      vertices_big_endian: bool) \
         -> List[GMDVertexBuffer]:
-    pass
 
+    abstract_vertex_buffers = []
+    vertex_bytes_offset = 0
+    for layout_struct in vertex_layout_arr:
+        abstract_layout = build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags)
+        if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
+            raise Exception(f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
+                            f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
+
+        abstract_vertex_buffer, vertex_bytes_offset = \
+            abstract_layout.unpack_from(vertices_big_endian, layout_struct.vertex_count,
+                                        vertex_bytes, vertex_bytes_offset)
+
+        abstract_vertex_buffers.append(abstract_vertex_buffer)
+
+    return abstract_vertex_buffers
 
 def build_shaders_from_structs(version_properties: VersionProperties,
 
@@ -272,7 +403,7 @@ def build_meshes_from_structs(version_properties: VersionProperties,
                               ) \
         -> List[GMDMesh]:
     file_uses_relative_indices = version_properties.relative_indices_used
-    file_uses_vertex_offset = version_properties.vertex_offset_used
+    file_uses_vertex_offset = version_properties.mesh_vertex_offset_used
     # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
 
     def read_bytestring(start_byte: int, length: int):
@@ -339,12 +470,86 @@ def build_meshes_from_structs(version_properties: VersionProperties,
 
 def build_object_nodes(version_properties: VersionProperties,
 
-                       abstract_meshes: List[GMDMesh],
+                       abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
 
-                       remaining_node_arr: List[NodeStruct], matrix_arr: List[Matrix],
-                       mesh_bytestrings: bytes) \
+                       remaining_node_arr: List[NodeStruct], node_name_arr: List[ChecksumStrStruct],
+                       object_drawlist_ptrs: List[int],
+                       matrix_arr: List[Matrix], mesh_drawlists: bytes,
+                       big_endian: bool) \
         -> Tuple[List[GMDSkinnedObject], List[GMDUnskinnedObject]]:
-    pass
+    skinned_objects = []
+    unskinned_objects = []
+
+    parent_stack = ParentStack()
+    for node_struct in remaining_node_arr:
+        name = node_name_arr[node_struct.name_index].text
+
+        if node_struct.node_type == NodeType.MatrixTransform:
+            raise Exception(f"Node {name} of type {node_struct.node_type} found after bone heirarchy had finished")
+
+        # This is guaranteed to be some sort of object
+        # Parse the drawlist
+        object_abstract_meshes = []
+
+        drawlist_ptr = object_drawlist_ptrs[node_struct.object_index]
+        offset = drawlist_ptr
+        drawlist_len, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+        zero, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+        for i in range(drawlist_len):
+            material_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+            mesh_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+
+            abstract_attribute_set = abstract_attribute_sets[material_idx]
+            abstract_mesh = abstract_meshes[mesh_idx]
+            if abstract_attribute_set != abstract_mesh.attribute_set:
+                raise Exception(f"Object {name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
+
+            object_abstract_meshes.append(abstract_mesh)
+            pass
+
+        if node_struct.node_type == NodeType.SkinnedMesh:
+            if 0 <= node_struct.matrix_index < len(matrix_arr):
+                raise Exception(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
+
+            obj = GMDSkinnedObject(
+                name=name,
+                node_type=node_struct.node_type,
+
+                pos=node_struct.pos,
+                rot=node_struct.rot,
+                scale=node_struct.scale,
+
+                parent=parent_stack.peek() if parent_stack else None,
+
+                mesh_list=object_abstract_meshes
+            )
+            skinned_objects.append(obj)
+        else:
+            if not(0 <= node_struct.matrix_index < len(matrix_arr)):
+                raise Exception(f"Unskinned object {name} doesn't reference a valid matrix")
+
+            matrix = matrix_arr[node_struct.matrix_index]
+
+            obj = GMDUnskinnedObject(
+                name=name,
+                node_type=node_struct.node_type,
+
+                pos=node_struct.pos,
+                rot=node_struct.rot,
+                scale=node_struct.scale,
+
+                parent=parent_stack.peek() if parent_stack else None,
+
+                matrix=matrix,
+
+                mesh_list=object_abstract_meshes
+            )
+            unskinned_objects.append(obj)
+
+        # Apply the stack operation to the parent_stack
+        parent_stack.handle_node(node_struct.stack_op, obj)
+
+    return skinned_objects, unskinned_objects
 
 
 # TODO: Think about how to do this

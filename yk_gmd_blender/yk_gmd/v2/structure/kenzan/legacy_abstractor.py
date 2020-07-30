@@ -23,13 +23,13 @@ def convert_Kenzan_to_legacy_abstraction(data: FileData_Kenzan, version_props: V
     # get materials
     materials = extract_legacy_materials(data.attribute_arr, data.shader_arr, data.texture_arr, data.mesh_arr, vertex_buffers)
     # get submeshes/parts
-    print(f"kenzan file {version_props.version_str} rel_idx={version_props.relative_indices_used}, vtx_off={version_props.vertex_offset_used}")
+    print(f"kenzan file {version_props.version_str} rel_idx={version_props.relative_indices_used}, vtx_off={version_props.mesh_vertex_offset_used}")
     bytestrings_16bit = bool(data.flags[5] & 0x8000_0000)
     submeshes = extract_legacy_submeshes(data.file_is_big_endian(),
                                          data.mesh_arr, data.mesh_matrix_bytestrings, data.index_data, materials,
                                          vertex_buffers,
                                          relative_indices_used=version_props.relative_indices_used,
-                                         vertex_offset_used=version_props.vertex_offset_used,
+                                         vertex_offset_used=version_props.mesh_vertex_offset_used,
                                          bytestrings_are_16bit=bytestrings_16bit)
 
     return GMDScene(

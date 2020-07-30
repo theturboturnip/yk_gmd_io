@@ -53,7 +53,7 @@ def convert_YK1_to_legacy_abstraction(data: FileData_YK1, version_props: Version
                                          data.mesh_arr, data.mesh_matrix_bytestrings, data.index_data, materials,
                                          vertex_buffers,
                                          relative_indices_used=version_props.relative_indices_used,
-                                         vertex_offset_used=version_props.vertex_offset_used,
+                                         vertex_offset_used=version_props.mesh_vertex_offset_used,
                                          bytestrings_are_16bit=bytestrings_16bit)
 
     return GMDScene(

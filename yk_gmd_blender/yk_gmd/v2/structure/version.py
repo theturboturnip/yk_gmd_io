@@ -18,7 +18,7 @@ class VersionProperties:
     # Are indices relative to the defined "vertex start" in the file?
     relative_indices_used: bool
     # Is vertex offset used to determine the range of values used by a mesh?
-    vertex_offset_used: bool
+    mesh_vertex_offset_used: bool
 
     @property
     def version_str(self):
@@ -34,7 +34,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=True,
-                vertex_offset_used=True
+                mesh_vertex_offset_used=True
             )
         else:
             # ex: haruka_on
@@ -42,7 +42,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                vertex_offset_used=False
+                mesh_vertex_offset_used=False
             )
     elif version_major == 2:
         # Yakuza 3
@@ -51,7 +51,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kiwami1,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                vertex_offset_used=True
+                mesh_vertex_offset_used=True
             )
     elif version_major == 3:
         # All 0/Kiwami-era files
@@ -59,7 +59,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            vertex_offset_used=True
+            mesh_vertex_offset_used=True
         )
     elif version_major == 4:
         # Dragon engine
@@ -67,7 +67,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            vertex_offset_used=True
+            mesh_vertex_offset_used=True
         )
 
     print(f"Unknown major/minor combination {version_major}.{version_minor}")
