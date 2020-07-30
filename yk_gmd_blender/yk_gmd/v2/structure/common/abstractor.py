@@ -8,7 +8,7 @@ from mathutils import Matrix
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet, GMDUnk12, GMDUnk14
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, GMDShader, GMDVertexBuffer, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
@@ -443,7 +443,7 @@ def build_meshes_from_structs(version_properties: VersionProperties,
                               mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
                               bytestrings_are_16bit: bool,
                               ) \
-        -> List[GMDMesh]:
+        -> List[Union[GMDSkinnedMesh, GMDMesh]]:
     file_uses_relative_indices = version_properties.relative_indices_used
     file_uses_vertex_offset = version_properties.mesh_vertex_offset_used
     # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
@@ -484,8 +484,6 @@ def build_meshes_from_structs(version_properties: VersionProperties,
 
     meshes = []
     for mesh_struct in mesh_arr:
-        relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
-
         triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices)
         triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.noreset_strip_indices, min_index, max_index)
         triangle_strip_reset_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.reset_strip_indices, min_index, max_index)
@@ -499,17 +497,29 @@ def build_meshes_from_structs(version_properties: VersionProperties,
         if (not file_uses_relative_indices) and vertex_end < max_index:
             raise Exception(f"Mesh vertex_count is {mesh_struct.vertex_count} but indices show a range of length {max_index-min_index} is used.")
 
-        meshes.append(GMDMesh(
-            relevant_bones=[abstract_bones_ordered[bone_idx] for bone_idx in relevant_bone_indices],
+        relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
+        if relevant_bone_indices:
+            meshes.append(GMDSkinnedMesh(
+                relevant_bones=[abstract_bones_ordered[bone_idx] for bone_idx in relevant_bone_indices],
 
-            vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end+1],
+                vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end+1],
 
-            triangle_indices=triangle_indices,
-            triangle_strip_noreset_indices=triangle_indices,
-            triangle_strip_reset_indices=triangle_indices,
+                triangle_indices=triangle_indices,
+                triangle_strip_noreset_indices=triangle_indices,
+                triangle_strip_reset_indices=triangle_indices,
 
-            attribute_set=abstract_attributes[mesh_struct.attribute_index]
-        ))
+                attribute_set=abstract_attributes[mesh_struct.attribute_index]
+            ))
+        else:
+            meshes.append(GMDMesh(
+                vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end + 1],
+
+                triangle_indices=triangle_indices,
+                triangle_strip_noreset_indices=triangle_indices,
+                triangle_strip_reset_indices=triangle_indices,
+
+                attribute_set=abstract_attributes[mesh_struct.attribute_index]
+            ))
 
     return meshes
 

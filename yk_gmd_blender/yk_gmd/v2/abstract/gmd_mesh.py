@@ -11,8 +11,6 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 @dataclass
 class GMDMesh:
-    relevant_bones: List[GMDBone]
-
     vertices_data: GMDVertexBuffer
 
     # TODO: Is List[int] any more convenient than array? If not, array is more compact and nicer
@@ -21,4 +19,9 @@ class GMDMesh:
     triangle_strip_reset_indices: array.ArrayType
 
     attribute_set: GMDAttributeSet
+
+
+@dataclass
+class GMDSkinnedMesh(GMDMesh):
+    relevant_bones: List[GMDBone]
 
