@@ -26,12 +26,14 @@ from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProper
 
 @dataclass(frozen=True)
 class RearrangedData:
-    nodes_arr: List[Tuple[GMDNode, NodeStackOp]]
-    bone_id_to_node_index: Dict[int, int]
-    object_id_to_node_index: Dict[int, int]
+    ordered_nodes: List[Tuple[GMDNode, NodeStackOp]]
+    node_id_to_node_index: Dict[int, int]
     ordered_matrices: List[Matrix]
     object_id_to_matrix_index: Dict[int, int]
     root_node_indices: List[int]
+
+    ordered_objects: List[Union[GMDSkinnedObject, GMDUnskinnedObject]]
+    node_id_to_object_index: Dict[int, int]
 
     texture_names: List[ChecksumStrStruct]
     texture_names_index: Dict[str, int]
@@ -45,20 +47,22 @@ class RearrangedData:
     ordered_meshes: List[GMDMesh]
     mesh_id_to_index: Dict[int, int]
     mesh_id_to_matrixlist: Dict[int, List[int]]
+    mesh_id_to_object_index: Dict[int, int]
 
     ordered_attribute_sets: List[GMDAttributeSet]
     attribute_set_id_to_index: Dict[int, int]
+    # List of [start, end_exclusive) ranges
+    attribute_set_id_to_mesh_index_range: Dict[int, Tuple[int, int]]
 
     ordered_materials: List[GMDMaterial]
     material_id_to_index: Dict[int, int]
-
-    skinned_objects: List[GMDSkinnedObject]
-    unskinned_objects: List[GMDUnskinnedObject]
 
     # This is only for skinned meshes
     mesh_matrix_index_strings: List[List[int]]
     # build with build_index_mapping(pool, key=tuple)
     mesh_matrix_index_strings_index: Dict[Tuple, int]
+    packed_mesh_matrix_index_strings: bytes
+    packed_mesh_matrix_index_strings_index: Dict[Tuple, int]
 
 
 T = TypeVar('T')
@@ -90,8 +94,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         # is relative-indexing set in a flag?
 
     nodes_arr = []
-    bone_id_to_node_index = {}
-    object_id_to_node_index = {}
+    node_id_to_node_index = {}
     ordered_matrices = []
     object_id_to_matrix_index = {}
     root_node_indices = []
@@ -134,10 +137,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         nodes_arr.append((gmd_node, stack_op))
 
         # if node is instance of GMDObject (skinned or unskinned) add to object_id_node_index_mapping
-        if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
-            object_id_to_node_index[id(gmd_node)] = i
-        elif isinstance(gmd_node, GMDBone):
-            bone_id_to_node_index[id(gmd_node)] = i
+        node_id_to_node_index[id(gmd_node)] = i
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -201,6 +201,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     ordered_meshes = sum([ms for _,_,ms in vertex_layout_groups], [])
     mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
 
+    # Order the attribute sets
     ordered_attribute_sets = []
     for m in ordered_meshes:
         if m.attribute_set != ordered_attribute_sets[-1]:
@@ -208,6 +209,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)
 
+    # Order the materials
     material_ids = set()
     ordered_materials = []
     for attribute_set in ordered_attribute_sets:
@@ -236,8 +238,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
 
     return RearrangedData(
         nodes_arr=nodes_arr,
-        bone_id_to_node_index=bone_id_to_node_index,
-        object_id_to_node_index=object_id_to_node_index,
+        node_id_to_node_index=node_id_to_node_index,
         skinned_objects=skinned_objects,
         unskinned_objects=unskinned_objects,
         ordered_matrices=ordered_matrices,
@@ -512,6 +513,9 @@ def build_materials_from_structs(version_properties: VersionProperties,
             material=gmd_materials[attribute_struct.material_index],
             unk12=gmd_unk12s[i] if unk12_arr else None,
             unk14=gmd_unk14s[i] if unk14_arr else None,
+
+            attr_flags=attribute_struct.flags,
+            attr_extra_properties=attribute_struct.extra_properties,
         ))
 
     return attributes

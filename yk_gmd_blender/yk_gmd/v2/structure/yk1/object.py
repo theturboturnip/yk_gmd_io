@@ -10,6 +10,7 @@ class ObjectStruct_YK1:
     index: int
     node_index_1: int
     node_index_2: int
+    # TODO: whyyyy is this a rel_ptr? What is it rel_ to?
     drawlist_rel_ptr: int
 
     # TODO: 010 template says this is a matrix

@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_contents
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
@@ -194,13 +195,46 @@ def legacy_abstract_v2_struct_main(args):
 
         can_write, _ = can_write_over(data)
         if can_write:
-            contents.unk13 = []#[0xFF] * len(contents.unk13)
+            new_attrs = []
+            # for attr in cast(FileData_YK1, contents).attribute_arr:
+            #     new_attrs.append(AttributeStruct(
+            #         index=attr.index,
+            #         material_index=attr.material_index,
+            #         shader_index=attr.shader_index,
+            #
+            #         # Which meshes use this material - offsets in the Mesh_YK1 array
+            #         meshset_start=attr.meshset_start,
+            #         meshset_count=attr.meshset_count,
+            #
+            #         # Always one of {6,7,8} for kiwami bob
+            #         # i.e. 0b0110, 0b0111, 0b1000
+            #         # probably not a bitmask?
+            #         unk1=0,
+            #         # Always 0x00_01_00_00
+            #         unk2=attr.unk2,
+            #         # Observed to be 0x0000, 0x0001, 0x2001, 0x8001
+            #         flags=attr.flags,
+            #
+            #         texture_diffuse=attr.texture_diffuse,
+            #         texture_refl=attr.texture_refl,
+            #         texture_multi=attr.texture_multi,
+            #         # Never filled
+            #         texture_unk1=attr.texture_unk1,
+            #         texture_ts=attr.texture_ts,
+            #         texture_normal=attr.texture_normal,
+            #         texture_rt=attr.texture_rt,
+            #         texture_rd=attr.texture_rd,
+            #
+            #         extra_properties=attr.extra_properties
+            #
+            #     ))
+            # contents.attribute_arr = new_attrs
             new_bytes = bytearray()
             FilePacker_YK1.pack(contents.file_is_big_endian(), contents, new_bytes)
             new_bytes = bytes(new_bytes)
             #new_bytes = write_from_legacy(contents, scene)
             new_contents, new_scene = read_to_legacy(new_bytes)
-            print(new_contents.unk13)
+            print(new_contents.attribute_arr)
 
             if args.output_dir:
                 with open(args.output_dir / args.file_to_poke, "wb") as out_file:
@@ -222,3 +256,5 @@ if __name__ == '__main__':
 
     version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke)
     scene = read_abstract_scene_from_contents(version_props, file_data)
+
+    #legacy_abstract_v2_struct_main(args)

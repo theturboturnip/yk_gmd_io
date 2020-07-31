@@ -20,6 +20,9 @@ class VersionProperties:
     # Is vertex offset used to determine the range of values used by a mesh?
     mesh_vertex_offset_used: bool
 
+    def combined_version(self):
+        return ((self.version_tuple[0] & 0xFFFF) << 16) | (self.version_tuple[1] & 0xFFFF)
+
     @property
     def version_str(self):
         return f"{self.version_tuple[0]}.{self.version_tuple[1]}"

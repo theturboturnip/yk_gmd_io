@@ -33,13 +33,11 @@ class AttributeStruct:
     shader_index: int
 
     # Which meshes use this material - offsets in the Mesh_YK1 array
-    meshset_start: int
-    meshset_count: int
+    mesh_indices_start: int
+    mesh_indices_count: int
 
-    # Always one of {6,7,8} for kiwami bob
-    unk1: int
-    # Always 0x00_01_00_00
-    unk2: int
+    # The number of texture slots to initialize == the largest index of a set texture
+    texture_init_count: int
     # Observed to be 0x0000, 0x0001, 0x2001, 0x8001
     flags: int
 
@@ -55,7 +53,9 @@ class AttributeStruct:
 
     extra_properties: List[float]  # Could be scale (x,y) pairs for the textures, although 0 is present a lot.
 
-    padding: int = 0
+    unk1_always_1: int = 1
+    unk2_always_0: int = 0
+    unk3_always_0: int = 0
 
 
 AttributeStruct_Unpack = StructureUnpacker(
@@ -64,13 +64,14 @@ AttributeStruct_Unpack = StructureUnpacker(
         ("index", c_uint32),
         ("material_index", c_uint32),
         ("shader_index", c_uint32),
-        ("meshset_start", c_uint32),
-        ("meshset_count", c_uint32),
-        ("unk1", c_uint32),
-        ("unk2", c_uint32),
+        ("mesh_indices_start", c_uint32),
+        ("mesh_indices_count", c_uint32),
+        ("texture_init_count", c_uint32),
 
+        ("unk1_always_1", c_uint16),
+        ("unk2_always_0", c_uint16),
         ("flags", c_uint16),
-        ("padding", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
+        ("unk3_always_0", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
 
         ("texture_diffuse", TextureIndexStruct_Unpack),
         ("texture_refl", TextureIndexStruct_Unpack),

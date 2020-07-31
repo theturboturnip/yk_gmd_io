@@ -33,6 +33,10 @@ class GMDUnk12(GMDVersionRestricted):
     """
     float_data: List[float]
 
+    @staticmethod
+    def get_default() -> List[float]:
+        pass
+
 
 # TODO: Implement port_to_version
 @dataclass(frozen=True)
@@ -42,6 +46,10 @@ class GMDUnk14(GMDVersionRestricted):
     We don't know how to edit them, so they are frozen.
     """
     int_data: List[int]
+
+    @staticmethod
+    def get_default() -> List[int]:
+        pass
 
 
 @dataclass
@@ -60,3 +68,5 @@ class GMDAttributeSet:
     material: GMDMaterial
     unk12: Optional[GMDUnk12]
     unk14: Optional[GMDUnk14]
+    attr_extra_properties: List[float]
+    attr_flags: int

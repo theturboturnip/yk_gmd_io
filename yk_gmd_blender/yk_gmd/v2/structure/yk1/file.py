@@ -39,10 +39,7 @@ class FileData_YK1(FileData_Common):
     mesh_matrix_bytestrings: bytes
 
     unk12: List[Unk12Struct]
-    unk13: List[int]  # Is sequence 00, 7C, 7D, 7E... 92 in Kiwami bob
-    # # 0x7C = 124
-    # # 0x92 = 146 => this is likely a bone address
-    # # 24 elements in total
+    unk13: List[int]
     unk14: List[Unk14Struct]
     flags: List[int]
 
