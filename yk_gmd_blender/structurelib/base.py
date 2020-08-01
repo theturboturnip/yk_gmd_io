@@ -276,6 +276,9 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
             field_unpacker.pack(big_endian, getattr(value, field_name), append_to)
 
     def validate_value(self, value: TDataclass) -> bool:
+        if not isinstance(value, self.python_type):
+            raise PackingValidationError(f"Incorrect value type - expected {self.python_type} got {type(value)}")
+
         for field_name, field_unpacker in self._exported_fields.items():
             try:
                 field_unpacker.validate_value(getattr(value, field_name))

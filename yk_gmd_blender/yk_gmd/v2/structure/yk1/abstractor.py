@@ -2,7 +2,7 @@ import time
 from collections import Iterator
 from typing import List, Iterable, Tuple, Dict
 
-from mathutils import Quaternion
+from mathutils import Quaternion, Vector
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
@@ -28,11 +28,58 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 
 
+def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1:
+    box_rotation = Quaternion()
+    box_rotation.identity()
+
+    center = (min_pos + max_pos) / 2
+    box_extents = (max_pos - center)
+    sphere_radius = (box_extents).length
+
+    return BoundsDataStruct_YK1(
+        center=center,
+        sphere_radius=sphere_radius,
+        box_extents=box_extents,
+        box_rotation=box_rotation
+    )
+
 def bounds_of(mesh) -> BoundsDataStruct_YK1:
-    pass
+    min_pos = Vector(mesh.vertices_data.pos[0])
+    max_pos = Vector(mesh.vertices_data.pos[0])
+
+    for pos in mesh.vertices_data.pos:
+        min_pos.x = min(pos.x, min_pos.x)
+        min_pos.y = min(pos.y, min_pos.y)
+        min_pos.z = min(pos.z, min_pos.z)
+
+        max_pos.x = max(pos.x, max_pos.x)
+        max_pos.y = max(pos.y, max_pos.y)
+        max_pos.z = max(pos.z, max_pos.z)
+
+    return bounds_from_minmax(min_pos, max_pos)
+
 
 def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
-    pass
+    min_pos = None
+    max_pos = None
+
+    for bound in bounds:
+        min_for_bound = bound.center - bound.box_extents
+        max_for_bound = bound.center - bound.box_extents
+
+        if min_pos is None:
+            min_pos = min_for_bound
+            max_pos = max_for_bound
+        else:
+            min_pos.x = min(min_for_bound.x, min_pos.x)
+            min_pos.y = min(min_for_bound.y, min_pos.y)
+            min_pos.z = min(min_for_bound.z, min_pos.z)
+
+            max_pos.x = max(max_for_bound.x, max_pos.x)
+            max_pos.y = max(max_for_bound.y, max_pos.y)
+            max_pos.z = max(max_for_bound.z, max_pos.z)
+
+    return bounds_from_minmax(min_pos, max_pos)
 
 
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool, scene: GMDScene) -> FileData_YK1:

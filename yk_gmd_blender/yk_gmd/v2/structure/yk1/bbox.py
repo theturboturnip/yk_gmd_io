@@ -21,7 +21,7 @@ class BoundsDataStruct_YK1:
     box_extents: Vector
     box_rotation: Quaternion
 
-    padding: float
+    padding: float = 0.0
 
 
 
