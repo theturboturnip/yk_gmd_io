@@ -251,18 +251,18 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
     material_arr = []
     for gmd_material in rearranged_data.ordered_materials:
-        material_arr.append(gmd_material.port_to_version(version_properties.major_version))
+        material_arr.append(gmd_material.port_to_version(version_properties.major_version).origin_data)
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
     make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
-            data=gmd_attribute_set.unk12.port_to_version(version_properties.major_version)
+            data=gmd_attribute_set.unk12.port_to_version(version_properties.major_version).float_data
                     if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
-            data=gmd_attribute_set.unk14.port_to_version(version_properties.major_version)
+            data=gmd_attribute_set.unk14.port_to_version(version_properties.major_version).int_data
             if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 

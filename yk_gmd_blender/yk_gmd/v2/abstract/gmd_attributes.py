@@ -25,7 +25,7 @@ class GMDMaterial(GMDVersionRestricted):
     """
     origin_data: Union[MaterialStruct_YK1, MaterialStruct_Kenzan]
 
-    def port_to_version(self, new_version: GMDVersion):
+    def port_to_version(self, new_version: GMDVersion) -> 'GMDMaterial':
         if new_version == self.origin_version:
             return self
         if isinstance(self.origin_data, MaterialStruct_YK1) and new_version == GMDVersion.Kenzan:
