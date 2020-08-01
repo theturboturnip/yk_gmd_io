@@ -259,4 +259,7 @@ if __name__ == '__main__':
     scene = read_abstract_scene_from_contents(version_props, file_data)
 
     new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene)
+    new_file_bytearray = bytearray()
+    FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
+
     #legacy_abstract_v2_struct_main(args)

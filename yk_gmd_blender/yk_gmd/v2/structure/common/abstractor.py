@@ -87,8 +87,20 @@ def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str,
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
-def pack_mesh_matrix_strings(mesh_matrixlist: Dict[Tuple, int]) -> Tuple[bytes, Dict[Tuple, int]]:
-    pass
+def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16bit: bool) -> Tuple[bytes, Dict[Tuple, int]]:
+    matrixlist_bytearray = bytearray()
+    matrixlist_index = {}
+    for matrixlist in mesh_matrixlist:
+        matrixlist_index[matrixlist] = len(matrixlist_bytearray)
+
+        if pack_as_16bit:
+            matrixlist_bytearray += bytes([len(matrixlist)])
+            FixedSizeArrayUnpacker(c_uint16, len(matrixlist)).pack(big_endian=True, value=matrixlist,
+                                                                         append_to=matrixlist_bytearray)
+        else:
+            matrixlist_bytearray += bytes([len(matrixlist)] + list(matrixlist))
+
+    return bytes(matrixlist_bytearray), matrixlist_index
 
 def generate_vertex_layout_packing_flags(layout: GMDVertexBufferLayout) -> int:
     pass
@@ -149,13 +161,12 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
 
         # emit (node, stackop)
         ordered_nodes.append((gmd_node, stack_op))
+        node_id_to_node_index[id(gmd_node)] = i
 
         # if node is instance of GMDObject (skinned or unskinned) add to ordered_objects
         if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+            node_id_to_object_index[id(gmd_node)] = len(ordered_objects)
             ordered_objects.append(gmd_node)
-
-        node_id_to_node_index[id(gmd_node)] = i
-
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -264,6 +275,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
             attribute_set_id_to_mesh_index_range[id(curr_attribute_set)] = (attr_index_start, attr_index_end)
             attr_index_start = i
             ordered_attribute_sets.append(m.attribute_set)
+    attribute_set_id_to_mesh_index_range[id(ordered_attribute_sets[-1])] = (attr_index_start, len(ordered_meshes))
 
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)

@@ -1,21 +1,23 @@
 import abc
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TypeVar
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 
+T = TypeVar('T')
+
 @dataclass(frozen=True)
 class GMDVersionRestricted(abc.ABC):
     origin_version: GMDVersion
 
-    def port_to_version(self, new_version: GMDVersion):
+    def port_to_version(self: T, new_version: GMDVersion) -> T:
         raise NotImplementedError()
 
 
-# TODO: Implement port_to_version
+# TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
 class GMDMaterial(GMDVersionRestricted):
     """
@@ -23,8 +25,38 @@ class GMDMaterial(GMDVersionRestricted):
     """
     origin_data: Union[MaterialStruct_YK1, MaterialStruct_Kenzan]
 
+    def port_to_version(self, new_version: GMDVersion):
+        if new_version == self.origin_version:
+            return self
+        if isinstance(self.origin_data, MaterialStruct_YK1) and new_version == GMDVersion.Kenzan:
+            return GMDMaterial(
+                origin_version=new_version,
+                origin_data=MaterialStruct_Kenzan(
+                    diffuse=self.origin_data.diffuse,
+                    opacity=self.origin_data.opacity,
+                    specular=self.origin_data.specular,
+                    ambient=[0, 0, 0, 0],
+                    emissive=0,
+                    power=1,
+                    intensity=1,
 
-# TODO: Implement port_to_version
+                    padding=0,
+                )
+            )
+        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version == GMDVersion.Kiwami1:
+            return GMDMaterial(
+                origin_version=new_version,
+                origin_data=MaterialStruct_YK1(
+                    diffuse=self.origin_data.diffuse,
+                    opacity=int(self.origin_data.opacity * 255),
+                    specular=self.origin_data.specular,
+                    unk1=[0, 0, 0, 0],
+                    unk2=[0, 0, 0, 0],
+                )
+            )
+
+
+# TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
 class GMDUnk12(GMDVersionRestricted):
     """
@@ -37,8 +69,15 @@ class GMDUnk12(GMDVersionRestricted):
     def get_default() -> List[float]:
         pass
 
+    def port_to_version(self, new_version: GMDVersion):
+        if new_version == self.origin_version:
+            return self
+        return GMDUnk12(
+            origin_version=new_version,
+            float_data=self.float_data
+        )
 
-# TODO: Implement port_to_version
+# TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
 class GMDUnk14(GMDVersionRestricted):
     """
@@ -50,6 +89,14 @@ class GMDUnk14(GMDVersionRestricted):
     @staticmethod
     def get_default() -> List[int]:
         pass
+
+    def port_to_version(self, new_version: GMDVersion):
+        if new_version == self.origin_version:
+            return self
+        return GMDUnk14(
+            origin_version=new_version,
+            int_data=self.int_data
+        )
 
 
 @dataclass

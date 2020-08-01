@@ -38,10 +38,10 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool, scene: GMDScene) -> FileData_YK1:
     rearranged_data: RearrangedData = arrange_data_for_export(scene)
 
-    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(rearranged_data.mesh_matrixlist_index)
-
     # Set >255 bones flag
-    int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
+    int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)]) > 255
+
+    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(rearranged_data.mesh_matrixlist, int16_bone_indices)
 
     node_arr = []
     for i, (gmd_node, stack_op) in enumerate(rearranged_data.ordered_nodes):
@@ -55,6 +55,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         if gmd_node.node_type == NodeType.MatrixTransform:
             object_index = -1
         else:
+            print(gmd_node)
             object_index = rearranged_data.node_id_to_object_index[id(gmd_node)]
 
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -93,7 +94,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
-    index_buffer = List[int]
+    index_buffer = []
     mesh_arr = []
     for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(rearranged_data.vertex_layout_groups):
         buffer_vertex_count=sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
