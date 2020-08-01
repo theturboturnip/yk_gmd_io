@@ -262,4 +262,7 @@ if __name__ == '__main__':
     new_file_bytearray = bytearray()
     FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
 
+    new_version_props, new_file_data = read_gmd_structures(bytes(new_file_bytearray))
+    new_scene = read_abstract_scene_from_contents(new_version_props, new_file_data)
+
     #legacy_abstract_v2_struct_main(args)
