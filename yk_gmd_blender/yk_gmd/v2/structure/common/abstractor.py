@@ -27,13 +27,13 @@ from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProper
 @dataclass(frozen=True)
 class RearrangedData:
     ordered_nodes: List[Tuple[GMDNode, NodeStackOp]]
-    node_id_to_node_index: Dict[int, int]
     ordered_matrices: List[Matrix]
-    object_id_to_matrix_index: Dict[int, int]
-    root_node_indices: List[int]
-
     ordered_objects: List[Union[GMDSkinnedObject, GMDUnskinnedObject]]
+
+    root_node_indices: List[int]
+    node_id_to_node_index: Dict[int, int]
     node_id_to_object_index: Dict[int, int]
+    object_id_to_matrix_index: Dict[int, int]
 
     texture_names: List[ChecksumStrStruct]
     texture_names_index: Dict[str, int]
@@ -44,9 +44,10 @@ class RearrangedData:
 
     # Tuple of (layout, layout_vertex_packing_flags, meshes)
     vertex_layout_groups: List[Tuple[GMDVertexBufferLayout, int, List[GMDMesh]]]
+
     ordered_meshes: List[GMDMesh]
     mesh_id_to_index: Dict[int, int]
-    mesh_id_to_matrixlist: Dict[int, List[int]]
+    mesh_id_to_matrixlist: Dict[int, Tuple]
     mesh_id_to_object_index: Dict[int, int]
 
     ordered_attribute_sets: List[GMDAttributeSet]
@@ -58,11 +59,12 @@ class RearrangedData:
     material_id_to_index: Dict[int, int]
 
     # This is only for skinned meshes
-    mesh_matrix_index_strings: List[List[int]]
+    mesh_matrixlist: List[Tuple]
     # build with build_index_mapping(pool, key=tuple)
-    mesh_matrix_index_strings_index: Dict[Tuple, int]
-    packed_mesh_matrix_index_strings: bytes
-    packed_mesh_matrix_index_strings_index: Dict[Tuple, int]
+    mesh_matrixlist_index: Dict[Tuple, int]
+    # packed_mesh_matrixlist: bytes
+    # packed_mesh_matrixlist_index: Dict[Tuple, int]
+    pass
 
 
 T = TypeVar('T')
@@ -85,6 +87,9 @@ def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str,
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
+def pack_mesh_matrix_strings(mesh_matrixlist: Dict[Tuple, int]) -> Tuple[bytes, Dict[Tuple, int]]:
+    pass
+
 def generate_vertex_layout_packing_flags(layout: GMDVertexBufferLayout) -> int:
     pass
 
@@ -93,14 +98,23 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         # many bones flag is important, but so are the others - look into which ones are supposed to be there
         # is relative-indexing set in a flag?
 
-    nodes_arr = []
-    node_id_to_node_index = {}
-    ordered_matrices = []
-    object_id_to_matrix_index = {}
-    root_node_indices = []
+    # ordered_nodes = []
+    # node_id_to_node_index = {}
+    # ordered_matrices = []
+    # node_id_to_matrix_index = {}
+    # root_node_indices = []
+    #
+    # skinned_objects = list(scene.skinned_objects.depth_first_iterate())
+    # unskinned_objects = list(scene.unskinned_objects.depth_first_iterate())
 
-    skinned_objects = list(scene.skinned_objects.depth_first_iterate())
-    unskinned_objects = list(scene.unskinned_objects.depth_first_iterate())
+    ordered_nodes = []
+    ordered_matrices = []
+    ordered_objects = []
+
+    root_node_indices = []
+    node_id_to_node_index = {}
+    node_id_to_object_index = {}
+    node_id_to_matrix_index = {}
 
     texture_names = set()
     shader_names = set()
@@ -134,14 +148,18 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
             stack_op = NodeStackOp.Push
 
         # emit (node, stackop)
-        nodes_arr.append((gmd_node, stack_op))
+        ordered_nodes.append((gmd_node, stack_op))
 
-        # if node is instance of GMDObject (skinned or unskinned) add to object_id_node_index_mapping
+        # if node is instance of GMDObject (skinned or unskinned) add to ordered_objects
+        if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+            ordered_objects.append(gmd_node)
+
         node_id_to_node_index[id(gmd_node)] = i
+
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
-            object_id_to_matrix_index[id(gmd_node)] = len(ordered_matrices)
+            node_id_to_matrix_index[id(gmd_node)] = len(ordered_matrices)
             ordered_matrices.append(gmd_node.matrix)
 
         # if node has no parent, add index to roots
@@ -157,24 +175,28 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # collect meshes
     meshes: List[GMDMesh] = [
         mesh
-        for obj in skinned_objects
-        for mesh in obj.mesh_list
-    ] + [
-        mesh
-        for obj in unskinned_objects
+        for obj in ordered_objects
         for mesh in obj.mesh_list
     ]
     for mesh in meshes:
         shader_names.add(mesh.attribute_set.shader.name)
 
-        texture_names.add(mesh.attribute_set.texture_diffuse)
-        texture_names.add(mesh.attribute_set.texture_refl)
-        texture_names.add(mesh.attribute_set.texture_multi)
-        texture_names.add(mesh.attribute_set.texture_unk1)
-        texture_names.add(mesh.attribute_set.texture_rs)
-        texture_names.add(mesh.attribute_set.texture_normal)
-        texture_names.add(mesh.attribute_set.texture_rt)
-        texture_names.add(mesh.attribute_set.texture_rd)
+        if mesh.attribute_set.texture_diffuse:
+            texture_names.add(mesh.attribute_set.texture_diffuse)
+        if mesh.attribute_set.texture_refl:
+            texture_names.add(mesh.attribute_set.texture_refl)
+        if mesh.attribute_set.texture_multi:
+            texture_names.add(mesh.attribute_set.texture_multi)
+        if mesh.attribute_set.texture_unk1:
+            texture_names.add(mesh.attribute_set.texture_unk1)
+        if mesh.attribute_set.texture_rs:
+            texture_names.add(mesh.attribute_set.texture_rs)
+        if mesh.attribute_set.texture_normal:
+            texture_names.add(mesh.attribute_set.texture_normal)
+        if mesh.attribute_set.texture_rt:
+            texture_names.add(mesh.attribute_set.texture_rt)
+        if mesh.attribute_set.texture_rd:
+            texture_names.add(mesh.attribute_set.texture_rd)
 
     # build texture, shader, node name pools
     texture_names, texture_names_index = build_pools(texture_names)
@@ -198,14 +220,51 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         # emit buffer_layout, meshes_for_buffer
         vertex_layout_groups.append((layout, flag, meshes_for_buffer))
 
-    ordered_meshes = sum([ms for _,_,ms in vertex_layout_groups], [])
+    ordered_meshes = sum([ms for _, _, ms in vertex_layout_groups], [])
     mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
 
+    mesh_id_to_object_index = {}
+    # These are only for skinned meshes
+    mesh_id_to_matrixlist = {}
+    mesh_matrixlist_set = set()
+    for object_idx, object in enumerate(ordered_objects):
+        for mesh in object.mesh_list:
+            if id(mesh) in mesh_id_to_object_index:
+                raise Exception(f"Mesh is mapped to two objects {object.name} and {ordered_objects[mesh_id_to_object_index[id(mesh)]].name}")
+            mesh_id_to_object_index[id(mesh)] = object_idx
+
+            if isinstance(object, GMDSkinnedObject):
+                if not isinstance(mesh, GMDSkinnedMesh):
+                    raise Exception(f"SkinnedObject {object.name} has unskinned mesh")
+                matrixlist = tuple([node_id_to_matrix_index[id(bone)] for bone in mesh.relevant_bones])
+                mesh_id_to_matrixlist[id(mesh)] = matrixlist
+                mesh_matrixlist_set.add(matrixlist)
+
+    mesh_matrixlist = list(mesh_matrixlist_set)
+    mesh_matrixlist_index = build_index_mapping(mesh_matrixlist)
+    # mesh_id_to_matrix_string_index = {
+    #     mesh_id:mesh_matrixlist.index(matrixlist)
+    #     for mesh_id, matrixlist in mesh_id_to_matrixlist.items()
+    # }
+
+    if set(mesh_id_to_index.keys()) != set(mesh_id_to_object_index.keys()):
+        raise Exception("Somehow the mapping of mesh -> mesh index maps different meshes than the mesh -> object index")
+
     # Order the attribute sets
+    attribute_set_id_to_mesh_index_range = {}
     ordered_attribute_sets = []
-    for m in ordered_meshes:
-        if m.attribute_set != ordered_attribute_sets[-1]:
+    attr_index_start = -1
+    for i, m in enumerate(ordered_meshes):
+        if not ordered_attribute_sets:
             ordered_attribute_sets.append(m.attribute_set)
+            attr_index_start = i
+        elif m.attribute_set != ordered_attribute_sets[-1]:
+            curr_attribute_set = ordered_attribute_sets[-1]
+            attr_index_end = i
+            attribute_set_id_to_mesh_index_range[id(curr_attribute_set)] = (attr_index_start, attr_index_end)
+            attr_index_start = i
+            ordered_attribute_sets.append(m.attribute_set)
+
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)
 
@@ -221,29 +280,30 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # TODO: Build drawlists?
 
     # Build matrixlists
-    mesh_matrix_index_list_set = set()
-    mesh_id_to_matrixlist: Dict[int, List[int]] = {}
-    for mesh in ordered_meshes:
-        if not isinstance(mesh, GMDSkinnedMesh):
-            continue
-
-        matrix_list = [bone_id_to_node_index[id(bone)] for bone in mesh.relevant_bones]
-        mesh_matrix_index_list_set.add(tuple(matrix_list))
-        mesh_id_to_matrixlist[id(mesh)] = matrix_list
-    mesh_matrix_index_strings = [list(s) for s in mesh_matrix_index_list_set]
-    mesh_matrix_index_strings_index = build_index_mapping(mesh_matrix_index_strings, key=tuple)
+    # mesh_matrix_index_list_set = set()
+    # mesh_id_to_matrixlist: Dict[int, List[int]] = {}
+    # for mesh in ordered_meshes:
+    #     if not isinstance(mesh, GMDSkinnedMesh):
+    #         continue
+    #
+    #     matrix_list = [node_id_to_node_index[id(bone)] for bone in mesh.relevant_bones]
+    #     mesh_matrix_index_list_set.add(tuple(matrix_list))
+    #     mesh_id_to_matrixlist[id(mesh)] = matrix_list
+    # mesh_matrixlist = [list(s) for s in mesh_matrix_index_list_set]
+    # mesh_matrixlist_index = build_index_mapping(mesh_matrixlist, key=tuple)
 
     # now all arrangements should be made - next is to port into the respective file formats
     # this is for tomorrow tho
 
     return RearrangedData(
-        nodes_arr=nodes_arr,
-        node_id_to_node_index=node_id_to_node_index,
-        skinned_objects=skinned_objects,
-        unskinned_objects=unskinned_objects,
+        ordered_nodes=ordered_nodes,
         ordered_matrices=ordered_matrices,
-        object_id_to_matrix_index=object_id_to_matrix_index,
+        ordered_objects=ordered_objects,
+
         root_node_indices=root_node_indices,
+        node_id_to_node_index=node_id_to_node_index,
+        node_id_to_object_index=node_id_to_object_index,
+        object_id_to_matrix_index=node_id_to_matrix_index,
 
         texture_names=texture_names,
         texture_names_index=texture_names_index,
@@ -252,19 +312,26 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
         node_names=node_names,
         node_names_index=node_names_index,
 
+        # Tuple of (layout, layout_vertex_packing_flags, meshes)
         vertex_layout_groups=vertex_layout_groups,
+
         ordered_meshes=ordered_meshes,
         mesh_id_to_index=mesh_id_to_index,
+        mesh_id_to_object_index=mesh_id_to_object_index,
+        # These are only for skinned meshes
         mesh_id_to_matrixlist=mesh_id_to_matrixlist,
+        mesh_matrixlist=mesh_matrixlist,
+        mesh_matrixlist_index=mesh_matrixlist_index,
 
         ordered_attribute_sets=ordered_attribute_sets,
         attribute_set_id_to_index=attribute_set_id_to_index,
+        # List of [start, end_exclusive) ranges
+        attribute_set_id_to_mesh_index_range=attribute_set_id_to_mesh_index_range,
 
         ordered_materials=ordered_materials,
         material_id_to_index=material_id_to_index,
 
-        mesh_matrix_index_strings=mesh_matrix_index_strings,
-        mesh_matrix_index_strings_index=mesh_matrix_index_strings_index,
+
     )
 
 

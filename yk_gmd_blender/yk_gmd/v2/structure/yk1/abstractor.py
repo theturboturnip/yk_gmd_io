@@ -13,7 +13,8 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.structure.common.abstractor import build_vertex_buffers_from_structs, \
     build_shaders_from_structs, build_materials_from_structs, build_index_mapping, \
-    build_meshes_from_structs, build_object_nodes, build_skeleton_bones_from_structs, arrange_data_for_export
+    build_meshes_from_structs, build_object_nodes, build_skeleton_bones_from_structs, arrange_data_for_export, \
+    RearrangedData, pack_mesh_matrix_strings
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct, TextureIndexStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
@@ -33,8 +34,11 @@ def bounds_of(mesh) -> BoundsDataStruct_YK1:
 def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
     pass
 
+
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool, scene: GMDScene) -> FileData_YK1:
-    rearranged_data = arrange_data_for_export(scene)
+    rearranged_data: RearrangedData = arrange_data_for_export(scene)
+
+    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(rearranged_data.mesh_matrixlist_index)
 
     # Set >255 bones flag
     int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
@@ -159,7 +163,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
                 object_index=object_index,
                 node_index=node_index,
 
-                matrixlist_offset=rearranged_data.packed_mesh_matrix_index_strings_index[tuple(matrix_list)] if matrix_list else 0,
+                matrixlist_offset=packed_mesh_matrix_strings_index[tuple(matrix_list)] if matrix_list else 0,
                 matrixlist_length=len(matrix_list),
 
                 vertex_offset=vertex_offset,
@@ -244,6 +248,11 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     flags = [0, 0, 0, 0, 0, 0]
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
+    else:
+        flags[5] &= ~0x8000_0000
+    # TODO: This is in all(?) Yakuza Kiwami 1 files
+    # It could be worth passing on the flags from original files if we're still exporting "over" them
+    flags[5] |= 0x20
 
     return FileData_YK1(
         magic="GSGM",
@@ -268,7 +277,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,
         meshset_data=bytes(drawlist_bytearray),
-        mesh_matrix_bytestrings=rearranged_data.packed_mesh_matrix_index_strings,
+        mesh_matrix_bytestrings=packed_mesh_matrix_strings,
 
         unk12=unk12_arr,
         unk13=rearranged_data.root_node_indices,

@@ -8,6 +8,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unp
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import pack_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
@@ -257,4 +258,5 @@ if __name__ == '__main__':
     version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke)
     scene = read_abstract_scene_from_contents(version_props, file_data)
 
+    new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene)
     #legacy_abstract_v2_struct_main(args)
