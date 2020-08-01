@@ -719,7 +719,7 @@ def build_meshes_from_structs(version_properties: VersionProperties,
             return [int(bone_idx_byte) for bone_idx_byte in data]
 
     def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0xFFFF, max_index: int = -1) -> Tuple[array.ArrayType, int, int]:
-        index_offset = mesh_struct.vertex_offset if file_uses_relative_indices else 0
+        index_offset = 0 if file_uses_relative_indices else mesh_struct.vertex_offset
         indices = array.array("H")
         for i in range(indices_range.index_offset, indices_range.index_offset + indices_range.index_count):
             index = index_buffer[i]
@@ -756,8 +756,8 @@ def build_meshes_from_structs(version_properties: VersionProperties,
                 vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end+1],
 
                 triangle_indices=triangle_indices,
-                triangle_strip_noreset_indices=triangle_indices,
-                triangle_strip_reset_indices=triangle_indices,
+                triangle_strip_noreset_indices=triangle_strip_noreset_indices,
+                triangle_strip_reset_indices=triangle_strip_reset_indices,
 
                 attribute_set=abstract_attributes[mesh_struct.attribute_index]
             ))
@@ -766,8 +766,8 @@ def build_meshes_from_structs(version_properties: VersionProperties,
                 vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end + 1],
 
                 triangle_indices=triangle_indices,
-                triangle_strip_noreset_indices=triangle_indices,
-                triangle_strip_reset_indices=triangle_indices,
+                triangle_strip_noreset_indices=triangle_strip_noreset_indices,
+                triangle_strip_reset_indices=triangle_strip_reset_indices,
 
                 attribute_set=abstract_attributes[mesh_struct.attribute_index]
             ))
