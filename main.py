@@ -258,6 +258,10 @@ if __name__ == '__main__':
     version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke)
     scene = read_abstract_scene_from_contents(version_props, file_data)
 
+    # for skinned_obj in scene.skinned_objects.depth_first_iterate():
+    #     for mesh in skinned_obj.mesh_list:
+    #         mesh.attribute_set.texture_diffuse = "dummy_white"
+
     new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene)
     new_file_bytearray = bytearray()
     FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
@@ -267,5 +271,9 @@ if __name__ == '__main__':
     print(version_props)
     print(new_version_props)
     new_scene = read_abstract_scene_from_contents(new_version_props, new_file_data)
+
+    if args.output_dir:
+        with open(args.output_dir / args.file_to_poke, "wb") as out_file:
+            out_file.write(new_file_bytearray)
 
     #legacy_abstract_v2_struct_main(args)

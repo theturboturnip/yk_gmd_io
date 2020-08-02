@@ -13,8 +13,8 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.structure.common.abstractor import build_vertex_buffers_from_structs, \
     build_shaders_from_structs, build_materials_from_structs, build_index_mapping, \
-    build_meshes_from_structs, build_object_nodes, build_skeleton_bones_from_structs, arrange_data_for_export, \
-    RearrangedData, pack_mesh_matrix_strings
+    build_meshes_from_structs, arrange_data_for_export, \
+    RearrangedData, pack_mesh_matrix_strings, build_node_hierarchy_from_structs, connect_object_meshes
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct, TextureIndexStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
@@ -42,6 +42,7 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1
         box_extents=box_extents,
         box_rotation=box_rotation
     )
+
 
 def bounds_of(mesh) -> BoundsDataStruct_YK1:
     min_pos = Vector(mesh.vertices_data.pos[0])
@@ -79,16 +80,25 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
             max_pos.y = max(max_for_bound.y, max_pos.y)
             max_pos.z = max(max_for_bound.z, max_pos.z)
 
+    # TODO - This is for the sake of hierarchy objects which have no meshes themselves, but presumably have children with meshes.
+    # Will these BBOXes need to be calculated with those other ones in mind?
+    # Will these BBOXes need to be calculated with object position in mind?
+    if min_pos is None:
+        min_pos = Vector((0, 0, 0, 0))
+        max_pos = Vector((0, 0, 0, 0))
+
     return bounds_from_minmax(min_pos, max_pos)
 
 
-def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool, scene: GMDScene) -> FileData_YK1:
+def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
+                               scene: GMDScene) -> FileData_YK1:
     rearranged_data: RearrangedData = arrange_data_for_export(scene)
 
     # Set >255 bones flag
     int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)]) > 255
 
-    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(rearranged_data.mesh_matrixlist, int16_bone_indices)
+    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
+        rearranged_data.mesh_matrixlist, int16_bone_indices)
 
     node_arr = []
     for i, (gmd_node, stack_op) in enumerate(rearranged_data.ordered_nodes):
@@ -97,12 +107,12 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         if gmd_node.parent:
             this_node_child_index = gmd_node.parent.children.index(gmd_node)
             if this_node_child_index != len(gmd_node.parent.children) - 1:
-                sibling_of = rearranged_data.node_id_to_node_index[id(gmd_node.parent.children[this_node_child_index+1])]
+                sibling_of = rearranged_data.node_id_to_node_index[
+                    id(gmd_node.parent.children[this_node_child_index + 1])]
 
         if gmd_node.node_type == NodeType.MatrixTransform:
             object_index = -1
         else:
-            print(gmd_node)
             object_index = rearranged_data.node_id_to_object_index[id(gmd_node)]
 
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -116,7 +126,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         else:
             bone_pos = gmd_node.pos
             bone_pos.w = 1
-            bone_axis = Quaternion((0,0,0,0))
+            bone_axis = Quaternion((0, 0, 0, 0))
             pass
 
         node_arr.append(NodeStruct(
@@ -136,15 +146,16 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             bone_pos=bone_pos,
             bone_axis=bone_axis,
             # TODO: GMD Node Flags
-            flags=[0,0,0,0],
+            flags=[0, 0, 0, 0],
         ))
 
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
     index_buffer = []
     mesh_arr = []
-    for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(rearranged_data.vertex_layout_groups):
-        buffer_vertex_count=sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
+    for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(
+            rearranged_data.vertex_layout_groups):
+        buffer_vertex_count = sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
 
         vertex_buffer_arr.append(VertexBufferLayoutStruct_YK1(
             index=buffer_idx,
@@ -236,13 +247,14 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         c_uint16.pack(file_big_endian, len(obj.mesh_list), drawlist_bytearray)
         c_uint16.pack(file_big_endian, 0, drawlist_bytearray)
         for i, mesh in enumerate(obj.mesh_list):
-            c_uint16.pack(file_big_endian, rearranged_data.attribute_set_id_to_index[id(mesh.attribute_set)], drawlist_bytearray)
+            c_uint16.pack(file_big_endian, rearranged_data.attribute_set_id_to_index[id(mesh.attribute_set)],
+                          drawlist_bytearray)
             c_uint16.pack(file_big_endian, rearranged_data.mesh_id_to_index[id(mesh)], drawlist_bytearray)
 
         obj_arr.append(ObjectStruct_YK1(
             index=i,
             node_index_1=node_index,
-            node_index_2=node_index, # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
+            node_index_2=node_index,  # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
             drawlist_rel_ptr=drawlist_rel_ptr,
 
             bbox=mesh_bounds,
@@ -259,7 +271,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.port_to_version(version_properties.major_version).float_data
-                    if gmd_attribute_set.unk12 else GMDUnk12.get_default()
+            if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
             data=gmd_attribute_set.unk14.port_to_version(version_properties.major_version).int_data
@@ -276,7 +288,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=8, # TODO: Set this properly?
+            texture_init_count=8,  # TODO: Set this properly?
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
@@ -284,7 +296,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             texture_refl=make_texture_index(gmd_attribute_set.texture_refl),
             texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
             texture_unk1=make_texture_index(gmd_attribute_set.texture_unk1),
-            texture_ts=make_texture_index(gmd_attribute_set.texture_rs), # TODO: ugh, name mismatch
+            texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
             texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
             texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
@@ -356,27 +368,28 @@ def read_abstract_contents_YK1(version_properties: VersionProperties, file_data:
 
     abstract_attributes = build_materials_from_structs(version_properties,
 
-                                                      abstract_shaders,
+                                                       abstract_shaders,
 
-                                                      file_data.attribute_arr, file_data.material_arr,
-                                                      file_data.unk12, file_data.unk14,
-                                                      file_data.texture_arr)
+                                                       file_data.attribute_arr, file_data.material_arr,
+                                                       file_data.unk12, file_data.unk14,
+                                                       file_data.texture_arr)
 
     print(f"Time after build_materials_from_structs: {time.time() - start_time}")
 
-    abstract_skeleton_bones, remaining_nodes = build_skeleton_bones_from_structs(version_properties,
+    abstract_nodes = build_node_hierarchy_from_structs(version_properties,
 
-                                                                                 file_data.node_arr,
-                                                                                 file_data.node_name_arr,
-                                                                                 file_data.matrix_arr)
+                                                       file_data.node_arr,
+                                                       file_data.node_name_arr,
+                                                       file_data.matrix_arr)
 
     print(f"Time after build_skeleton_bones_from_structs: {time.time() - start_time}")
 
     abstract_meshes = build_meshes_from_structs(version_properties,
 
-                                                abstract_attributes, abstract_vertex_buffers, abstract_skeleton_bones,
+                                                abstract_attributes, abstract_vertex_buffers, abstract_nodes,
 
-                                                file_data.mesh_arr, file_data.index_data, file_data.mesh_matrix_bytestrings,
+                                                file_data.mesh_arr, file_data.index_data,
+                                                file_data.mesh_matrix_bytestrings,
                                                 bytestrings_are_16bit)
 
     print(f"Time after build_meshes_from_structs: {time.time() - start_time}")
@@ -385,28 +398,26 @@ def read_abstract_contents_YK1(version_properties: VersionProperties, file_data:
         o.drawlist_rel_ptr
         for o in file_data.obj_arr
     ]
-    skinned_abstract_objects, unskinned_abstract_objects = build_object_nodes(version_properties,
+    connect_object_meshes(
+        version_properties,
 
-                                                                              abstract_meshes, abstract_attributes,
+        abstract_meshes, abstract_attributes, abstract_nodes,
 
-                                                                              remaining_nodes, file_data.node_name_arr,
-                                                                              object_drawlist_ptrs,
-                                                                              file_data.matrix_arr,
-                                                                              file_data.meshset_data,
-                                                                              big_endian=file_data.file_is_big_endian())
+        file_data.node_arr, object_drawlist_ptrs, file_data.meshset_data, big_endian=file_data.file_is_big_endian()
+    )
+    # skinned_abstract_objects, unskinned_abstract_objects = build_object_nodes(version_properties,
+    #
+    #                                                                           abstract_meshes, abstract_attributes,
+    #
+    #                                                                           remaining_nodes, file_data.node_name_arr,
+    #                                                                           object_drawlist_ptrs,
+    #                                                                           file_data.matrix_arr,
+    #                                                                           file_data.meshset_data,
+    #                                                                           big_endian=file_data.file_is_big_endian())
 
-    abstract_bones_roots = [b for b in abstract_skeleton_bones if not b.parent]
-    skinned_roots = [s for s in skinned_abstract_objects if not s.parent]
-    unskinned_roots = [s for s in unskinned_abstract_objects if not s.parent]
-
-    overall_roots = abstract_bones_roots + skinned_roots + unskinned_roots
-
+    roots = [n for n in abstract_nodes if not n.parent]
     return GMDScene(
         name=file_data.name.text,
 
-        overall_heirarchy=HierarchyData[GMDNode](overall_roots),
-
-        bones=HierarchyData(abstract_bones_roots) if abstract_bones_roots else None,
-        skinned_objects=HierarchyData(skinned_roots) if skinned_roots else None,
-        unskinned_objects=HierarchyData(unskinned_roots) if unskinned_roots else None,
+        overall_hierarchy=HierarchyData[GMDNode](roots),
     )

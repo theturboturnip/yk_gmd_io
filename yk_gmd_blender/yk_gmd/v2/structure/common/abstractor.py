@@ -1,7 +1,7 @@
 import array
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload, Optional, Set
+from typing import List, Dict, Tuple, Iterable, TypeVar, Callable, Union, overload, Optional, Set, cast
 
 from mathutils import Matrix
 
@@ -639,57 +639,83 @@ class ParentStack:
         return self.stack[-1]
 
 
-def build_skeleton_bones_from_structs(version_properties: VersionProperties,
+def build_node_hierarchy_from_structs(version_properties: VersionProperties,
 
                                       node_arr: List[NodeStruct],
                                       node_name_arr: List[ChecksumStrStruct], matrix_arr: List[Matrix]) \
-        -> Tuple[List[GMDBone], List[NodeStruct]]:
+        -> List[GMDNode]:
 
-    bones = []
+    nodes = []
     parent_stack = ParentStack()
-    bone_idx = 0
     for bone_idx, node_struct in enumerate(node_arr):
         name = node_name_arr[node_struct.name_index].text
 
-        if node_struct.node_type != NodeType.MatrixTransform:
-            if not bones:
-                # Assume the file has no skeleton nodes
-                break
-            elif parent_stack:
-                # Hit a new node inside of the hierarchy => type mismatch
-                raise Exception(f"Node {name} of type {node_struct.node_type} found inside heirarchy of Bone")
-            else:
-                # Hit a new node type when at the root => assume everything is fine
-                break
+        if node_struct.node_type == NodeType.SkinnedMesh and parent_stack:
+            # As far as we know Skinned Objects having a "parent" in the hierarchy is meaningless
+            raise Exception(f"Node {name} of type {node_struct.node_type} found inside hierarchy of Bone")
 
         # This is guaranteed to be a bone node
-        bone = GMDBone(
-            name=name,
-            node_type=node_struct.node_type,
+        if node_struct.node_type == NodeType.MatrixTransform:
+            node = GMDBone(
+                name=name,
+                node_type=node_struct.node_type,
 
-            pos=node_struct.pos,
-            rot=node_struct.rot,
-            scale=node_struct.scale,
+                pos=node_struct.pos,
+                rot=node_struct.rot,
+                scale=node_struct.scale,
 
-            bone_pos=node_struct.bone_pos,
-            bone_axis=node_struct.bone_axis,
-            matrix=matrix_arr[node_struct.matrix_index],
+                bone_pos=node_struct.bone_pos,
+                bone_axis=node_struct.bone_axis,
+                matrix=matrix_arr[node_struct.matrix_index],
 
-            parent=parent_stack.peek() if parent_stack else None
-        )
+                parent=parent_stack.peek() if parent_stack else None
+            )
+        elif node_struct.node_type == NodeType.SkinnedMesh:
+            if 0 <= node_struct.matrix_index < len(matrix_arr):
+                raise Exception(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
 
-        bones.append(bone)
+            node = GMDSkinnedObject(
+                name=name,
+                node_type=node_struct.node_type,
 
+                pos=node_struct.pos,
+                rot=node_struct.rot,
+                scale=node_struct.scale,
+
+                parent=parent_stack.peek() if parent_stack else None,
+            )
+        elif node_struct.node_type == NodeType.UnskinnedMesh:
+            if not (0 <= node_struct.matrix_index < len(matrix_arr)):
+                raise Exception(f"Unskinned object {name} doesn't reference a valid matrix")
+
+            matrix = matrix_arr[node_struct.matrix_index]
+
+            node = GMDUnskinnedObject(
+                name=name,
+                node_type=node_struct.node_type,
+
+                pos=node_struct.pos,
+                rot=node_struct.rot,
+                scale=node_struct.scale,
+
+                parent=parent_stack.peek() if parent_stack else None,
+
+                matrix=matrix,
+            )
+        else:
+            raise Exception(f"Unknown node type enum value {node_struct.node_type} for {name}")
+
+        nodes.append(node)
         # Apply the stack operation to the parent_stack
-        parent_stack.handle_node(node_struct.stack_op, bone)
+        parent_stack.handle_node(node_struct.stack_op, node)
 
-    return bones, node_arr[bone_idx:]
+    return nodes
 
 
 def build_meshes_from_structs(version_properties: VersionProperties,
 
                               abstract_attributes: List[GMDAttributeSet], abstract_vertex_buffers: List[GMDVertexBuffer],
-                              abstract_bones_ordered: List[GMDBone],
+                              abstract_nodes_ordered: List[GMDNode],
 
                               mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
                               bytestrings_are_16bit: bool,
@@ -750,8 +776,12 @@ def build_meshes_from_structs(version_properties: VersionProperties,
 
         relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
         if relevant_bone_indices:
+            relevant_bones = [abstract_nodes_ordered[bone_idx] for bone_idx in relevant_bone_indices]
+            if any(not isinstance(node, GMDBone) for node in relevant_bones):
+                raise Exception(f"Skinned mesh references some non-bone nodes {[node.name for node in relevant_bones if not isinstance(node, GMDBone)]}")
+
             meshes.append(GMDSkinnedMesh(
-                relevant_bones=[abstract_bones_ordered[bone_idx] for bone_idx in relevant_bone_indices],
+                relevant_bones=cast(List[GMDBone], relevant_bones),
 
                 vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end+1],
 
@@ -774,88 +804,129 @@ def build_meshes_from_structs(version_properties: VersionProperties,
 
     return meshes
 
-def build_object_nodes(version_properties: VersionProperties,
+def connect_object_meshes(version_properties: VersionProperties,
 
-                       abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
+                          abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
+                          abstract_nodes: List[GMDNode],
 
-                       remaining_node_arr: List[NodeStruct], node_name_arr: List[ChecksumStrStruct],
-                       object_drawlist_ptrs: List[int],
-                       matrix_arr: List[Matrix], mesh_drawlists: bytes,
-                       big_endian: bool) \
-        -> Tuple[List[GMDSkinnedObject], List[GMDUnskinnedObject]]:
-    skinned_objects = []
-    unskinned_objects = []
+                          node_arr: List[NodeStruct],
+                          object_drawlist_ptrs: List[int], mesh_drawlists: bytes, big_endian: bool
+                          ):
+    for i, node_struct in enumerate(node_arr):
+        if node_struct.node_type in [NodeType.UnskinnedMesh, NodeType.SkinnedMesh]:
+            abstract_node = abstract_nodes[i]
 
-    parent_stack = ParentStack()
-    for node_struct in remaining_node_arr:
-        name = node_name_arr[node_struct.name_index].text
+            if not isinstance(abstract_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+                raise Exception(f"Node type mismatch: node {i} is of type {node_struct.node_type} but the abstract version is a {type(abstract_node)}")
 
-        if node_struct.node_type == NodeType.MatrixTransform:
-            raise Exception(f"Node {name} of type {node_struct.node_type} found after bone heirarchy had finished")
+            # This is guaranteed to be some sort of object
+            # Parse the drawlist
 
-        # This is guaranteed to be some sort of object
-        # Parse the drawlist
-        object_abstract_meshes = []
+            drawlist_ptr = object_drawlist_ptrs[node_struct.object_index]
+            offset = drawlist_ptr
+            drawlist_len, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+            zero, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+            for i in range(drawlist_len):
+                material_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+                mesh_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
 
-        drawlist_ptr = object_drawlist_ptrs[node_struct.object_index]
-        offset = drawlist_ptr
-        drawlist_len, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-        zero, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-        for i in range(drawlist_len):
-            material_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-            mesh_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+                abstract_attribute_set = abstract_attribute_sets[material_idx]
+                abstract_mesh = abstract_meshes[mesh_idx]
+                if abstract_attribute_set != abstract_mesh.attribute_set:
+                    raise Exception(f"Object {abstract_node.name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
 
-            abstract_attribute_set = abstract_attribute_sets[material_idx]
-            abstract_mesh = abstract_meshes[mesh_idx]
-            if abstract_attribute_set != abstract_mesh.attribute_set:
-                raise Exception(f"Object {name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
+                abstract_node.add_mesh(abstract_mesh)
+                pass
 
-            object_abstract_meshes.append(abstract_mesh)
-            pass
 
-        if node_struct.node_type == NodeType.SkinnedMesh:
-            if 0 <= node_struct.matrix_index < len(matrix_arr):
-                raise Exception(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
-
-            obj = GMDSkinnedObject(
-                name=name,
-                node_type=node_struct.node_type,
-
-                pos=node_struct.pos,
-                rot=node_struct.rot,
-                scale=node_struct.scale,
-
-                parent=parent_stack.peek() if parent_stack else None,
-
-                mesh_list=object_abstract_meshes
-            )
-            skinned_objects.append(obj)
-        else:
-            if not(0 <= node_struct.matrix_index < len(matrix_arr)):
-                raise Exception(f"Unskinned object {name} doesn't reference a valid matrix")
-
-            matrix = matrix_arr[node_struct.matrix_index]
-
-            obj = GMDUnskinnedObject(
-                name=name,
-                node_type=node_struct.node_type,
-
-                pos=node_struct.pos,
-                rot=node_struct.rot,
-                scale=node_struct.scale,
-
-                parent=parent_stack.peek() if parent_stack else None,
-
-                matrix=matrix,
-
-                mesh_list=object_abstract_meshes
-            )
-            unskinned_objects.append(obj)
-
-        # Apply the stack operation to the parent_stack
-        parent_stack.handle_node(node_struct.stack_op, obj)
-
-    return skinned_objects, unskinned_objects
+# def build_object_nodes(version_properties: VersionProperties,
+#
+#                        abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
+#
+#                        remaining_node_arr: List[NodeStruct], node_name_arr: List[ChecksumStrStruct],
+#                        object_drawlist_ptrs: List[int],
+#                        matrix_arr: List[Matrix], mesh_drawlists: bytes,
+#                        big_endian: bool) \
+#         -> Tuple[List[GMDSkinnedObject], List[GMDUnskinnedObject]]:
+#     skinned_objects = []
+#     unskinned_objects = []
+#
+#     # TODO - the model sword has unskinned BEFORE matrix transform (despite none of those matrix transforms actually being used)
+#     # TODO - the shotgun model has unskinned INSIDE A HIERARCHY
+#         # Blender has a "Child Of" constraint for this
+#
+#     parent_stack = ParentStack()
+#     for node_struct in remaining_node_arr:
+#         name = node_name_arr[node_struct.name_index].text
+#
+#         if node_struct.node_type == NodeType.MatrixTransform:
+#             # print(skinned_objects)
+#             # print(unskinned_objects)
+#             raise Exception(f"Node {name} of type {node_struct.node_type} found after bone heirarchy had finished")
+#
+#         # This is guaranteed to be some sort of object
+#         # Parse the drawlist
+#         object_abstract_meshes = []
+#
+#         drawlist_ptr = object_drawlist_ptrs[node_struct.object_index]
+#         offset = drawlist_ptr
+#         drawlist_len, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+#         zero, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+#         for i in range(drawlist_len):
+#             material_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+#             mesh_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
+#
+#             abstract_attribute_set = abstract_attribute_sets[material_idx]
+#             abstract_mesh = abstract_meshes[mesh_idx]
+#             if abstract_attribute_set != abstract_mesh.attribute_set:
+#                 raise Exception(f"Object {name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
+#
+#             object_abstract_meshes.append(abstract_mesh)
+#             pass
+#
+#         if node_struct.node_type == NodeType.SkinnedMesh:
+#             if 0 <= node_struct.matrix_index < len(matrix_arr):
+#                 raise Exception(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
+#
+#             obj = GMDSkinnedObject(
+#                 name=name,
+#                 node_type=node_struct.node_type,
+#
+#                 pos=node_struct.pos,
+#                 rot=node_struct.rot,
+#                 scale=node_struct.scale,
+#
+#                 parent=parent_stack.peek() if parent_stack else None,
+#
+#                 mesh_list=object_abstract_meshes
+#             )
+#             skinned_objects.append(obj)
+#         else:
+#             if not(0 <= node_struct.matrix_index < len(matrix_arr)):
+#                 raise Exception(f"Unskinned object {name} doesn't reference a valid matrix")
+#
+#             matrix = matrix_arr[node_struct.matrix_index]
+#
+#             obj = GMDUnskinnedObject(
+#                 name=name,
+#                 node_type=node_struct.node_type,
+#
+#                 pos=node_struct.pos,
+#                 rot=node_struct.rot,
+#                 scale=node_struct.scale,
+#
+#                 parent=parent_stack.peek() if parent_stack else None,
+#
+#                 matrix=matrix,
+#
+#                 mesh_list=object_abstract_meshes
+#             )
+#             unskinned_objects.append(obj)
+#
+#         # Apply the stack operation to the parent_stack
+#         parent_stack.handle_node(node_struct.stack_op, obj)
+#
+#     return skinned_objects, unskinned_objects
 
 
 # TODO: Think about how to do this

@@ -44,13 +44,13 @@ class HierarchyData(Generic[TNode]):
 class GMDScene:
     name: str
 
-    # Node Heirarchy stuff
-    overall_heirarchy: HierarchyData[GMDNode]
+    # Node Hierarchy stuff
+    overall_hierarchy: HierarchyData[GMDNode]
 
-    bones: Optional[HierarchyData[GMDBone]]
-    skinned_objects: Optional[HierarchyData[GMDSkinnedObject]]
-    unskinned_objects: Optional[HierarchyData[GMDUnskinnedObject]]
+    # bones: Optional[HierarchyData[GMDBone]]
+    # skinned_objects: Optional[HierarchyData[GMDSkinnedObject]]
+    # unskinned_objects: Optional[HierarchyData[GMDUnskinnedObject]]
 
-    def __post_init__(self):
-        if self.skinned_objects and self.skinned_objects.total_elems != len(self.skinned_objects.roots):
-            raise Exception("Skinned objects are expected to all be at the root of the heirarchy")
+    # def __post_init__(self):
+    #     if self.skinned_objects and self.skinned_objects.total_elems != len(self.skinned_objects.roots):
+    #         raise Exception("Skinned objects are expected to all be at the root of the heirarchy")

@@ -14,16 +14,17 @@ class GMDUnskinnedObject(GMDNode):
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
                  parent: GMDNode,
-                 matrix: Matrix,
-                 mesh_list: List[GMDMesh]):
+                 matrix: Matrix):
         super().__init__(name, node_type, pos, rot, scale, matrix, parent)
-        self.mesh_list = mesh_list
-        for mesh in mesh_list:
-            if isinstance(mesh, GMDSkinnedMesh):
-                raise TypeError(f"GMDUnskinnedObject {name} got skinned mesh {mesh}")
+        self.mesh_list = []
 
         if self.node_type != NodeType.UnskinnedMesh:
             raise TypeError(f"GMDUnskinnedObject {name} expected NodeType.UnskinnedMesh, got {self.node_type}")
+
+    def add_mesh(self, mesh: GMDMesh):
+        if isinstance(mesh, GMDSkinnedMesh):
+            raise TypeError(f"GMDUnskinnedObject {self.name} got skinned mesh {mesh}")
+        self.mesh_list.append(mesh)
 
     def __str__(self):
         return super().__str__()
@@ -37,13 +38,14 @@ class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDSkinnedMesh]
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
-                 parent: GMDNode,
-                 mesh_list: List[GMDSkinnedMesh]):
+                 parent: GMDNode):
         super().__init__(name, node_type, pos, rot, scale, matrix=None, parent=parent)
-        self.mesh_list = mesh_list
-        for mesh in mesh_list:
-            if not isinstance(mesh, GMDSkinnedMesh):
-                raise TypeError(f"GMDSkinnedObject {name} got not-skinned-mesh {mesh}")
+        self.mesh_list = []
 
         if self.node_type != NodeType.SkinnedMesh:
             raise TypeError(f"GMDSkinnedObject expected NodeType.SkinnedMesh, got {self.node_type}")
+
+    def add_mesh(self, mesh: GMDSkinnedMesh):
+        if not isinstance(mesh, GMDSkinnedMesh):
+            raise TypeError(f"GMDSkinnedObject {self.name} got not-skinned-mesh {mesh}")
+        self.mesh_list.append(mesh)
