@@ -2,11 +2,11 @@ import bpy
 import math
 from typing import Dict, List
 
-from yk_gmd_blender import GMDError
+from yk_gmd_blender.blender.error import GMDError
 from yk_gmd_blender.blender.common import material_name, uv_yk_to_blender_space, yk_to_blender_space
 from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterialTextureIndex
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import extract_base_header
-from yk_gmd_blender.yk_gmd.v2.structure.legacy_io import can_read_from, read_to_legacy
+from yk_gmd_blender.yk_gmd.v2.legacy_io import can_read_from, read_to_legacy
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
 

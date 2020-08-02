@@ -155,7 +155,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: VersionPr
 
         bone_pos=Vector((0, 0, 0, 1)),
         bone_axis=Quaternion(),
-        padding=Vector((0, 0, 0, 0))
+        flags=[0, 0, 0, 0]
     )
     node_names.append(ChecksumStrStruct.make_from_str("[l0]global_object"))
     nodes.append(global_object_node)
@@ -191,7 +191,7 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: VersionPr
     vertex_buffer_layout_structs: List[VertexBufferLayoutStruct_YK1] = []
     overall_vertex_buffer_data = bytearray()
     overall_index_buffer_data: List[int] = []
-    submesh_structs: List[MeshStruct] = []
+    submesh_structs: List[MeshStruct_YK1] = []
     submesh_bonelists = bytearray()
 
     for abstract_layout, vb_submeshes in vb_layout_submeshes:
@@ -302,19 +302,16 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: VersionPr
             index=i,
             material_index=attribute.material_index,
             shader_index=attribute.shader_index,
-            meshset_start=indices_using_mat[0],
-            meshset_count=len(indices_using_mat),
-            unk1=attribute.unk1,
-            unk2=attribute.unk2,
-
+            mesh_indices_start=indices_using_mat[0],
+            mesh_indices_count=len(indices_using_mat),
+            texture_init_count=attribute.texture_init_count,
             flags=attribute.flags,
-            padding=attribute.padding,
 
             texture_diffuse=attribute.texture_diffuse,
-            texture_refl_cubemap=attribute.texture_refl_cubemap,
+            texture_refl=attribute.texture_refl,
             texture_multi=attribute.texture_multi,
             texture_unk1=attribute.texture_unk1,
-            texture_unk2=attribute.texture_unk2,
+            texture_ts=attribute.texture_ts,
             texture_normal=attribute.texture_normal,
             texture_rt=attribute.texture_rt,
             texture_rd=attribute.texture_rd,
@@ -344,8 +341,8 @@ def package_legacy_abstraction_to_YK1(big_endian: bool, version_props: VersionPr
         shader_arr=shader_names,
         node_name_arr=node_names,
         index_data=overall_index_buffer_data,
-        meshset_data=drawlist_bytes,
-        mesh_matrix_bytestrings=bytes(submesh_bonelists),
+        object_drawlist_bytes=drawlist_bytes,
+        mesh_matrixlist_bytes=bytes(submesh_bonelists),
 
         overall_bounds=initial_data.overall_bounds,  # TODO: Bounds calcs
         unk12=initial_data.unk12,
