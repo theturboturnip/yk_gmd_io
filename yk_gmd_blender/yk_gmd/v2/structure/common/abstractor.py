@@ -298,13 +298,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # Order the nodes
     # Depth-first indexing
     # Track touched nodes in set T(n)?
-    root_gmd_nodes = []
-    if scene.bones:
-        root_gmd_nodes += scene.bones.roots
-    if scene.skinned_objects:
-        root_gmd_nodes += scene.skinned_objects.roots
-    if scene.unskinned_objects:
-        root_gmd_nodes += scene.unskinned_objects.roots
+    root_gmd_nodes = scene.overall_hierarchy.roots
     for i, gmd_node in enumerate(depth_first_iterate(root_gmd_nodes)):
         # stackop = none
         # if has parent and all other children of your parent have been touched - stackop += pop
