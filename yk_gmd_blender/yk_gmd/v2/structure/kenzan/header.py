@@ -33,8 +33,8 @@ class GMDHeader_Kenzan(GMDHeaderStruct):
     shader_arr: ArrayPointerStruct[ChecksumStrStruct]
     node_name_arr: ArrayPointerStruct[ChecksumStrStruct]
     index_data: ArrayPointerStruct[int]
-    meshset_data: SizedPointerStruct
-    mesh_matrix_bytestrings: SizedPointerStruct
+    object_drawlist_bytes: SizedPointerStruct
+    mesh_matrixlist_bytes: SizedPointerStruct
 
     overall_bounds: BoundsDataStruct_Kenzan
 
@@ -62,8 +62,8 @@ GMDHeader_Kenzan_Unpack = StructureUnpacker(
         ("node_name_arr", ArrayPointerStruct_Unpack),
 
         ("index_data", ArrayPointerStruct_Unpack),
-        ("meshset_data", SizedPointerStruct_Unpack),
-        ("mesh_matrix_bytestrings", SizedPointerStruct_Unpack),
+        ("object_drawlist_bytes", SizedPointerStruct_Unpack),
+        ("mesh_matrixlist_bytes", SizedPointerStruct_Unpack),
 
         ("overall_bounds", BoundsDataStruct_Kenzan_Unpack),
 

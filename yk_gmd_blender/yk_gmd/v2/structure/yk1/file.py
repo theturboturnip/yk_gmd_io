@@ -35,8 +35,8 @@ class FileData_YK1(FileData_Common):
     shader_arr: List[ChecksumStrStruct]
     node_name_arr: List[ChecksumStrStruct]
     index_data: List[int]
-    meshset_data: bytes
-    mesh_matrix_bytestrings: bytes
+    object_drawlist_bytes: bytes
+    mesh_matrixlist_bytes: bytes
 
     unk12: List[Unk12Struct]
     unk13: List[int]
@@ -67,8 +67,8 @@ class FileData_YK1(FileData_Common):
             ("shader_arr", ChecksumStrStruct_Unpack),
             ("node_name_arr", ChecksumStrStruct_Unpack),
             ("index_data", c_uint16),
-            ("meshset_data", bytes),
-            ("mesh_matrix_bytestrings", bytes),
+            ("object_drawlist_bytes", bytes),
+            ("mesh_matrixlist_bytes", bytes),
             ("unk12", Unk12Struct_Unpack),
             ("unk13", c_uint16),
             ("unk14", Unk14Struct_Unpack),

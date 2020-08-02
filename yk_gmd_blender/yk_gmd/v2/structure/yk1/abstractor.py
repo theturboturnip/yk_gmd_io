@@ -97,7 +97,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     # Set >255 bones flag
     int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)]) > 255
 
-    packed_mesh_matrix_strings, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
+    packed_mesh_matrixlists, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
         rearranged_data.mesh_matrixlist, int16_bone_indices)
 
     node_arr = []
@@ -336,8 +336,8 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         shader_arr=rearranged_data.shader_names,
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,
-        meshset_data=bytes(drawlist_bytearray),
-        mesh_matrix_bytestrings=packed_mesh_matrix_strings,
+        object_drawlist_bytes=bytes(drawlist_bytearray),
+        mesh_matrixlist_bytes=packed_mesh_matrixlists,
 
         unk12=unk12_arr,
         unk13=rearranged_data.root_node_indices,
@@ -389,7 +389,7 @@ def read_abstract_contents_YK1(version_properties: VersionProperties, file_data:
                                                 abstract_attributes, abstract_vertex_buffers, abstract_nodes,
 
                                                 file_data.mesh_arr, file_data.index_data,
-                                                file_data.mesh_matrix_bytestrings,
+                                                file_data.mesh_matrixlist_bytes,
                                                 bytestrings_are_16bit)
 
     print(f"Time after build_meshes_from_structs: {time.time() - start_time}")
@@ -403,7 +403,7 @@ def read_abstract_contents_YK1(version_properties: VersionProperties, file_data:
 
         abstract_meshes, abstract_attributes, abstract_nodes,
 
-        file_data.node_arr, object_drawlist_ptrs, file_data.meshset_data, big_endian=file_data.file_is_big_endian()
+        file_data.node_arr, object_drawlist_ptrs, file_data.object_drawlist_bytes, big_endian=file_data.file_is_big_endian()
     )
     # skinned_abstract_objects, unskinned_abstract_objects = build_object_nodes(version_properties,
     #
