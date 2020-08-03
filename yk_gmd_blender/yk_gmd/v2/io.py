@@ -2,16 +2,13 @@ from pathlib import Path
 from typing import Union, Tuple, cast
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.errors.error_classes import InvalidGMDFormatError
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct, GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan, FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProperties
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import read_abstract_contents_YK1
+from yk_gmd_blender.yk_gmd.v2.converters.yk1.from_abstract import read_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1, FilePacker_YK1
-
-
-class InvalidGMDFormatError(Exception):
-    pass
 
 
 def _get_file_data(data: Union[Path, str, bytes]) -> bytes:

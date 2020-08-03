@@ -8,7 +8,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unp
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.abstractor import pack_abstract_contents_YK1
+from yk_gmd_blender.yk_gmd.v2.converters.yk1.to_abstract import pack_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
