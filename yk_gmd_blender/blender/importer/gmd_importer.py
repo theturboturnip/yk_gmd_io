@@ -1,6 +1,8 @@
+import array
+import collections
 import os
 import re
-from typing import Dict
+from typing import Dict, Iterable, List, Tuple, Union, cast, TypeVar, Optional
 
 from mathutils import Matrix, Vector
 
@@ -12,15 +14,20 @@ from bpy.props import (StringProperty,
                        CollectionProperty)
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper, ExportHelper
+import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight4, GMDVertexBuffer, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
 class ImportGMD(Operator, ImportHelper):
@@ -84,17 +91,14 @@ class ImportGMD(Operator, ImportHelper):
                 duplicate_names = set(node_name_list)
                 error_reporter.fatal(f"Some nodes don't have unique names - found duplicates {duplicate_names}")
 
-            scene_creator = GMDSceneCreator(gmd_scene)
+            scene_creator = GMDSceneCreator(gmd_scene, error_reporter)
             gmd_collection = scene_creator.make_collection(context)
 
             if self.import_hierarchy:
                 gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
 
-            if self.import_materials:
-                pass
-
             if self.import_objects:
-                pass
+                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None, use_materials=False)#self.import_materials)
 
             return {'FINISHED'}
         except GMDImportExportError as e:
@@ -102,6 +106,7 @@ class ImportGMD(Operator, ImportHelper):
             self.report({"ERROR"}, str(e))
         return {'CANCELLED'}
 
+TMesh = TypeVar('TMesh', bound=GMDMesh)
 
 class GMDSceneCreator:
     gmd_scene: GMDScene
@@ -262,9 +267,279 @@ class GMDSceneCreator:
 
         return armature_obj
 
-    def make_material(self, gmd_material: GMDMaterial) -> bpy.types.Material:
-        if id(gmd_material) in self.material_id_to_blender:
-            return self.material_id_to_blender[id(gmd_material)]
+    def make_objects(self, context: bpy.types.Context, collection: bpy.types.Collection, armature_object: Optional[bpy.types.Object], use_materials: bool):
+        temp_mesh = bpy.data.meshes.new(".temp")
+
+        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
+        vertex_group_indices = {
+            name:i
+            for i, name in enumerate(vertex_group_list)
+        }
+
+        gmd_objects = {}
+
+        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+            if not isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+                continue
+
+            is_skinned = isinstance(gmd_node, GMDSkinnedObject)
+
+            # List of all attribute set IDs referenced by an object
+            # Make a list from a set to avoid duplicates
+            gmd_attr_set_ids = list({id(mesh.attribute_set) for mesh in gmd_node.mesh_list})
+            # TODO: This method probably wastes a lot of time creating new BMeshes. It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
+            overall_bm = bmesh.new()
+            blender_material_list = []
+            for i, attr_set_id in enumerate(gmd_attr_set_ids):
+                merged_gmd_mesh = self.make_merged_gmd_mesh(
+                    [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id])
+                if use_materials:
+                    blender_material_list.append(self.make_material(merged_gmd_mesh.attribute_set))
+                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=i)
+                else:
+                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=0)
+                new_bmesh.to_mesh(temp_mesh)
+                new_bmesh.free()
+                overall_bm.from_mesh(temp_mesh)
+
+            # Create a mesh object for it
+            overall_mesh = bpy.data.meshes.new(gmd_node.name)
+            overall_bm.to_mesh(overall_mesh)
+            overall_bm.free()
+            # if self.validate_meshes:
+            #     mesh.validate()
+            if use_materials:
+                for mat in blender_material_list:
+                    overall_mesh.materials.append(mat)
+            mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
+
+            if is_skinned:
+                if armature_object:
+                    mesh_obj.parent = armature_object
+                    for name in vertex_group_list:
+                        mesh_obj.vertex_groups.new(name=name)
+                    modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
+                    modifier.object = armature_object
+            else:
+                if gmd_node.parent:
+                    if gmd_node.parent.node_type == NodeType.MatrixTransform:
+                        child_constraint = mesh_obj.constraints.new("CHILD_OF")
+                        child_constraint.target = armature_object
+                        child_constraint.subtarget = gmd_node.parent.name
+                    else:
+                        mesh_obj.parent = gmd_objects[gmd_node.parent.name]
+
+            # Objects have positions
+            mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
+            mesh_obj.rotation_quaternion = self.gmd_to_blender_world @ gmd_node.rot
+            mesh_obj.scale = self.gmd_to_blender_world.scale.xyz
+
+            gmd_objects[gmd_node.name] = mesh_obj
+            collection.objects.link(mesh_obj)
+
+        bpy.data.meshes.remove(temp_mesh)
+
+    def gmd_to_bmesh(self, gmd_mesh: Union[GMDMesh, GMDSkinnedMesh], vertex_group_indices: Dict[str, int], material_index: int) -> bmesh.types.BMesh:
+        apply_bone_weights = isinstance(gmd_mesh, GMDSkinnedMesh)
+
+        bm = bmesh.new()
+
+        # Create initial vertices (position, normal, bone weights if present)
+        if apply_bone_weights:
+            deform = bm.verts.layers.deform.new("Vertex Weights")
+
+        vtx_buffer = gmd_mesh.vertices_data
+        for i in range(len(vtx_buffer)):
+            vert = bm.verts.new(self.gmd_to_blender_world @ vtx_buffer.pos[i].xyz)
+            if vtx_buffer.normal:
+                # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
+                # Just using .xyz would make blender apply a translation (TODO - check this?)
+                vert.normal = self.gmd_to_blender_world @ (vtx_buffer.normal.xyz.resized(4))
+            # Tangents cannot be applied
+            if apply_bone_weights and vtx_buffer.bone_weights:
+                for bone_weight in vtx_buffer.bone_weights[i]:
+                    if bone_weight.weight > 0:
+                        vertex_group_index = vertex_group_indices[gmd_mesh.relevant_bones[bone_weight.bone].name]
+                        vert[deform][vertex_group_index] = bone_weight.weight
+        # Set up the indexing table inside the bmesh so lookups work
+        bm.verts.ensure_lookup_table()
+        bm.verts.index_update()
+
+        # Connect triangles
+        def add_face_to_bmesh(face):
+            try:
+                # blender has a reversed winding order
+                face = bm.faces.new((bm.verts[face[0]], bm.verts[face[2]], bm.verts[face[1]]))
+            except ValueError:
+                pass
+            else:
+                face.smooth = True
+                face.material_index = material_index
+
+        for i in range(0, len(gmd_mesh.triangle_indices), 3):
+            tri_idxs = gmd_mesh.triangle_indices[i:i + 3]
+            if len(set(tri_idxs)) != 3:
+                continue
+            if 0xFFFF in tri_idxs:
+                self.error.recoverable(f"Found an 0xFFFF index inside a triangle_indices list! That shouldn't happen.")
+                continue
+            add_face_to_bmesh(tri_idxs)
+
+        # Removed unused verts
+        # Typically the mesh passed into this function comes from make_merged_gmd_mesh, which "fuses" vertices by changing the index buffer
+        # However, the unused verts themselves are still in the buffer
+        unused_verts = [v for v in bm.verts if not v.link_faces]
+        # equiv of bmesh.ops.delete(bm, geom=verts, context='VERTS')
+        for v in unused_verts:
+            bm.verts.remove(v)
+
+        # Color0
+        if vtx_buffer.col0:
+            col0_layer = bm.loops.layers.color.new("color0")
+            for face in bm.faces:
+                for loop in face.loops:
+                    color = vtx_buffer.col0[loop.vert.index]
+                    loop[col0_layer] = (color.x, color.y, color.z, color.w)
+
+        # Color1
+        if vtx_buffer.col1:
+            col1_layer = bm.loops.layers.color.new("color1")
+            for face in bm.faces:
+                for loop in face.loops:
+                    color = vtx_buffer.col1[loop.vert.index]
+                    loop[col1_layer] = (color.x, color.y, color.z, color.w)
+
+        # If UVs are present, add them
+        for i, uv in enumerate(vtx_buffer.uvs):
+            uv_layer = bm.loops.layers.uv.new(f"TexCoords{i}")
+            original_uv = uv[loop.vert.index]
+            # TODO - check if we actually need to set uvs
+            loop[uv_layer].uv = original_uv
+
+        return bm
+
+    def make_merged_gmd_mesh(self, gmd_meshes: List[TMesh], remove_dupes: bool = True) -> TMesh:
+        from mathutils import kdtree
+        """
+        Given multiple GMD Meshes that use the same material, merge them into a single GMDMesh that uses a single vertex buffer and index set.
+        :param gmd_meshes:
+        :return: A merged GMD Mesh. Only has triangle indices, not strips.
+        """
+        if not all(gmd_mesh.attribute_set is gmd_meshes[0].attribute_set for gmd_mesh in gmd_meshes):
+            self.error.fatal("Trying to merge GMDMeshes that do not share an attribute set!")
+
+        making_skinned_mesh = isinstance(gmd_meshes[0], GMDSkinnedMesh)
+        if making_skinned_mesh:
+            # Skinned meshes are more complicated because vertices reference bones using a *per-mesh* index into that "relevant_bones" list
+            # These indices have to be changed for the merged mesh, because each mesh will usually have a different "relevant_bones" list
+            gmd_meshes = cast(List[GMDSkinnedMesh], gmd_meshes)
+            # Handling skinned meshes
+            relevant_bones = gmd_meshes[0].relevant_bones[:]
+            merged_vertex_buffer = gmd_meshes[0].vertices_data[:]
+            for gmd_mesh in gmd_meshes[1:]:
+                bone_index_mapping = {}
+                for i, bone in enumerate(gmd_mesh.relevant_bones):
+                    if bone not in relevant_bones:
+                        relevant_bones.append(bone)
+                    bone_index_mapping[i] = relevant_bones.index(bone)
+
+                index_start_to_adjust_bones = len(merged_vertex_buffer)
+                merged_vertex_buffer += gmd_mesh.vertices_data
+                for i in range(index_start_to_adjust_bones, len(merged_vertex_buffer)):
+                    old_weights = merged_vertex_buffer.bone_weights[i]
+                    merged_vertex_buffer.bone_weights[i] = (
+                        BoneWeight(bone_index_mapping[old_weights[0].bone], old_weights[0].weight),
+                        BoneWeight(bone_index_mapping[old_weights[1].bone], old_weights[1].weight),
+                        BoneWeight(bone_index_mapping[old_weights[2].bone], old_weights[2].weight),
+                        BoneWeight(bone_index_mapping[old_weights[3].bone], old_weights[3].weight),
+                    )
+        else:
+            merged_vertex_buffer = gmd_meshes[0].vertices_data[:]
+            for gmd_mesh in gmd_meshes[1:]:
+                merged_vertex_buffer += gmd_mesh.vertices_data
+
+        # Mapping of vertex index pre-merge -> merged vertex index
+        # i.e. if the merger decides vertex 5 and vertex 7 are merged, mapping[5] = 5 and mapping[7] = 5
+        merged_indices_map = {}
+        dupes_of_map = collections.defaultdict(list)
+        unused_indices = set()
+        if remove_dupes:
+            # Build a 3D tree of positions, so we can efficiently find the closest vertices
+            equality_check_distance = 0.0001
+            actual_equality_epsilon = 0.000001
+
+            size = len(merged_vertex_buffer)
+            kd = kdtree.KDTree(size)
+            for i, pos in enumerate(merged_vertex_buffer.pos):
+                kd.insert(pos.xyz, i)
+            kd.balance()
+
+            for i, pos in enumerate(merged_vertex_buffer.pos):
+                if i in unused_indices:
+                    continue
+                else:
+                    # Set the index in the map only if it hasn't been set already i.e. if it isn't in unused_indices
+                    merged_indices_map[i] = i
+
+                for (co, index, dist) in kd.find_range(pos.xyz, equality_check_distance):
+                    if index == i:
+                        continue
+
+                    if dist < actual_equality_epsilon:
+                        if merged_vertex_buffer.verts_equal(i, index):
+                            unused_indices.add(index)
+                            merged_indices_map[index] = i
+                            dupes_of_map[i].append(index)
+
+        total_verts = len(merged_vertex_buffer) - len(unused_indices)
+
+        print(f"After merging {len(gmd_meshes)} meshes, {len(unused_indices)} vertex indices were determined to be redundant. Expected total verts = {total_verts}")
+
+        index_maps = []
+        overall_i = 0
+        for gmd_mesh in gmd_meshes:
+            index_map = {}
+            if merged_indices_map:
+                for i in range(len(gmd_mesh.vertices_data)):
+                    index_map[i] = merged_indices_map[overall_i]
+                    overall_i += 1
+            else:
+                for i in range(len(gmd_mesh.vertices_data)):
+                    index_map[i] = overall_i
+                    overall_i += 1
+
+            index_maps.append(index_map)
+
+        #import array
+        triangle_indices = array.array('i')
+        for gmd_mesh, index_map in zip(gmd_meshes, index_maps):
+            for index in gmd_mesh.triangle_indices:
+                triangle_indices.append(index_map[index])
+
+        if making_skinned_mesh:
+            return GMDSkinnedMesh(
+                attribute_set=gmd_meshes[0].attribute_set,
+
+                vertices_data=merged_vertex_buffer,
+                triangle_indices=triangle_indices,
+                triangle_strip_noreset_indices=array.array('i'),
+                triangle_strip_reset_indices=array.array('i'),
+
+                relevant_bones=relevant_bones
+            )
+        else:
+            return GMDMesh(
+                attribute_set=gmd_meshes[0].attribute_set,
+
+                vertices_data=merged_vertex_buffer,
+                triangle_indices=triangle_indices,
+                triangle_strip_noreset_indices=array.array('i'),
+                triangle_strip_reset_indices=array.array('i'),
+            )
+
+    def make_material(self, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
+        if id(gmd_attribute_set) in self.material_id_to_blender:
+            return self.material_id_to_blender[id(gmd_attribute_set)]
         raise NotImplementedError()
 
 
