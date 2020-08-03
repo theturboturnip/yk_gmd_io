@@ -17,6 +17,10 @@ class PackType(Enum):
     Bytes = 1
 
 
+class FileUnpackError(Exception):
+    pass
+
+
 @dataclass(repr=False)
 class FileData_Common:
     magic: str
@@ -155,7 +159,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
                 try:
                     return attr.extract(unpacker, big_endian, data)
                 except Exception as e:
-                    raise Exception(f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
+                    raise FileUnpackError(f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
             else:
                 raise TypeError(f"Unexpected unpacker type {unpacker}")
 

@@ -2,13 +2,14 @@ import argparse
 import math
 from pathlib import Path
 
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_contents
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
+from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FilePacker_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties
-from yk_gmd_blender.yk_gmd.v2.converters.yk1.to_abstract import pack_abstract_contents_YK1
+from yk_gmd_blender.yk_gmd.v2.converters.yk1.from_abstract import pack_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.legacy_abstractor import convert_YK1_to_legacy_abstraction, \
     package_legacy_abstraction_to_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FilePacker_YK1
@@ -255,8 +256,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke)
-    scene = read_abstract_scene_from_contents(version_props, file_data)
+    error_reporter = LenientErrorReporter()
+
+    version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
+    scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
 
     # for skinned_obj in scene.skinned_objects.depth_first_iterate():
     #     for mesh in skinned_obj.mesh_list:
@@ -266,11 +269,11 @@ if __name__ == '__main__':
     new_file_bytearray = bytearray()
     FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
 
-    new_version_props, new_file_data = read_gmd_structures(bytes(new_file_bytearray))
+    new_version_props, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
     print(version_props == new_version_props)
     print(version_props)
     print(new_version_props)
-    new_scene = read_abstract_scene_from_contents(new_version_props, new_file_data)
+    new_scene = read_abstract_scene_from_filedata_object(new_version_props, new_file_data, error_reporter)
 
     if args.output_dir:
         with open(args.output_dir / args.file_to_poke, "wb") as out_file:

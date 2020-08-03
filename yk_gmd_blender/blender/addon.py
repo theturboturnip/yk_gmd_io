@@ -29,7 +29,7 @@
 #
 import bpy
 from .export.export_gmd import ExportGMD, menu_func_export
-from .importer.import_gmd import ImportGMD, menu_func_import
+from .importer.gmd_importer import ImportGMD, menu_func_import
 
 classes = (
     ImportGMD,

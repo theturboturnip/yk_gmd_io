@@ -46,7 +46,7 @@ class ImportGMD(Operator, ImportHelper):
         return self.unit_import(context, self.filepath, self.as_keywords(ignore=("filter_glob",)))
 
     def unit_import(self, context, filepath, import_settings):
-        from yk_gmd_blender.blender.importer.importer import GMDImporter
+        from yk_gmd_blender.blender.importer.legacy.importer import GMDImporter
         import time
 
         try:
