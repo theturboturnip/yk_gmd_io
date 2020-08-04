@@ -1,20 +1,32 @@
-from typing import List
+import os
+import re
+from typing import List, Optional, Tuple, cast
 
 import bpy
 from bpy.props import FloatVectorProperty, StringProperty
-from bpy.types import NodeSocketStandard, NodeSocket, Context, UILayout, Node
+from bpy.types import NodeSocketStandard, NodeSocket, Context, UILayout, Node, NodeSocketColor, ShaderNodeTexImage
+from mathutils import Matrix, Vector
 
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
+
+
+def get_row(self: 'Matrix4x4NodeSocket', idx):
+    return list(self.matrix.row[idx])
+def set_row(self: 'Matrix4x4NodeSocket', idx, value):
+    self.matrix.row[idx] = Vector(value)
 
 class Matrix4x4NodeSocket(NodeSocket):
     bl_idname = "Matrix4x4NodeSocket"
     bl_label = "Socket for holding 4x4 matrix values"
 
+    matrix: Matrix = Matrix.Diagonal(Vector((0, 0, 0, 0)))
+
     socket_col = FloatVectorProperty(size=4, default=[1, 1, 1, 1])
 
-    prop_row0 = FloatVectorProperty(size=4, default=[0, 0, 0, 0])
-    prop_row1 = FloatVectorProperty(size=4, default=[0, 0, 0, 0])
-    prop_row2 = FloatVectorProperty(size=4, default=[0, 0, 0, 0])
-    prop_row3 = FloatVectorProperty(size=4, default=[0, 0, 0, 0])
+    prop_row0 = FloatVectorProperty(size=4, get=lambda self: get_row(self, 0), set=lambda self, value: set_row(self, 0, value))
+    prop_row1 = FloatVectorProperty(size=4, get=lambda self: get_row(self, 1), set=lambda self, value: set_row(self, 1, value))
+    prop_row2 = FloatVectorProperty(size=4, get=lambda self: get_row(self, 2), set=lambda self, value: set_row(self, 2, value))
+    prop_row3 = FloatVectorProperty(size=4, get=lambda self: get_row(self, 3), set=lambda self, value: set_row(self, 3, value))
 
     # Derived from https://github.com/zeffii/SoundPetal/blob/9fde0c64d5a4d3b30f0d4a75e73d29c0757463f8/node_tree.py#L94
     # I'm pretty sure this is boilerplate though?
@@ -55,6 +67,76 @@ DEFAULT_UNUSED_COLOR = (0, 0, 0, 1)
 DEFAULT_NORMAL_COLOR = (0.5, 0.5, 0, 1)
 DEFAULT_MULTI_COLOR = (0, 0, 0, 1)
 
+def create_single_color_texture(name: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
+    pass
+
+def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_name: str) -> ShaderNodeTexImage:
+    from bpy_extras.image_utils import load_image
+
+    image_node = node_tree.nodes.new('ShaderNodeTexImage')
+
+    if tex_name in bpy.data.images:
+        image_node.image = bpy.data.images[tex_name]
+    elif tex_name in ["dummy_black", "dummy_multi"]:
+        image_node.image = create_single_color_texture(tex_name, (0, 0, 0, 1))
+    elif tex_name == "dummy_white":
+        image_node.image = create_single_color_texture(tex_name, (1, 1, 1, 1))
+    else:
+        tex_filename = os.path.join(gmd_folder, f"{tex_name}.dds")
+        if not os.path.isfile(tex_filename):
+            # Make a purple texture to signify "not found"
+            image_node.image = create_single_color_texture(tex_name, (1, 0, 1, 1))
+        else:
+            image = bpy.data.images.load(tex_filename, check_existing=True)
+            image.name = tex_name
+            image_node.image = image
+
+    return cast(ShaderNodeTexImage, image_node)
+    # load_image(f"{diffuse_name}.dds", os.path.dirname(self.filepath),
+    #                                                  place_holder=True, check_existing=True)
+
+def set_yakuza_shader_node_group_inputs_from_attributeset(material_node_tree: bpy.types.NodeTree, yakuza_inputs: bpy.types.NodeInputs, attribute_set: GMDAttributeSet, gmd_folder: str):
+    yakuza_inputs["Shader Name"].default_value = attribute_set.shader.name
+    yakuza_inputs["Shader Vertex Packing Flags"].default_value = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
+    yakuza_inputs["Skin Shader"].default_value = "[skin]" in attribute_set.shader.name
+
+    def set_matrix(set_into: Matrix4x4NodeSocket, data: List[float]):
+        set_into.prop_row0 = data[0:4]
+        set_into.prop_row1 = data[4:8]
+        set_into.prop_row2 = data[8:12]
+        set_into.prop_row3 = data[12:16]
+
+    yakuza_inputs["Attribute Set Flags"].default_value = attribute_set.attr_flags
+    set_matrix(yakuza_inputs["Attribute Set Floats"], attribute_set.attr_extra_properties)
+    # TODO - Material
+    #  set_matrix(yakuza_inputs["Material Floats"], attribute_set.material.)
+    set_matrix(yakuza_inputs["Unk12 Floats"], attribute_set.unk12.float_data)
+    set_matrix(yakuza_inputs["Unk14 Ints"], attribute_set.unk14.int_data)
+
+    def set_texture(set_into: NodeSocketColor, tex_name: Optional[str], next_image_y: int = 0) -> Tuple[Optional[ShaderNodeTexImage], int]:
+        if not tex_name:
+            return None, next_image_y
+        image_node = load_texture_from_name(material_node_tree, gmd_folder, tex_name)
+        image_node.location = (-500, next_image_y)
+        image_node.label = tex_name
+        image_node.hide = True
+        material_node_tree.links.new(image_node.outputs["Color"], set_into)
+        next_image_y -= 100
+        return image_node, next_image_y
+
+    diffuse_tex, next_y = set_texture(yakuza_inputs["Diffuse Texture"], attribute_set.texture_diffuse)
+    if diffuse_tex and re.search(r'^s_b', attribute_set.shader.name):
+        # The shader name starts with s_b so we know it's transparent
+        material_node_tree.links.new(diffuse_tex.outputs["Alpha"], yakuza_inputs["Diffuse Alpha"])
+    _, next_y = set_texture(yakuza_inputs["Normal Texture"], attribute_set.texture_normal, next_y)
+    _, next_y = set_texture(yakuza_inputs["Multi Texture"], attribute_set.texture_multi, next_y)
+    _, next_y = set_texture(yakuza_inputs["texture_refl"], attribute_set.texture_refl, next_y)
+    _, next_y = set_texture(yakuza_inputs["texture_unk1"], attribute_set.texture_unk1, next_y)
+    _, next_y = set_texture(yakuza_inputs["texture_rs"], attribute_set.texture_rs, next_y)
+    _, next_y = set_texture(yakuza_inputs["texture_rt"], attribute_set.texture_rt, next_y)
+    _, next_y = set_texture(yakuza_inputs["texture_rd"], attribute_set.texture_rd, next_y)
+
+
 def get_yakuza_shader_node_group():
     if YAKUZA_SHADER_NODE_GROUP in bpy.data.node_groups:
         return bpy.data.node_groups[YAKUZA_SHADER_NODE_GROUP]
@@ -83,6 +165,10 @@ def get_yakuza_shader_node_group():
     # Create Inputs
     shader_name = shader.inputs.new("NodeSocketString", "Shader Name")
     shader_name.default_value = "Invalid Shader"
+    # These flags are stored as a hex-string encoding a 64-bit unsigned number.
+    # It can't be stored as an IntUnsigned because blender uses primitive C types for that, and would try to store it in 32 bits.
+    shader_vertex_packing_flags = shader.inputs.new("NodeSocketString", "Shader Vertex Packing Flags")
+    shader_vertex_packing_flags.default_value = "0"
 
     shader_is_skin = shader.inputs.new("NodeSocketBool", "Skin Shader")
     shader_is_skin.default_value = False
@@ -115,8 +201,8 @@ def get_yakuza_shader_node_group():
     shader_flags.default_value = 0
     shader_extra_properties = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Attribute Set Floats")
     shader_material_floats = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Material Floats")
-    shader_unk12 = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Unk12 Ints")
-    shader_unk14 = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Unk14 Floats")
+    shader_unk12 = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Unk12 Floats")
+    shader_unk14 = shader.inputs.new(Matrix4x4NodeSocket.bl_idname, "Unk14 Ints")
 
     # Create outputs
     shader.outputs.new("NodeSocketShader", 'Shader')

@@ -18,7 +18,8 @@ import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, get_yakuza_shader_node_group
+from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, get_yakuza_shader_node_group, \
+    set_yakuza_shader_node_group_inputs_from_attributeset
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -111,7 +112,7 @@ class ImportGMD(Operator, ImportHelper):
             for object in objects_depth_first:
                 check_objects_children(object)
 
-            scene_creator = GMDSceneCreator(gmd_scene, error_reporter)
+            scene_creator = GMDSceneCreator(self.filepath, gmd_scene, error_reporter)
             gmd_collection = scene_creator.make_collection(context)
 
             if self.import_hierarchy:
@@ -130,11 +131,13 @@ class ImportGMD(Operator, ImportHelper):
 TMesh = TypeVar('TMesh', bound=GMDMesh)
 
 class GMDSceneCreator:
+    filepath: str
     gmd_scene: GMDScene
     material_id_to_blender: Dict[int, bpy.types.Material]
     gmd_to_blender_world: Matrix
 
-    def __init__(self, gmd_scene: GMDScene, error: ErrorReporter):
+    def __init__(self, filepath: str, gmd_scene: GMDScene, error: ErrorReporter):
+        self.filepath = filepath
         self.gmd_scene = gmd_scene
         self.material_id_to_blender = {}
         self.gmd_to_blender_world = Matrix((
@@ -437,9 +440,10 @@ class GMDSceneCreator:
             for face in bm.faces:
                 for loop in face.loops:
                     original_uv = uv[loop.vert.index]
-                    # TODO - check if we actually need to rearrange 2D UVs
                     # TODO - fuuuuck. blender doesn't accept 3D/4D UVs. How the hell are we supposed to handle them?
-                    loop[uv_layer].uv = original_uv.xy
+                    #  thought - have a deterministic "primary UV" designation that can only be 2D
+                    #  This is the only UV loaded into the actual UV layer, the rest are all loaded into custom properties
+                    loop[uv_layer].uv = (original_uv.x, 1.0 - original_uv.y)
 
         # Removed unused verts
         # Typically the mesh passed into this function comes from make_merged_gmd_mesh, which "fuses" vertices by changing the index buffer
@@ -626,6 +630,13 @@ class GMDSceneCreator:
         output_node = material.node_tree.nodes.new("ShaderNodeOutputMaterial")
         output_node.location = (500, 0)
         material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
+
+        set_yakuza_shader_node_group_inputs_from_attributeset(
+            material.node_tree,
+            yakuza_shader_node_group.inputs,
+            gmd_attribute_set,
+            os.path.dirname(self.filepath)
+        )
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material
