@@ -69,10 +69,6 @@ class ImportGMD(Operator, ImportHelper):
         layout.use_property_decorate = True  # No animation.
 
         # When properties are added, use "layout.prop" here to display them
-        # layout.prop(self, 'load_materials')
-        # layout.prop(self, 'load_bones')
-        # layout.prop(self, 'validate_meshes')
-        # layout.prop(self, 'merge_meshes')
         layout.prop(self, 'strict')
         layout.prop(self, 'import_hierarchy')
         layout.prop(self, 'import_objects')
@@ -131,6 +127,10 @@ class ImportGMD(Operator, ImportHelper):
 TMesh = TypeVar('TMesh', bound=GMDMesh)
 
 class GMDSceneCreator:
+    """
+    Class used to create all meshes and materials in Blender, from a GMDScene.
+    Uses ErrorReporter for all error handling.
+    """
     filepath: str
     gmd_scene: GMDScene
     material_id_to_blender: Dict[int, bpy.types.Material]
@@ -140,9 +140,15 @@ class GMDSceneCreator:
         self.filepath = filepath
         self.gmd_scene = gmd_scene
         self.material_id_to_blender = {}
+        # self.gmd_to_blender_world = Matrix((
+        #     Vector((1, 0, 0, 0)),
+        #     Vector((0, 0, -1, 0)),
+        #     Vector((0, 1, 0, 0)),
+        #     Vector((0, 0, 0, 1)),
+        # ))
         self.gmd_to_blender_world = Matrix((
-            Vector((1, 0, 0, 0)),
-            Vector((0, 0, -1, 0)),
+            Vector((-1, 0, 0, 0)),
+            Vector((0, 0, 1, 0)),
             Vector((0, 1, 0, 0)),
             Vector((0, 0, 0, 1)),
         ))
@@ -151,10 +157,7 @@ class GMDSceneCreator:
     def make_collection(self, context: bpy.types.Context) -> bpy.types.Collection:
         collection_name = root_name_for_gmd_file(self.gmd_scene)
         collection = bpy.data.collections.new(collection_name)
-        # TODO: This was just sort of copied from XNALara - it's probably better to just take the scene collections?
-        # view_layer = bpy.context.view_layer
-        # active_collection = view_layer.active_layer_collection.collection
-        # active_collection.children.link(collection)
+        # Link the new collection to the currently active collection.
         context.collection.children.link(collection)
         return collection
 
@@ -174,41 +177,29 @@ class GMDSceneCreator:
         # The actual regex has been changed tho
         twist_regex = re.compile(r'[-_](twist|adj|sup)\d*([-_\s]|$)')
 
-        parent_world_yakuza_space_matrices: Dict[str, Matrix] = {}
+        self.bone_world_yakuza_space_matrices: Dict[str, Matrix] = {}
 
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
 
-            bone = armature.edit_bones.new(f"{gmd_node.name}")
-            bone.use_relative_parent = False
-
-            # Find the local->world matrix for this bone, and it's parent
-            # if gmd_node.matrix:
-            #     this_bone_matrix = self.gmd_to_blender_world @ gmd_node.matrix.inverted()
-            # elif gmd_node.parent:
-            #     this_bone_matrix = armature.edit_bones[gmd_node.parent.name].matrix @ (Matrix.Translation(gmd_node.pos.xyz) @ gmd_node.rot.to_matrix().resize_4x4() @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
-            # else:
-            #     this_bone_matrix = self.gmd_to_blender_world @ Matrix.Identity(4)
-
+            # Find the local->world matrix for the parent bone, and use this to find the local->world matrix for the current bone
             if gmd_node.parent:
-                parent_matrix = parent_world_yakuza_space_matrices[gmd_node.parent.name]
+                parent_matrix = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
             else:
                 parent_matrix = Matrix.Identity(4)
 
             rot_matrix = gmd_node.rot.to_matrix()
             rot_matrix.resize_4x4()
             this_bone_matrix = parent_matrix @ (Matrix.Translation(gmd_node.pos.xyz) @ rot_matrix)# @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
-            parent_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix
+            self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix
 
             #print(f"{gmd_node.name}")
             #if isinstance(gmd_node, GMDBone):
-            bone.use_deform = True
 
             # Take a page out of XNA Importer's book for bone tails - make roots just stick towards the camera
             # and make nodes with (non-twist) children try to go to the average of those children's positions
             if not gmd_node.parent:
-                #print("Using basic Z-delta for tail")
                 tail_delta = Vector((0, 0, 0.5))
             elif twist_regex.search(gmd_node.name) and not gmd_node.children:
                 # We have a parent, and we're a twist bone
@@ -220,32 +211,35 @@ class GMDSceneCreator:
                 adjacent_siblings = [child for child in gmd_node.parent.children if child is not gmd_node and (child.pos - gmd_node.pos).length < 0.01]
                 if adjacent_siblings:
                     # If we're trying to be different from our sibling, we pick a direction that is perpendicular to the direction we would normally pick
+                    # i.e. a vector perpendicular to the "parent direction"
+                    parent_dir = gmd_node.pos.xyz.normalized() # gmd_node.pos is relative to the parent already
 
-                    # Pick a vector perpendicular to the parent direction
-                    parent_dir = (gmd_node.pos.xyz) # gmd_node.pos is relative to the parent already
-                    original_parent_dir_length = parent_dir.length
-                    parent_dir.normalize()
-                    perp_dir = Vector((0, 0, 1))
-                    if parent_dir.dot(perp_dir) > 0.99:
+                    # Pick a vector that's sort of in the same direction we want the bone to point in
+                    # (i.e. we don't want the bone to go in/out, so don't pick (0, 0, 1))
+                    target_dir = Vector((0, 1, 0))
+                    if parent_dir.dot(target_dir) > 0.99:
                         # Parent and proposed perpendicular direction are basically the same, cross product won't work
                         # Choose a different one
-                        perp_dir = Vector((0, 1, 0))
+                        target_dir = Vector((0, 0, 1))
 
-                    tail_delta_dir = parent_dir.cross(perp_dir)
-                    tail_delta_dir.normalize()
+                    # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
+                    perp_dir = parent_dir.cross(target_dir).normalized()
 
-                    #tail_delta_dir = perp_dir.cross(guaranteed_perp)
+                    # Then, parent_dir cross perp_dir will create a vector that is both
+                    #   1) perpendicular to parent_dir
+                    #   2) in the same sort of direction as target_dir
+                    # use this vector as our tail_delta
+                    tail_delta_dir = parent_dir.cross(perp_dir).normalized()
 
-                    # Cross product can have bad symmetry - bones on opposite sides
+                    # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
                     # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
-                    # This will choose consistent directions regardless of which side of the Y axis you are on
+                    # This will choose consistent directions regardless of which side of the vertical axis you are on
                     distance_from_origin_with_positive = (this_bone_matrix @ (tail_delta_dir * 0.1)).length
                     distance_from_origin_with_negative = (this_bone_matrix @ (-tail_delta_dir * 0.1)).length
                     if distance_from_origin_with_negative > distance_from_origin_with_positive:
                         tail_delta_dir = -tail_delta_dir
 
-                    # Extend the tail in the direction of the delta, for the same length between this bone and our parent
-                    #print(f"Using twist formula - parent_dir {parent_dir} perp_dir {perp_dir} tail_delta_dir {tail_delta_dir}")
+                    # Extend the tail in the direction of the delta
                     tail_delta = (tail_delta_dir.xyz * 0.1)
                 else:
                     # There aren't any bones we have to differentiate ourselves from -> just follow the parent delta, like the default for having no children
@@ -256,22 +250,18 @@ class GMDSceneCreator:
                 countable_children_gmd_positions = [child.pos.xyz for child in gmd_node.children if not twist_regex.search(child.name)]
 
                 if countable_children_gmd_positions:
-                    #print(f"Has usable children - using delta from average of {countable_children_gmd_positions}")
                     tail_delta = sum(countable_children_gmd_positions, Vector((0,0,0))) / len(countable_children_gmd_positions)
                 else:
-                    #print(f"No usable children - just extending in direction of pos, which is {gmd_node.pos.xyz}")
                     # Extend the tail in the direction of the parent
                     # gmd_node.pos.xyz is relative to the parent already
                     if gmd_node.pos.xyz.length < 0.00001:
                         tail_delta = Vector((0, 0, 0.05))
                     else:
-                        tail_delta = gmd_node.pos.xyz.normalized() * 0.05 # + (gmd_node.pos.xyz - gmd_node.parent.pos.xyz)
-            # else:
-            #     bone.use_deform = False
-            #     print(f"Not deforming - using straight offset")
-            #     tail_delta = Vector((0, 0, 0.5))
+                        tail_delta = gmd_node.pos.xyz.normalized() * 0.05
 
-            #bone.matrix = self.gmd_to_blender_world @ this_bone_matrix
+            bone = armature.edit_bones.new(f"{gmd_node.name}")
+            bone.use_relative_parent = False
+            bone.use_deform = True
             bone.head = self.gmd_to_blender_world @ this_bone_matrix @ Vector((0,0,0))
             bone.tail = self.gmd_to_blender_world @ this_bone_matrix @ tail_delta
             # TODO: If your head is close to your parent's tail, turn on "connected to parent"
@@ -336,6 +326,15 @@ class GMDSceneCreator:
                     overall_mesh.materials.append(mat)
             mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
 
+            # Objects have positions
+            mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
+            # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
+            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))#self.gmd_to_blender_world @ gmd_node.rot
+            # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
+            # .xzy is used to swap the components for now, but there's probably a better way?
+            #mesh_obj.scale = self.gmd_to_blender_world @ gmd_node.scale.xyz
+            mesh_obj.scale = gmd_node.scale.xzy
+
             if is_skinned:
                 if armature_object:
                     mesh_obj.parent = armature_object
@@ -347,19 +346,20 @@ class GMDSceneCreator:
                 if gmd_node.parent:
                     if gmd_node.parent.node_type == NodeType.MatrixTransform:
                         child_constraint = mesh_obj.constraints.new("CHILD_OF")
+
+                        # Line up the object with the bone it's parented to
+                        parent_yakuza_space = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
+                        mesh_unparented_yakuza_space = (self.gmd_to_blender_world.inverted() @ mesh_obj.matrix_world)
+                        expected_mesh_obj_matrix = self.gmd_to_blender_world @ parent_yakuza_space @ mesh_unparented_yakuza_space
+
+                        # Set the inverse matrix based on this orientation - otherwise things get weird
+                        # Make sure to set the inverse matrix BEFORE changing other stuff, apparently changing it last doesn't work
+                        # https://blender.stackexchange.com/questions/19602/child-of-constraint-set-inverse-with-python
+                        child_constraint.inverse_matrix = (expected_mesh_obj_matrix).inverted()
                         child_constraint.target = armature_object
                         child_constraint.subtarget = gmd_node.parent.name
                     else:
                         mesh_obj.parent = gmd_objects[id(gmd_node.parent)]
-
-            # Objects have positions
-            mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
-            # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, gmd_node.rot.x, -gmd_node.rot.z, gmd_node.rot.y))#self.gmd_to_blender_world @ gmd_node.rot
-            # TODO - When applying gmd_to_blender_world to (1,1,1) you get (1,-1,1) out. This undoes the previous scaling applied to the vertices.
-            # .xzy is used to swap the components for now, but there's probably a better way?
-            #mesh_obj.scale = self.gmd_to_blender_world @ gmd_node.scale.xyz
-            mesh_obj.scale = gmd_node.scale.xzy
 
             gmd_objects[id(gmd_node)] = mesh_obj
             collection.objects.link(mesh_obj)
