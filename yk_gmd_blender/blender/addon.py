@@ -28,15 +28,17 @@
 # Import Class
 #
 import bpy
+from bpy.props import PointerProperty
 
-from yk_gmd_blender.blender.materials import Matrix4x4NodeSocket
+from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel
 from .export.export_gmd import ExportGMD, menu_func_export
 from .importer.gmd_importer import ImportGMD, menu_func_import
 
 classes = (
     ImportGMD,
     ExportGMD,
-    Matrix4x4NodeSocket
+    YakuzaPropertyGroup,
+    YakuzaPropertyPanel,
 )
 
 def register():
@@ -47,8 +49,12 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
+    bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
+
 
 def unregister():
+    del bpy.types.Material.yakuza_data
+
     for c in classes:
         bpy.utils.unregister_class(c)
     #for f in extension_panel_unregister_functors:

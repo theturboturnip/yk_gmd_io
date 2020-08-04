@@ -632,7 +632,7 @@ class GMDSceneCreator:
         material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
 
         set_yakuza_shader_node_group_inputs_from_attributeset(
-            material.node_tree,
+            material,
             yakuza_shader_node_group.inputs,
             gmd_attribute_set,
             os.path.dirname(self.filepath)
