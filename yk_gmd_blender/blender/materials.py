@@ -161,7 +161,7 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
     # load_image(f"{diffuse_name}.dds", os.path.dirname(self.filepath),
     #                                                  place_holder=True, check_existing=True)
 
-def set_yakuza_shader_node_group_inputs_from_attributeset(material: bpy.types.Material, yakuza_inputs: bpy.types.NodeInputs, attribute_set: GMDAttributeSet, gmd_folder: str):
+def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, yakuza_inputs: bpy.types.NodeInputs, attribute_set: GMDAttributeSet, gmd_folder: str):
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"

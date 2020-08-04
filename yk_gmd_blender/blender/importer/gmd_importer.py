@@ -2,7 +2,7 @@ import array
 import collections
 import os
 import re
-from typing import Dict, Iterable, List, Tuple, Union, cast, TypeVar, Optional
+from typing import Dict, List, Tuple, Union, cast, TypeVar, Optional
 
 from mathutils import Matrix, Vector, Quaternion
 
@@ -13,17 +13,17 @@ from bpy.props import (StringProperty,
                        IntProperty,
                        CollectionProperty)
 from bpy.types import Operator
-from bpy_extras.io_utils import ImportHelper, ExportHelper
+from bpy_extras.io_utils import ImportHelper
 import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, get_yakuza_shader_node_group, \
-    set_yakuza_shader_node_group_inputs_from_attributeset
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
+from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
+    set_yakuza_shader_material_from_attributeset
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight4, GMDVertexBuffer, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -140,12 +140,10 @@ class GMDSceneCreator:
         self.filepath = filepath
         self.gmd_scene = gmd_scene
         self.material_id_to_blender = {}
-        # self.gmd_to_blender_world = Matrix((
-        #     Vector((1, 0, 0, 0)),
-        #     Vector((0, 0, -1, 0)),
-        #     Vector((0, 1, 0, 0)),
-        #     Vector((0, 0, 0, 1)),
-        # ))
+        # TODO - Would it be simpler to just have a scene root object, which we rotate to get the axes correct?
+        #  need to think about how it would affect export - if export can handle it easily, then it would be easier
+        # The Yakuza games treat +Y as up, +Z as forward.
+        # Blender treats +Z as up, +Y as forward, but if we just leave it at that then X is inverted.
         self.gmd_to_blender_world = Matrix((
             Vector((-1, 0, 0, 0)),
             Vector((0, 0, 1, 0)),
@@ -155,6 +153,11 @@ class GMDSceneCreator:
         self.error = error
 
     def make_collection(self, context: bpy.types.Context) -> bpy.types.Collection:
+        """
+        Build a collection to hold all of the objects and meshes from the GMDScene.
+        :param context: The context used by the import process.
+        :return: A collection which the importer can add objects and meshes to.
+        """
         collection_name = root_name_for_gmd_file(self.gmd_scene)
         collection = bpy.data.collections.new(collection_name)
         # Link the new collection to the currently active collection.
@@ -162,6 +165,15 @@ class GMDSceneCreator:
         return collection
 
     def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection) -> bpy.types.Object:
+        """
+        Make an Armature representing all of the GMDBones in the imported scene hierarchy.
+        :param context: The context used by the import process.
+        :param collection: The collection the import process is adding objects and meshes to.
+        :return: An object with an armature representing all of the GMDBones in the imported scene hierarchy.
+        """
+        # Make a copy of the context so that we don't have to reset any state after using it.
+        context = context.copy()
+
         armature_name = armature_name_for_gmd_file(self.gmd_scene)
         armature = bpy.data.armatures.new(f"{armature_name}")
         armature.display_type = 'STICK'
@@ -193,9 +205,6 @@ class GMDSceneCreator:
             rot_matrix.resize_4x4()
             this_bone_matrix = parent_matrix @ (Matrix.Translation(gmd_node.pos.xyz) @ rot_matrix)# @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
             self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix
-
-            #print(f"{gmd_node.name}")
-            #if isinstance(gmd_node, GMDBone):
 
             # Take a page out of XNA Importer's book for bone tails - make roots just stick towards the camera
             # and make nodes with (non-twist) children try to go to the average of those children's positions
@@ -264,10 +273,18 @@ class GMDSceneCreator:
             bone.use_deform = True
             bone.head = self.gmd_to_blender_world @ this_bone_matrix @ Vector((0,0,0))
             bone.tail = self.gmd_to_blender_world @ this_bone_matrix @ tail_delta
-            # TODO: If your head is close to your parent's tail, turn on "connected to parent"
-            bone.parent = armature.edit_bones[gmd_node.parent.name] if gmd_node.parent else None
+            # If your head is close to your parent's tail, turn on "connected to parent"
+            if gmd_node.parent:
+                bone.parent = armature.edit_bones[gmd_node.parent.name]
+                if (bone.head - bone.parent.tail).length < 0.0001:
+                    bone.use_connect = True
+                else:
+                    bone.use_connect = False
+            else:
+                bone.parent = None
 
         bpy.ops.object.mode_set(mode='POSE')
+
         # todo - set custom shape for object bones (and bones with no parent?) (and twist bones????)
         #bpy.data.objects['Armature'].pose.bones['Bone1'].custom_shape = bpy.data.objects['wgt_bone1']
 
@@ -279,7 +296,19 @@ class GMDSceneCreator:
 
         return armature_obj
 
-    def make_objects(self, context: bpy.types.Context, collection: bpy.types.Collection, armature_object: Optional[bpy.types.Object], use_materials: bool, fuse_vertices: bool):
+    def make_objects(self, context: bpy.types.Context, collection: bpy.types.Collection,
+                     armature_object: Optional[bpy.types.Object], use_materials: bool, fuse_vertices: bool):
+        """
+        Populate the Blender scene with Blender objects for each node in the scene hierarchy representing a GMDSkinnedObject
+        or GMDUnskinnedObject.
+        :param context: The Blender context the import process was given.
+        :param collection: The collection the import process is adding objects and meshes to.
+        :param armature_object: The object used for the armature, if a scene skeleton was imported.
+        :param use_materials: Should the objects have correct materials set or not.
+        :param fuse_vertices: Should vertices in meshes using the same attribute sets in the same object be fused?
+        :return: Nothing
+        """
+
         temp_mesh = bpy.data.meshes.new(".temp")
 
         vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
@@ -295,47 +324,55 @@ class GMDSceneCreator:
                 continue
 
             is_skinned = isinstance(gmd_node, GMDSkinnedObject)
-            print(f"making object {gmd_node.name}, is_skinned {is_skinned} from meshes {gmd_node.mesh_list}")
 
-            # List of all attribute set IDs referenced by an object
-            # Make a list from a set to avoid duplicates
+            # 1. Make a single BMesh containing all meshes referenced by this object.
+            # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
+            # originally split up for the sake of bone limits, and not merging them would make blender bug up.
+            # To do this, we list all of the unique attribute sets:
             gmd_attr_set_ids = list({id(mesh.attribute_set) for mesh in gmd_node.mesh_list})
-            # TODO: This method probably wastes a lot of time creating new BMeshes. It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
+            # TODO: This method probably wastes a lot of time creating new BMeshes.
+            #  It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
             overall_bm = bmesh.new()
             blender_material_list = []
+            # then we make a merged GMDMesh object for each attribute set, containing the meshes that use that attribute set.
             for i, attr_set_id in enumerate(gmd_attr_set_ids):
                 merged_gmd_mesh = self.make_merged_gmd_mesh(
                     [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id], remove_dupes=fuse_vertices)
+
+                # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
                 if use_materials:
                     blender_material_list.append(self.make_material(collection, merged_gmd_mesh.attribute_set))
                     new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=i)
                 else:
                     new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=0)
+
+                # Merge it in to the overall bmesh.
                 new_bmesh.to_mesh(temp_mesh)
                 new_bmesh.free()
                 overall_bm.from_mesh(temp_mesh)
 
-            # Create a mesh object for it
+            # Turn the overall BMesh into a Blender Mesh (there's a difference) so that it can be attached to an Object.
             overall_mesh = bpy.data.meshes.new(gmd_node.name)
             overall_bm.to_mesh(overall_mesh)
             overall_bm.free()
-            # if self.validate_meshes:
-            #     mesh.validate()
             if use_materials:
                 for mat in blender_material_list:
                     overall_mesh.materials.append(mat)
+
+            # Create the final object representing this GMDNode
             mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
 
-            # Objects have positions
+            # Set the GMDNode position, rotation, scale
             mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
             # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
             mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))#self.gmd_to_blender_world @ gmd_node.rot
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
-            # .xzy is used to swap the components for now, but there's probably a better way?
+            #  .xzy is used to swap the components for now, but there's probably a better way?
             #mesh_obj.scale = self.gmd_to_blender_world @ gmd_node.scale.xyz
             mesh_obj.scale = gmd_node.scale.xzy
 
             if is_skinned:
+                # Skinned Objects are parented to the armature, with an Armature modifier to deform them.
                 if armature_object:
                     mesh_obj.parent = armature_object
                     for name in vertex_group_list:
@@ -343,10 +380,13 @@ class GMDSceneCreator:
                     modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
                     modifier.object = armature_object
             else:
+                # Unskinned objects are either parented to a bone, or to another unskinned object.
                 if gmd_node.parent:
                     if gmd_node.parent.node_type == NodeType.MatrixTransform:
+                        # To parent an object to a specific bone in the armature, use the Child-Of constraint.
                         child_constraint = mesh_obj.constraints.new("CHILD_OF")
 
+                        # TODO - This may be unnecessary now that the forward vectors are sign-consistent
                         # Line up the object with the bone it's parented to
                         parent_yakuza_space = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
                         mesh_unparented_yakuza_space = (self.gmd_to_blender_world.inverted() @ mesh_obj.matrix_world)
@@ -359,14 +399,23 @@ class GMDSceneCreator:
                         child_constraint.target = armature_object
                         child_constraint.subtarget = gmd_node.parent.name
                     else:
+                        # Parenting an object to another object is easy
                         mesh_obj.parent = gmd_objects[id(gmd_node.parent)]
 
+            # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = mesh_obj
             collection.objects.link(mesh_obj)
 
         bpy.data.meshes.remove(temp_mesh)
 
     def gmd_to_bmesh(self, gmd_mesh: Union[GMDMesh, GMDSkinnedMesh], vertex_group_indices: Dict[str, int], material_index: int) -> bmesh.types.BMesh:
+        """
+        Given a GMDMesh/GMDSkinnedMesh, convert it to a BMesh.
+        :param gmd_mesh: The mesh to convert.
+        :param vertex_group_indices: A mapping of bone name -> vertex group index.
+        :param material_index: The material index this mesh uses.
+        :return: A BMesh representing this GMDMesh, with bone weights included if the gmd_mesh is an instance of GMDSkinnedMesh.
+        """
         apply_bone_weights = isinstance(gmd_mesh, GMDSkinnedMesh)
 
         bm = bmesh.new()
@@ -409,6 +458,7 @@ class GMDSceneCreator:
             except ValueError:
                 self.error.recoverable(f"Adding face {face} resulted in ValueError - This should have been a valid triangle")
 
+        # For each triangle, add it to the bmesh
         for i in range(0, len(gmd_mesh.triangle_indices), 3):
             tri_idxs = gmd_mesh.triangle_indices[i:i + 3]
             if len(set(tri_idxs)) != 3:
@@ -434,7 +484,7 @@ class GMDSceneCreator:
                     color = vtx_buffer.col1[loop.vert.index]
                     loop[col1_layer] = (color.x, color.y, color.z, color.w)
 
-        # If UVs are present, add them
+        # UVs
         for i, uv in enumerate(vtx_buffer.uvs):
             uv_layer = bm.loops.layers.uv.new(f"TexCoords{i}")
             for face in bm.faces:
@@ -450,38 +500,38 @@ class GMDSceneCreator:
         # However, the unused verts themselves are still in the buffer, and should be removed.
         # THIS MUST ONLY HAPPEN AFTER ALL OTHER LOADING - otherwise different data channels will be messed up
         unused_verts = [v for v in bm.verts if not v.link_faces]
-        print(f"Bmesh removing {len(unused_verts)} verts")
         # equiv of bmesh.ops.delete(bm, geom=verts, context='VERTS')
         for v in unused_verts:
             bm.verts.remove(v)
         bm.verts.ensure_lookup_table()
         bm.verts.index_update()
-        print(f"total vert count = {len(bm.verts)}")
 
         return bm
 
     def make_merged_gmd_mesh(self, gmd_meshes: List[TMesh], remove_dupes: bool = True) -> TMesh:
-        from mathutils import kdtree
         """
         Given multiple GMD Meshes that use the same material, merge them into a single GMDMesh that uses a single vertex buffer and index set.
-        :param gmd_meshes:
+        :param gmd_meshes: A list of at least one mesh, that are all of the same type, and use the same attribute set.
         :return: A merged GMD Mesh. Only has triangle indices, not strips.
         """
+        if len(gmd_meshes) == 0:
+            self.error.fatal("Called make_merged_gmd_mesh with 0 meshes!")
+
         if len(gmd_meshes) == 1:
             return gmd_meshes[0]
 
-        if not all(gmd_mesh.attribute_set is gmd_meshes[0].attribute_set for gmd_mesh in gmd_meshes):
+        # All of the meshes should have the same attribute set
+        if not all(gmd_mesh.attribute_set is gmd_meshes[0].attribute_set for gmd_mesh in gmd_meshes[1:]):
             self.error.fatal("Trying to merge GMDMeshes that do not share an attribute set!")
 
+        # Assume that all meshes in the list have the same type
+        # -> if one is skinned, all of them are
         making_skinned_mesh = isinstance(gmd_meshes[0], GMDSkinnedMesh)
-        print(f"Merging {gmd_meshes}")
-        print(f"Is skinned {making_skinned_mesh}")
-
         if making_skinned_mesh:
             # Skinned meshes are more complicated because vertices reference bones using a *per-mesh* index into that "relevant_bones" list
             # These indices have to be changed for the merged mesh, because each mesh will usually have a different "relevant_bones" list
             gmd_meshes = cast(List[GMDSkinnedMesh], gmd_meshes)
-            # Handling skinned meshes
+
             relevant_bones = gmd_meshes[0].relevant_bones[:]
             merged_vertex_buffer = gmd_meshes[0].vertices_data[:]
             for gmd_mesh in gmd_meshes[1:]:
@@ -490,8 +540,6 @@ class GMDSceneCreator:
                     if bone not in relevant_bones:
                         relevant_bones.append(bone)
                     bone_index_mapping[i] = relevant_bones.index(bone)
-
-                print(bone_index_mapping)
 
                 def remap_weight(bone_weight: BoneWeight):
                     # If the weight is 0 the bone is unused, so don't remap it.
@@ -511,7 +559,6 @@ class GMDSceneCreator:
                         remap_weight(old_weights[2]),
                         remap_weight(old_weights[3]),
                     )
-            print(len(relevant_bones))
         else:
             merged_vertex_buffer = gmd_meshes[0].vertices_data[:]
             for gmd_mesh in gmd_meshes[1:]:
@@ -524,8 +571,7 @@ class GMDSceneCreator:
         unused_indices = set()
         if remove_dupes:
             # Build a 3D tree of positions, so we can efficiently find the closest vertices
-            equality_check_distance = 0.000001
-            actual_equality_epsilon = 0.0
+            from mathutils import kdtree
 
             size = len(merged_vertex_buffer)
             kd = kdtree.KDTree(size)
@@ -533,37 +579,33 @@ class GMDSceneCreator:
                 kd.insert(pos.xyz, i)
             kd.balance()
 
+            # Build the initial state for the merged index map, just x:x for all indices
             merged_indices_map = {
-                i:i
+                i: i
                 for i in range(len(merged_vertex_buffer))
             }
 
-            rejects = set()
-
+            equality_check_distance = 0.000001
             for i, pos in enumerate(merged_vertex_buffer.pos):
+                # If this index has been merged, don't re-merge it
                 if i in unused_indices:
                     continue
 
                 for (co, index, dist) in kd.find_range(pos.xyz, equality_check_distance):
+                    # Ignore this index and any indices which have already been merged elsewhere
                     if index == i:
                         continue
-
                     if index in unused_indices:
                         continue
 
-                    if dist <= actual_equality_epsilon and merged_vertex_buffer.verts_equalish(i, index):
+                    # If the new vertex is *exactly* equal (except maybe for the tangent)...
+                    if dist == 0 and merged_vertex_buffer.verts_equalish(i, index):
+                        # then set its map entry to refer to i
                         unused_indices.add(index)
                         merged_indices_map[index] = i
                         dupes_of_map[i].append(index)
-                    else:
-                        # print(f"Rejected index {index}, which was of distance {dist} vs {actual_equality_epsilon}")
-                        rejects.add(index)
 
-            total_verts = len(merged_vertex_buffer) - len(unused_indices)
-            print(
-                f"After merging {len(gmd_meshes)} meshes, {len(unused_indices)} vertex indices were determined to be redundant. Expected total verts = {total_verts}")
-            print(f"total rejects (will include doubles?) {len(rejects)}")
-
+        # Build a separate index map for each mesh, of (mesh-local index) -> (overall merged index)
         index_maps = []
         overall_i = 0
         for gmd_mesh in gmd_meshes:
@@ -579,15 +621,14 @@ class GMDSceneCreator:
 
             index_maps.append(index_map)
 
-        #import array
+        # Apply the index mappings to the actual index buffers, and merge them.
+        # We could also do this for the triangle strip indices, but it's unnecessary.
         triangle_indices = array.array('i')
         for gmd_mesh, index_map in zip(gmd_meshes, index_maps):
             for index in gmd_mesh.triangle_indices:
                 triangle_indices.append(index_map[index])
 
         if making_skinned_mesh:
-            print(len(relevant_bones))
-            print({x.bone for bone_weights in merged_vertex_buffer.bone_weights for x in bone_weights})
             return GMDSkinnedMesh(
                 attribute_set=gmd_meshes[0].attribute_set,
 
@@ -609,6 +650,16 @@ class GMDSceneCreator:
             )
 
     def make_material(self, collection: bpy.types.Collection, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
+        """
+        Given a gmd_attribute_set, make a Blender material.
+        The material name is based on the collection name NOT the gmd_scene name, in case duplicate scenes exist.
+        i.e. if c_am_kiryu is imported twice, the second collection will be named c_am_kiryu.001. For consistency,
+        the materials take this c_am_kiryu.001 as a prefix.
+        :param collection: The collection the scene is associated with.
+        :param gmd_attribute_set: The attribute set to create a material for.
+        :return: A Blender material with all of the data from the gmd_attribute_set represented in an exportable way.
+        """
+        # If the attribute set has a material already, reuse it.
         if id(gmd_attribute_set) in self.material_id_to_blender:
             return self.material_id_to_blender[id(gmd_attribute_set)]
 
@@ -620,18 +671,24 @@ class GMDSceneCreator:
         material_name = f"{collection.name_full}_{gmd_attribute_set.shader.name}"
 
         material = bpy.data.materials.new(material_name)
+        # Yakuza shaders all use backface culling (even the transparent ones!)
         material.use_backface_culling = True
+        # They all have to use nodes, of course
         material.use_nodes = True
+        # Don't use the default node setup
         material.node_tree.nodes.clear()
+        # Make a Yakuza Shader group, and position it
         yakuza_shader_node_group = make_yakuza_node_group(material.node_tree)
         yakuza_shader_node_group.location = (0, 0)
         yakuza_shader_node_group.width = 400
         yakuza_shader_node_group.height = 800
+        # Hook up the Yakuza Shader to the output
         output_node = material.node_tree.nodes.new("ShaderNodeOutputMaterial")
         output_node.location = (500, 0)
         material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
 
-        set_yakuza_shader_node_group_inputs_from_attributeset(
+        # Set up the group inputs and material data based on the attribute set.
+        set_yakuza_shader_material_from_attributeset(
             material,
             yakuza_shader_node_group.inputs,
             gmd_attribute_set,
@@ -640,6 +697,7 @@ class GMDSceneCreator:
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material
+
 
 def menu_func_import(self, context):
     self.layout.operator(ImportGMD.bl_idname, text='Yakuza GMD (.gmd)')
