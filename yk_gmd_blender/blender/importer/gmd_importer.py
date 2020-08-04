@@ -18,6 +18,7 @@ import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
+from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, get_yakuza_shader_node_group
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -105,7 +106,7 @@ class ImportGMD(Operator, ImportHelper):
             def check_objects_children(object: GMDNode):
                 for child in object.children:
                     if isinstance(child, GMDBone):
-                        self.error.fatal(f"Object {object.name} has child {child.name} which is a GMDBone - The importer expects that objects do not have bones as children")
+                        error_reporter.fatal(f"Object {object.name} has child {child.name} which is a GMDBone - The importer expects that objects do not have bones as children")
                     check_objects_children(child)
             for object in objects_depth_first:
                 check_objects_children(object)
@@ -117,7 +118,8 @@ class ImportGMD(Operator, ImportHelper):
                 gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
 
             if self.import_objects:
-                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None, use_materials=False, fuse_vertices=self.fuse_object_meshes)#self.import_materials)
+                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None,
+                                           use_materials=self.import_materials, fuse_vertices=self.fuse_object_meshes)#self.import_materials)
 
             return {'FINISHED'}
         except GMDImportExportError as e:
@@ -147,9 +149,10 @@ class GMDSceneCreator:
         collection_name = root_name_for_gmd_file(self.gmd_scene)
         collection = bpy.data.collections.new(collection_name)
         # TODO: This was just sort of copied from XNALara - it's probably better to just take the scene collections?
-        view_layer = bpy.context.view_layer
-        active_collection = view_layer.active_layer_collection.collection
-        active_collection.children.link(collection)
+        # view_layer = bpy.context.view_layer
+        # active_collection = view_layer.active_layer_collection.collection
+        # active_collection.children.link(collection)
+        context.collection.children.link(collection)
         return collection
 
     def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection) -> bpy.types.Object:
@@ -311,7 +314,7 @@ class GMDSceneCreator:
                 merged_gmd_mesh = self.make_merged_gmd_mesh(
                     [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id], remove_dupes=fuse_vertices)
                 if use_materials:
-                    blender_material_list.append(self.make_material(merged_gmd_mesh.attribute_set))
+                    blender_material_list.append(self.make_material(collection, merged_gmd_mesh.attribute_set))
                     new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=i)
                 else:
                     new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=0)
@@ -390,7 +393,7 @@ class GMDSceneCreator:
         bm.verts.index_update()
 
         # Connect triangles
-        def add_face_to_bmesh(face):
+        def add_face_to_bmesh(face: Tuple[int, int, int]):
             try:
                 # blender has a reversed winding order
                 face = bm.faces.new((bm.verts[face[0]], bm.verts[face[2]], bm.verts[face[1]]))
@@ -598,11 +601,31 @@ class GMDSceneCreator:
                 triangle_strip_reset_indices=array.array('i'),
             )
 
-    def make_material(self, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
+    def make_material(self, collection: bpy.types.Collection, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
         if id(gmd_attribute_set) in self.material_id_to_blender:
             return self.material_id_to_blender[id(gmd_attribute_set)]
-        raise NotImplementedError()
 
+        def make_yakuza_node_group(node_tree: bpy.types.NodeTree):
+            node = node_tree.nodes.new("ShaderNodeGroup")
+            node.node_tree = get_yakuza_shader_node_group()
+            return node
+
+        material_name = f"{collection.name_full}_{gmd_attribute_set.shader.name}"
+
+        material = bpy.data.materials.new(material_name)
+        material.use_backface_culling = True
+        material.use_nodes = True
+        material.node_tree.nodes.clear()
+        yakuza_shader_node_group = make_yakuza_node_group(material.node_tree)
+        yakuza_shader_node_group.location = (0, 0)
+        yakuza_shader_node_group.width = 400
+        yakuza_shader_node_group.height = 800
+        output_node = material.node_tree.nodes.new("ShaderNodeOutputMaterial")
+        output_node.location = (500, 0)
+        material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
+
+        self.material_id_to_blender[id(gmd_attribute_set)] = material
+        return material
 
 def menu_func_import(self, context):
     self.layout.operator(ImportGMD.bl_idname, text='Yakuza GMD (.gmd)')

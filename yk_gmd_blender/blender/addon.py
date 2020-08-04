@@ -28,12 +28,15 @@
 # Import Class
 #
 import bpy
+
+from yk_gmd_blender.blender.materials import Matrix4x4NodeSocket
 from .export.export_gmd import ExportGMD, menu_func_export
 from .importer.gmd_importer import ImportGMD, menu_func_import
 
 classes = (
     ImportGMD,
     ExportGMD,
+    Matrix4x4NodeSocket
 )
 
 def register():
