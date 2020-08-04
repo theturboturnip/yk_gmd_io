@@ -479,7 +479,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 meshes.append(GMDSkinnedMesh(
                     relevant_bones=cast(List[GMDBone], relevant_bones),
 
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end + 1],
+                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
@@ -489,7 +489,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 ))
             else:
                 meshes.append(GMDMesh(
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end + 1],
+                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,

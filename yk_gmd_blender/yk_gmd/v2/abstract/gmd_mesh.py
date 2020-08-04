@@ -29,3 +29,8 @@ class GMDMesh:
 class GMDSkinnedMesh(GMDMesh):
     relevant_bones: List[GMDBone]
 
+    def __post_init__(self):
+        super().__post_init__()
+        referenced_bone_indices = {w.bone for ws in self.vertices_data.bone_weights for w in ws}
+        if max(referenced_bone_indices) >= len(self.relevant_bones):
+            raise Exception(f"Mesh uses {len(self.relevant_bones)} bones but references {referenced_bone_indices} in {len(self.vertices_data)} verts")
