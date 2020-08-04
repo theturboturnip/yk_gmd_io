@@ -395,13 +395,16 @@ class GMDSceneCreator:
         # Connect triangles
         def add_face_to_bmesh(face: Tuple[int, int, int]):
             try:
-                # blender has a reversed winding order
-                face = bm.faces.new((bm.verts[face[0]], bm.verts[face[2]], bm.verts[face[1]]))
-            except ValueError:
-                pass
-            else:
+                # This can throw ValueError if the triangle is "degenerate" - i.e. has two vertices that are the same
+                # [1, 2, 3] is fine
+                # [1, 2, 2] is degenerate
+                # This should never be called with degenerate triangles, but if there is one we skip it and recover.
+                face = bm.faces.new((bm.verts[face[0]], bm.verts[face[1]], bm.verts[face[2]]))
+
                 face.smooth = True
                 face.material_index = material_index
+            except ValueError:
+                self.error.recoverable(f"Adding face {face} resulted in ValueError - This should have been a valid triangle")
 
         for i in range(0, len(gmd_mesh.triangle_indices), 3):
             tri_idxs = gmd_mesh.triangle_indices[i:i + 3]
