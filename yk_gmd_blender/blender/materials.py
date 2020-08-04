@@ -80,21 +80,21 @@ def get_yakuza_shader_node_group():
     # attr_extra_properties: List[float]
     # attr_flags: int
 
-    # The "Group Input" and "Group Output" nodes are how we link values from shader.inputs, shader.outputs into the other nodes in the shader?
-    group_input = shader.nodes.new("NodeGroupInput")
-    group_output = shader.nodes.new("NodeGroupOutput")
-
     # Create Inputs
     shader_name = shader.inputs.new("NodeSocketString", "Shader Name")
     shader_name.default_value = "Invalid Shader"
 
     shader_is_skin = shader.inputs.new("NodeSocketBool", "Skin Shader")
     shader_is_skin.default_value = False
-    shader_is_transparent = shader.inputs.new("NodeSocketBool", "Transparent")
-    shader_is_transparent.default_value = False
+    # shader_is_transparent = shader.inputs.new("NodeSocketBool", "Transparent")
+    # shader_is_transparent.default_value = False
+    # shader_old_style_normal = shader.inputs.new("NodeSocketBool", "Old-Style Normal Maps")
+    # shader_old_style_normal.default_value = False
 
     shader_diffuse = shader.inputs.new("NodeSocketColor", "Diffuse Texture")
     shader_diffuse.default_value = DEFAULT_DIFFUSE_COLOR
+    shader_alpha = shader.inputs.new("NodeSocketFloat", "Diffuse Alpha")
+    shader_alpha.default_value = 1.0
     shader_normal = shader.inputs.new("NodeSocketColor", "Normal Texture")
     shader_normal.default_value = DEFAULT_NORMAL_COLOR
     shader_multi = shader.inputs.new("NodeSocketColor", "Multi Texture")
@@ -121,11 +121,102 @@ def get_yakuza_shader_node_group():
     # Create outputs
     shader.outputs.new("NodeSocketShader", 'Shader')
 
+    # The "Group Output" nodes is how we link values from shader.outputs into the other nodes in the shader
+    group_output = shader.nodes.new("NodeGroupOutput")
+
     principled_shader = shader.nodes.new("ShaderNodeBsdfPrincipled")
-    # TODO - why does group_output.inputs[0] work but not .inputs["Shader"]?
     link(principled_shader.outputs['BSDF'], group_output.inputs["Shader"])
 
-    # TODO: Multi textures, normals, is_transparent, is_skin
-    link(group_input.outputs['Diffuse Texture'], principled_shader.inputs['Base Color'])
+    principled_shader.location = (100, 0)
+    group_output.location = (principled_shader.location[0] + principled_shader.width + 100, 0)
+    group_input_x = -800
+
+    # Create multiple "Group Input" nodes containing only the bits we want
+    group_input_diffuse = shader.nodes.new("NodeGroupInput")
+    for output in group_input_diffuse.outputs:
+        output.hide = (output.name != "Diffuse Texture")
+    group_input_diffuse.label = "Diffuse Input"
+    group_input_diffuse.hide = True
+    group_input_diffuse.location = (group_input_x, 0)
+
+    group_input_is_skin = shader.nodes.new("NodeGroupInput")
+    for output in group_input_is_skin.outputs:
+        output.hide = (output.name != "Skin Shader")
+    group_input_is_skin.label = "Is-Skin Input"
+    group_input_is_skin.hide = True
+    group_input_is_skin.location = (group_input_x, -100)
+
+    group_input_multi = shader.nodes.new("NodeGroupInput")
+    for output in group_input_multi.outputs:
+        output.hide = (output.name != "Multi Texture")
+    group_input_multi.label = "Multi Input"
+    group_input_multi.hide = True
+    group_input_multi.location = (group_input_x, -400)
+
+    group_input_alpha = shader.nodes.new("NodeGroupInput")
+    for output in group_input_alpha.outputs:
+        output.hide = (output.name != "Diffuse Alpha")
+    group_input_alpha.label = "Alpha Input"
+    group_input_alpha.hide = True
+    group_input_alpha.location = (group_input_x, -600)
+
+    # group_input_normal = shader.nodes.new("NodeGroupInput")
+    # for output in group_input_normal.outputs:
+    #     output.hide = ("Normal" not in output.name)
+    # group_input_normal.label = "Normal Input"
+    # group_input_normal.hide = True
+    # group_input_normal.location = (group_input_x, -800)
+
+
+    def mix_between(fac, color1, color2):
+        mix_node = shader.nodes.new("ShaderNodeMixRGB")
+
+        link(fac, mix_node.inputs['Fac'])
+
+        if isinstance(color1, NodeSocket):
+            link(color1, mix_node.inputs['Color1'])
+        else:
+            mix_node.inputs['Color1'].default_value = color1
+
+        if isinstance(color2, NodeSocket):
+            link(color2, mix_node.inputs['Color2'])
+        else:
+            mix_node.inputs['Color2'].default_value = color2
+
+        return mix_node
+
+    # Multi texture
+    # 1. Split the color into R, G, B
+    split_multi = shader.nodes.new("ShaderNodeSeparateRGB")
+    split_multi.location = (-600, group_input_multi.location[1])
+    link(group_input_multi.outputs["Multi Texture"], split_multi.inputs[0])
+    # The R is specular
+    link(split_multi.outputs['R'], principled_shader.inputs['Specular'])
+    # The B is Ambient Occlusion, so it darkens the diffuse color
+    main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['Diffuse Texture'], (0, 0, 0, 1))
+    main_color.label = "Main Color"
+    main_color.hide = True
+    main_color.location = (-400, 0)
+    # The G is emission, so use it to mix between diffuse and emission
+    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], main_color.outputs[0], (0, 0, 0, 1))
+    main_color_diffuse_portion.label = "Diffuse Portion"
+    main_color_diffuse_portion.hide = True
+    main_color_diffuse_portion.location = (-200, 0)
+    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1), main_color.outputs[0])
+    main_color_emissive_portion.label = "Emissive Portion"
+    main_color_emissive_portion.hide = True
+    main_color_emissive_portion.location = (-200, -50)
+    # Link the diffuse/emissive portions correctly
+    link(main_color_diffuse_portion.outputs[0], principled_shader.inputs['Base Color'])
+    link(main_color_emissive_portion.outputs[0], principled_shader.inputs['Emission'])
+
+    # TODO: normal maps? They are very complicated so probably not right now
+
+    # is_transparent
+    link(group_input_alpha.outputs["Diffuse Alpha"], principled_shader.inputs["Alpha"])
+
+    # is_skin
+    link(group_input_is_skin.outputs['Skin Shader'], principled_shader.inputs['Subsurface'])
+    link(group_input_diffuse.outputs['Diffuse Texture'], principled_shader.inputs['Subsurface Color'])
 
     return shader
