@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Union, Tuple, cast
 
+from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.converters.yk1.from_abstract import pack_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.converters.yk1.to_abstract import GMDAbstractor_YK1
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import InvalidGMDFormatError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
@@ -32,6 +34,12 @@ def _extract_base_header(data: bytes) -> Tuple[bool, GMDHeaderStruct]:
     # Reimport the header with the correct endianness
     base_header, _ = GMDHeaderStruct_Unpack.unpack(big_endian, data=data, offset=0)
     return big_endian, base_header
+
+
+def get_file_header(data: Union[Path, str, bytes], error_reporter: ErrorReporter) -> GMDHeaderStruct:
+    data = _get_file_data(data, error_reporter)
+    _, base_header = _extract_base_header(data)
+    return base_header
 
 
 def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorReporter) -> Tuple[VersionProperties, Union[FileData_Kenzan, FileData_YK1]]:
@@ -69,3 +77,27 @@ def read_abstract_scene(data: Union[Path, str, bytes], error_reporter: ErrorRepo
 
     version_props, file_data = read_gmd_structures(data, error_reporter)
     return read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
+
+
+def check_version_writeable(version_props: VersionProperties, error_reporter: ErrorReporter):
+    if version_props.major_version == GMDVersion.Kiwami1:
+        return
+    else:
+        error_reporter.fatal(f"File format version {version_props.version_str} is not writeable")
+
+
+def write_abstract_scene_out(version_props: VersionProperties, file_is_big_endian: bool, vertices_are_big_endian: bool,
+                             scene: GMDScene, path: Union[Path, str], error_reporter: ErrorReporter):
+    if version_props.major_version == GMDVersion.Kiwami1:
+        file_data = pack_abstract_contents_YK1(version_props, file_is_big_endian, vertices_are_big_endian, scene, error_reporter)
+
+        try:
+            data_bytearray = bytearray()
+            FilePacker_YK1.pack(file_data.file_is_big_endian(), file_data, data_bytearray)
+
+            with open(path, "wb") as out_file:
+                out_file.write(data_bytearray)
+        except (PackingValidationError, IOError) as e:
+            error_reporter.fatal(str(e))
+    else:
+        raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not writeable")

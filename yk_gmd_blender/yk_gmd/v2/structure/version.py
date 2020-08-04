@@ -21,7 +21,7 @@ class VersionProperties:
     mesh_vertex_offset_used: bool
 
     def combined_version(self):
-        return ((self.version_tuple[0] & 0xFFFF) << 16) | (self.version_tuple[1] & 0xFFFF)
+        return combine_versions(self.version_tuple[0], self.version_tuple[1])
 
     @property
     def version_str(self):
@@ -29,6 +29,9 @@ class VersionProperties:
 
 def get_major_minor_version(version_combined: int) -> Tuple[int, int]:
     return (version_combined >> 16) & 0xFFFF, (version_combined >> 0) & 0xFFFF
+
+def combine_versions(major_version: int, minor_version: int):
+    return ((major_version & 0xFFFF) << 16) | (minor_version & 0xFFFF)
 
 def get_version_properties(version_major: int, version_minor: int) -> VersionProperties:
     if version_major == 1:

@@ -5,6 +5,7 @@ from typing import Tuple
 from yk_gmd_blender.structurelib.base import *
 from yk_gmd_blender.structurelib.primitives import *
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, \
     get_combined_version_properties, VersionProperties
 
@@ -23,6 +24,7 @@ def extract_base_header(data: bytes) -> Tuple['GMDHeaderStruct', bool]:
 
     return base_header, big_endian
 
+
 @dataclass(frozen=True)
 class GMDHeaderStruct:
     magic: str
@@ -35,6 +37,12 @@ class GMDHeaderStruct:
     name: ChecksumStrStruct
 
     padding: int
+
+    def file_is_big_endian(self):
+        return check_is_file_big_endian(self.file_endian_check)
+
+    def vertices_are_big_endian(self):
+        return check_are_vertices_big_endian(self.vertex_endian_check)
 
     @property
     def version_major(self) -> int:

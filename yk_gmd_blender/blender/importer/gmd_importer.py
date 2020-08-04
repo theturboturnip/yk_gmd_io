@@ -112,12 +112,15 @@ class ImportGMD(Operator, ImportHelper):
             gmd_collection = scene_creator.make_collection(context)
 
             if self.import_hierarchy:
+                self.report({"INFO"}, "Importing bone hierarchy...")
                 gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
 
             if self.import_objects:
+                self.report({"INFO"}, "Importing objects...")
                 scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None,
                                            use_materials=self.import_materials, fuse_vertices=self.fuse_object_meshes)#self.import_materials)
 
+            self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
             return {'FINISHED'}
         except GMDImportExportError as e:
             print(e)
@@ -259,6 +262,8 @@ class GMDSceneCreator:
                 countable_children_gmd_positions = [child.pos.xyz for child in gmd_node.children if not twist_regex.search(child.name)]
 
                 if countable_children_gmd_positions:
+                    # TODO - if children all start at the same place we do, tail_delta = (0,0,0) and bone disappears
+                    #  Do the perpendicular thing for this case too? Requires refactor
                     tail_delta = sum(countable_children_gmd_positions, Vector((0,0,0))) / len(countable_children_gmd_positions)
                 else:
                     # Extend the tail in the direction of the parent

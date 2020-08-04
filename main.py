@@ -265,7 +265,7 @@ if __name__ == '__main__':
     #     for mesh in skinned_obj.mesh_list:
     #         mesh.attribute_set.texture_diffuse = "dummy_white"
 
-    new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene)
+    new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
     new_file_bytearray = bytearray()
     FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
 

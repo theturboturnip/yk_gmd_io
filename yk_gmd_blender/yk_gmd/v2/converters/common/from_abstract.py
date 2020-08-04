@@ -12,6 +12,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStackOp
 
@@ -117,7 +118,7 @@ def generate_vertex_layout_packing_flags(layout: GMDVertexBufferLayout) -> int:
     #     vertex_packing_flags |= (1 << 3)
 
 
-def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
+def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> RearrangedData:
     # Note - flags
     # many bones flag is important, but so are the others - look into which ones are supposed to be there
     # is relative-indexing set in a flag?
@@ -247,13 +248,13 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     for object_idx, object in enumerate(ordered_objects):
         for mesh in object.mesh_list:
             if id(mesh) in mesh_id_to_object_index:
-                raise Exception(
+                error.fatal(
                     f"Mesh is mapped to two objects {object.name} and {ordered_objects[mesh_id_to_object_index[id(mesh)]].name}")
             mesh_id_to_object_index[id(mesh)] = object_idx
 
             if isinstance(object, GMDSkinnedObject):
                 if not isinstance(mesh, GMDSkinnedMesh):
-                    raise Exception(f"SkinnedObject {object.name} has unskinned mesh")
+                    error.fatal(f"SkinnedObject {object.name} has unskinned mesh")
                 matrixlist = tuple([node_id_to_matrix_index[id(bone)] for bone in mesh.relevant_bones])
                 mesh_id_to_matrixlist[id(mesh)] = matrixlist
                 mesh_matrixlist_set.add(matrixlist)
@@ -266,7 +267,7 @@ def arrange_data_for_export(scene: GMDScene) -> RearrangedData:
     # }
 
     if set(mesh_id_to_index.keys()) != set(mesh_id_to_object_index.keys()):
-        raise Exception("Somehow the mapping of mesh -> mesh index maps different meshes than the mesh -> object index")
+        error.fatal("Somehow the mapping of mesh -> mesh index maps different meshes than the mesh -> object index")
 
     # Order the attribute sets
     attribute_set_id_to_mesh_index_range = {}
