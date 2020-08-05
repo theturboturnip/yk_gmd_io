@@ -92,6 +92,7 @@ def create_single_color_texture(name: str, filepath: str, color: Tuple[float, fl
     :param color: The color to fill the image with.
     :return: A 128x128 Image of the given color, with the given filepath and name.
     """
+    # TODO - make blender not try and save this new image when you exit
     image = bpy.data.images.new(name, 128, 128, alpha=True)
     image.filepath = filepath
     image.pixels[:] = color * 128 * 128

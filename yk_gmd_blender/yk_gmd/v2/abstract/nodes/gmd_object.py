@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from mathutils import Vector, Quaternion, Matrix
 
@@ -13,7 +13,7 @@ class GMDUnskinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
-                 parent: GMDNode,
+                 parent: Optional[GMDNode],
                  matrix: Matrix):
         super().__init__(name, node_type, pos, rot, scale, matrix, parent)
         self.mesh_list = []
@@ -38,7 +38,7 @@ class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDSkinnedMesh]
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
-                 parent: GMDNode):
+                 parent: Optional[GMDNode]):
         super().__init__(name, node_type, pos, rot, scale, matrix=None, parent=parent)
         self.mesh_list = []
 

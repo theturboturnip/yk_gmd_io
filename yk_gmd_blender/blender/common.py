@@ -1,23 +1,22 @@
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Union
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial
-from yk_gmd_blender.yk_gmd.legacy.abstract.vector import Vec3, Vec4
-from yk_gmd_blender.yk_gmd.legacy.abstract.scene import GMDScene
 
 
-def yk_to_blender_space(vec: Vec3):
-    return (vec.x, vec.z, vec.y)
+# def yk_to_blender_space(vec: Vec3):
+#     return (vec.x, vec.z, vec.y)
+#
+#
+# def blender_to_yk_space(vec: Vector):
+#     return Vec3(vec[0], vec[2], vec[1])
+#
+# def blender_to_yk_space_vec4(vec: Vector, w: float):
+#     return Vec4(vec[0], vec[2], vec[1], w)
+#
+# def blender_to_yk_color(vec: Vector):
+#     return Vec4(vec[0], vec[1], vec[2], vec[3])
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 
-
-def blender_to_yk_space(vec: Vector):
-    return Vec3(vec[0], vec[2], vec[1])
-
-def blender_to_yk_space_vec4(vec: Vector, w: float):
-    return Vec4(vec[0], vec[2], vec[1], w)
-
-def blender_to_yk_color(vec: Vector):
-    return Vec4(vec[0], vec[1], vec[2], vec[3])
 
 def uv_yk_to_blender_space(uv: Tuple[float, float]):
     return (uv[0], 1 - uv[1])
@@ -36,11 +35,14 @@ def uv_blender_to_yk_space(uv: Tuple[float, float]):
 def root_name_for_gmd_file(gmd_file: GMDScene):
     return f"{gmd_file.name}"
 
-def armature_name_for_gmd_file(gmd_file: GMDScene):
-    return f"{gmd_file.name}_armature"
-
-def material_name(material: GMDMaterial):
-    return f"yakuza{material.id:02d}_{material.shader_name}"
+def armature_name_for_gmd_file(gmd_file: Union[GMDScene, str]):
+    if isinstance(gmd_file, GMDScene):
+        return f"{gmd_file.name}_armature"
+    else:
+        return f"{gmd_file}_armature"
+#
+# def material_name(material: GMDMaterial):
+#     return f"yakuza{material.id:02d}_{material.shader_name}"
 
 def arithmetic_mean(items: Iterable, sum_start=0):
     count = 0

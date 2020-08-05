@@ -23,6 +23,7 @@ def depth_first_iterate(roots: List[TNode]) -> Generator[TNode, None, None]:
 
 class HierarchyData(Generic[TNode]):
     roots: List[TNode]
+    # TODO: This doesn't work! Do one just for bones, those are guaranteed(?) to not have duplicates
     elem_from_name: Dict[str, TNode]
 
     def __init__(self, roots: List[TNode]):

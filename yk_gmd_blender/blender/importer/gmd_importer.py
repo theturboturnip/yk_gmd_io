@@ -174,9 +174,6 @@ class GMDSceneCreator:
         :param collection: The collection the import process is adding objects and meshes to.
         :return: An object with an armature representing all of the GMDBones in the imported scene hierarchy.
         """
-        # Make a copy of the context so that we don't have to reset any state after using it.
-        context = context.copy()
-
         armature_name = armature_name_for_gmd_file(self.gmd_scene)
         armature = bpy.data.armatures.new(f"{armature_name}")
         armature.display_type = 'STICK'
@@ -193,6 +190,36 @@ class GMDSceneCreator:
         twist_regex = re.compile(r'[-_](twist|adj|sup)\d*([-_\s]|$)')
 
         self.bone_world_yakuza_space_matrices: Dict[str, Matrix] = {}
+
+        def generate_perpendicular_bone_direction(this_bone_matrix: Matrix, parent_dir: Vector):
+            # Pick a vector that's sort of in the same direction we want the bone to point in
+            # (i.e. we don't want the bone to go in/out, so don't pick (0, 0, 1))
+            target_dir = Vector((0, 1, 0))
+            if abs(parent_dir.dot(target_dir)) > 0.99:
+                # Parent and proposed perpendicular direction are basically the same axis, cross product won't work
+                # Choose a different one
+                target_dir = Vector((1, 0, 0))
+
+            # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
+            perp_dir = parent_dir.cross(target_dir).normalized()
+            print(f"{parent_dir} X {target_dir} = {perp_dir}")
+
+            # Then, parent_dir cross perp_dir will create a vector that is both
+            #   1) perpendicular to parent_dir
+            #   2) in the same sort of direction as target_dir
+            # use this vector as our tail_delta
+            tail_delta_dir = parent_dir.cross(perp_dir).normalized()
+            print(f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
+
+            # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
+            # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
+            # This will choose consistent directions regardless of which side of the vertical axis you are on
+            distance_from_origin_with_positive = (this_bone_matrix @ (tail_delta_dir * 0.1)).length
+            distance_from_origin_with_negative = (this_bone_matrix @ (-tail_delta_dir * 0.1)).length
+            if distance_from_origin_with_negative > distance_from_origin_with_positive:
+                tail_delta_dir = -tail_delta_dir
+
+            return tail_delta_dir
 
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
@@ -214,6 +241,7 @@ class GMDSceneCreator:
             if not gmd_node.parent:
                 tail_delta = Vector((0, 0, 0.5))
             elif twist_regex.search(gmd_node.name) and not gmd_node.children:
+                print(f"Twisting {gmd_node.name}")
                 # We have a parent, and we're a twist bone
                 # "Twist Bones" allow things like shoulders to be twisted when the arm is bent.
                 # They are separate from the main arm bone, and shouldn't really extend in the same direction
@@ -225,37 +253,16 @@ class GMDSceneCreator:
                     # If we're trying to be different from our sibling, we pick a direction that is perpendicular to the direction we would normally pick
                     # i.e. a vector perpendicular to the "parent direction"
                     parent_dir = gmd_node.pos.xyz.normalized() # gmd_node.pos is relative to the parent already
-
-                    # Pick a vector that's sort of in the same direction we want the bone to point in
-                    # (i.e. we don't want the bone to go in/out, so don't pick (0, 0, 1))
-                    target_dir = Vector((0, 1, 0))
-                    if parent_dir.dot(target_dir) > 0.99:
-                        # Parent and proposed perpendicular direction are basically the same, cross product won't work
-                        # Choose a different one
-                        target_dir = Vector((0, 0, 1))
-
-                    # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
-                    perp_dir = parent_dir.cross(target_dir).normalized()
-
-                    # Then, parent_dir cross perp_dir will create a vector that is both
-                    #   1) perpendicular to parent_dir
-                    #   2) in the same sort of direction as target_dir
-                    # use this vector as our tail_delta
-                    tail_delta_dir = parent_dir.cross(perp_dir).normalized()
-
-                    # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
-                    # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
-                    # This will choose consistent directions regardless of which side of the vertical axis you are on
-                    distance_from_origin_with_positive = (this_bone_matrix @ (tail_delta_dir * 0.1)).length
-                    distance_from_origin_with_negative = (this_bone_matrix @ (-tail_delta_dir * 0.1)).length
-                    if distance_from_origin_with_negative > distance_from_origin_with_positive:
-                        tail_delta_dir = -tail_delta_dir
-
+                    tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
                     # Extend the tail in the direction of the delta
+                    print(f"Extending in the direction {tail_delta_dir}")
                     tail_delta = (tail_delta_dir.xyz * 0.1)
                 else:
                     # There aren't any bones we have to differentiate ourselves from -> just follow the parent delta, like the default for having no children
-                    tail_delta = gmd_node.pos.xyz.normalized() * 0.05
+                    if gmd_node.pos.xyz.length < 0.00001:
+                        tail_delta = Vector((0, 0, 0.05))
+                    else:
+                        tail_delta = gmd_node.pos.xyz.normalized() * 0.05
             else:
                 # This either isn't a twist bone or it has children - most likely this just isn't a twist bone, as twist bones generally don't have children anyway
                 # If there are non-twist children, set the tail to the average of their positions
@@ -265,6 +272,11 @@ class GMDSceneCreator:
                     # TODO - if children all start at the same place we do, tail_delta = (0,0,0) and bone disappears
                     #  Do the perpendicular thing for this case too? Requires refactor
                     tail_delta = sum(countable_children_gmd_positions, Vector((0,0,0))) / len(countable_children_gmd_positions)
+
+                    if tail_delta.length < 0.001:
+                        parent_dir = gmd_node.pos.xyz.normalized()  # gmd_node.pos is relative to the parent already
+                        tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
+                        tail_delta = (tail_delta_dir.xyz * 0.1)
                 else:
                     # Extend the tail in the direction of the parent
                     # gmd_node.pos.xyz is relative to the parent already
@@ -278,10 +290,12 @@ class GMDSceneCreator:
             bone.use_deform = True
             bone.head = self.gmd_to_blender_world @ this_bone_matrix @ Vector((0,0,0))
             bone.tail = self.gmd_to_blender_world @ this_bone_matrix @ tail_delta
+            if tail_delta.length < 0.00001:
+                self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.0001:
+                if (bone.head - bone.parent.tail).length < 0.00001:
                     bone.use_connect = True
                 else:
                     bone.use_connect = False
