@@ -14,6 +14,7 @@ from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData, depth_first_iterate
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer
@@ -116,6 +117,7 @@ class GMDSceneGatherer:
     bone_name_map: Dict[str, GMDNode]
     error: ErrorReporter
     try_copy_bones: bool
+    material_map: Dict[str, GMDAttributeSet]
 
     blender_to_gmd_space_matrix: Matrix
 
@@ -475,6 +477,12 @@ class GMDSceneGatherer:
         direct_children = [o for o in collection.objects if o.parent == object]
         for child_object in direct_children:
             self.export_unskinned_object(collection, child_object, gmd_object)
+
+    def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material) -> GMDAttributeSet:
+        if material.name in self.material_map:
+            return self.material_map[material.name]
+
+        raise NotImplementedError()
 
 
 def menu_func_export(self, context):

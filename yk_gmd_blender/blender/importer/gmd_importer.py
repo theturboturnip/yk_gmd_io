@@ -498,7 +498,7 @@ class GMDSceneCreator:
 
         # Color0
         if vtx_buffer.col0:
-            col0_layer = bm.loops.layers.color.new("color0")
+            col0_layer = bm.loops.layers.color.new("Color0")
             for face in bm.faces:
                 for loop in face.loops:
                     color = vtx_buffer.col0[loop.vert.index]
@@ -506,22 +506,29 @@ class GMDSceneCreator:
 
         # Color1
         if vtx_buffer.col1:
-            col1_layer = bm.loops.layers.color.new("color1")
+            col1_layer = bm.loops.layers.color.new("Color1")
             for face in bm.faces:
                 for loop in face.loops:
                     color = vtx_buffer.col1[loop.vert.index]
                     loop[col1_layer] = (color.x, color.y, color.z, color.w)
 
         # UVs
+        # Yakuza has 3D/4D UV coordinates. Blender doesn't support this in the UV channel.
+        # The solution is to have a deterministic "primary UV" designation that can only be 2D
+        # This is the only UV loaded into the actual UV layer, the rest are all loaded into the vertex colors with special names.
+        primary_uv_i = gmd_mesh.vertices_data.layout.get_primary_uv_index()
         for i, uv in enumerate(vtx_buffer.uvs):
-            uv_layer = bm.loops.layers.uv.new(f"TexCoords{i}")
-            for face in bm.faces:
-                for loop in face.loops:
-                    original_uv = uv[loop.vert.index]
-                    # TODO - fuuuuck. blender doesn't accept 3D/4D UVs. How the hell are we supposed to handle them?
-                    #  thought - have a deterministic "primary UV" designation that can only be 2D
-                    #  This is the only UV loaded into the actual UV layer, the rest are all loaded into custom properties
-                    loop[uv_layer].uv = (original_uv.x, 1.0 - original_uv.y)
+            if i == primary_uv_i:
+                uv_layer = bm.loops.layers.uv.new(f"UV_Primary")
+                for face in bm.faces:
+                    for loop in face.loops:
+                        original_uv = uv[loop.vert.index]
+                        loop[uv_layer].uv = (original_uv.x, 1.0 - original_uv.y)
+            else:
+                uv_layer = bm.loops.layers.color.new(f"UV{i}")
+                for face in bm.faces:
+                    for loop in face.loops:
+                        loop[uv_layer].uv = uv[loop.vert.index]
 
         # Removed unused verts
         # Typically the mesh passed into this function comes from make_merged_gmd_mesh, which "fuses" vertices by changing the index buffer

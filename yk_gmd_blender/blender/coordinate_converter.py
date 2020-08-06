@@ -3,6 +3,8 @@ from typing import Tuple
 from mathutils import Vector, Quaternion, Matrix
 
 
+
+
 def transform_gmd_to_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[Vector, Quaternion, Vector]:
     pos = Vector((-pos.x, pos.z, pos.y))
     rot = Quaternion((rot.w, -rot.x, rot.z, rot.y))
