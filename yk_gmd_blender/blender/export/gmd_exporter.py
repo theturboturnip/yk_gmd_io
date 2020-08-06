@@ -11,6 +11,7 @@ from bpy.types import Operator, ChildOfConstraint, ShaderNodeGroup, ShaderNodeTe
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Vector, Quaternion
 
+from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
@@ -322,7 +323,7 @@ class GMDSceneGatherer:
             self.export_skinned_object(skinned_object)
 
         for parent, unskinned_object in unskinned_object_roots:
-            self.export_unskinned_object(selected_collection, unskinned_object, parent)
+            self.export_unskinned_object(context, selected_collection, unskinned_object, parent)
 
         print(f"NODE REPORT")
         for node in depth_first_iterate(self.node_roots):
@@ -443,7 +444,7 @@ class GMDSceneGatherer:
         # TODO - make sure to apply the object matrix to the mesh vertices - Yakuza expects skinned meshes to be at the identity
 
 
-    def export_unskinned_object(self, collection: bpy.types.Collection, object: bpy.types.Object, parent: Optional[GMDNode]):
+    def export_unskinned_object(self, context: bpy.types.Context, collection: bpy.types.Collection, object: bpy.types.Object, parent: Optional[GMDNode]):
         """
         Export a Blender object into a GMDUnskinnedObject
         :param object: TODO
@@ -481,12 +482,14 @@ class GMDSceneGatherer:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
             attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
-
+            gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
+            for gmd_mesh in gmd_meshes:
+                gmd_object.add_mesh(gmd_mesh)
 
         # Object.children returns all children, not just direct descendants.
         direct_children = [o for o in collection.objects if o.parent == object]
         for child_object in direct_children:
-            self.export_unskinned_object(collection, child_object, gmd_object)
+            self.export_unskinned_object(context, collection, child_object, gmd_object)
 
     def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material, referencing_object: bpy.types.Object) -> GMDAttributeSet:
         if material.name in self.material_map:

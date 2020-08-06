@@ -2,7 +2,7 @@ import array
 import collections
 import re
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, overload, Union, cast
+from typing import List, Tuple, Dict, Callable, Set, overload, Union, cast, Optional
 
 import bmesh
 import bpy
@@ -10,7 +10,7 @@ from bmesh.types import BMLayerItem, BMVert, BMLoop
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
@@ -313,7 +313,7 @@ class VertexFetcher:
             if self.primary_uv_i == i:
                 self.uv_layers.append((2, uv_primary))
             elif i in uv_numbered:
-                layer = numbered_uv[i]
+                layer = uv_numbered[i]
                 self.uv_layers.append((VecStorage.component_count(storage), layer))
             else:
                 error.recoverable(f"VertexFetcher didn't have a UV for layer {i}, values will be all-0")
@@ -327,12 +327,12 @@ class VertexFetcher:
 
         b_vert = self.bm_vertices[i]
 
-        vertex_buffer.pos.append(self.transformation_position @ b_vert.co)
+        vertex_buffer.pos.append((self.transformation_position @ b_vert.co).resized(4))
         if vertex_buffer.normal is not None:
             vertex_buffer.normal.append(
-                self.transformation_direction @ (normal if normal is not None else b_vert.normal))
+                (self.transformation_direction @ (normal if normal is not None else b_vert.normal)).resized(4))
         if vertex_buffer.tangent is not None:
-            vertex_buffer.tangent.append(self.transformation_direction @ loop.calc_tangent())
+            vertex_buffer.tangent.append((self.transformation_direction @ loop.calc_tangent()).resized(4))
 
         if vertex_buffer.bone_weights is not None:
             if self.deform_layer:
@@ -367,15 +367,15 @@ class VertexFetcher:
                     BoneWeight(bone=0, weight=0),
                 ))
 
-        if vertex_buffer.col0:
+        if vertex_buffer.col0 is not None:
             if self.col0_layer:
-                vertex_buffer.col0.append(Vector(loop[col0_layer]))
+                vertex_buffer.col0.append(Vector(loop[self.col0_layer]))
             else:
                 vertex_buffer.col0.append(Vector((1, 1, 1, 1)))
 
-        if vertex_buffer.col1:
+        if vertex_buffer.col1 is not None:
             if self.col1_layer:
-                vertex_buffer.col1.append(Vector(loop[col1_layer]))
+                vertex_buffer.col1.append(Vector(loop[self.col1_layer]))
             else:
                 vertex_buffer.col1.append(Vector((1, 1, 1, 1)))
 
@@ -385,7 +385,7 @@ class VertexFetcher:
                     blender_uv = loop[layer].uv
                     value = Vector((blender_uv[0], 1 - blender_uv[1]))
                 else:
-                    value = Vector(loop[layer][:component_count])
+                    value = Vector(loop[layer].resized(component_count))
             else:
                 value = Vector([0] * component_count)
             vertex_buffer.uvs[i].append(value)
@@ -401,11 +401,12 @@ def split_mesh_by_material(name: str, bm: bmesh.types.BMesh, object_blender_tran
     uv_numbered_regex = re.compile(r'UV(\d+)')
 
     primary_uv_layer = bm.loops.layers.uv[uv_primary] if uv_primary in bm.loops.layers.uv else None
-    numbered_uv_layers: Dict[int, BMLayerItem] = {
-        int(uv_numbered_regex.match(layer.name).group(1)): layer
-        for layer in bm.loops.layers.color
-        if uv_numbered_regex.match(layer.name)
-    }
+    numbered_uv_layers: Dict[int, BMLayerItem] = {}
+    if bm.loops.layers.color:
+        for name, layer in bm.loops.layers.color.items():
+            match = uv_numbered_regex.match(name)
+            if match:
+                numbered_uv_layers[int(match.group(1))] = layer
 
     if skinned:
         deform_layer = bm.verts.layers.deform.active
@@ -445,6 +446,7 @@ def split_mesh_by_material(name: str, bm: bmesh.types.BMesh, object_blender_tran
                                        uv_primary=primary_uv_layer,
                                        uv_numbered=numbered_uv_layers,
                                        error=error)
+        vertex_fetchers.append(vertex_fetcher)
 
     for tri_loops in bm.calc_loop_triangles():
         l0 = tri_loops[0]
