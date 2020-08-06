@@ -150,6 +150,8 @@ class GMDSceneGatherer:
             return False
         return True
 
+    def remove_blender_duplicate(self, name:str) -> str:
+        return re.sub(r'\.\d\d\d', "", name)
 
     def gather_exported_items(self, context: bpy.types.Context, debug_compare_matrices: bool):
         # Decide on an export root
@@ -341,7 +343,7 @@ class GMDSceneGatherer:
             bone_matrix = transform_matrix_blender_to_gmd(blender_bone.matrix_local)
             gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(*blender_bone.matrix.decompose())
             bone = GMDBone(
-                name=blender_bone.name,
+                name=self.remove_blender_duplicate(blender_bone.name),
                 node_type=NodeType.MatrixTransform,
                 parent=parent_gmd_bone,
 
@@ -356,7 +358,7 @@ class GMDSceneGatherer:
 
             if not parent_gmd_bone:
                 self.node_roots.append(bone)
-            self.bone_name_map[blender_bone.name] = bone
+            self.bone_name_map[bone.name] = bone
 
             for child in blender_bone.children:
                 add_bone(child, bone)
@@ -389,7 +391,7 @@ class GMDSceneGatherer:
 
         def copy_bone(original_file_gmd_bone: GMDBone, new_gmd_parent: Optional[GMDBone] = None):
             bone = GMDBone(
-                name=original_file_gmd_bone.name,
+                name=self.remove_blender_duplicate(original_file_gmd_bone.name),
                 node_type=NodeType.MatrixTransform,
                 parent=new_gmd_parent,
 
@@ -422,7 +424,8 @@ class GMDSceneGatherer:
         """
 
         object = GMDSkinnedObject(
-            name=object.name, node_type=NodeType.SkinnedMesh,
+            name=self.remove_blender_duplicate(object.name),
+            node_type=NodeType.SkinnedMesh,
 
             pos=Vector((0,0,0)),
             rot=Quaternion(),
@@ -453,7 +456,8 @@ class GMDSceneGatherer:
         adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location, object.rotation_quaternion, object.scale)
 
         gmd_object = GMDUnskinnedObject(
-            name=object.name, node_type=NodeType.UnskinnedMesh,
+            name=self.remove_blender_duplicate(object.name),
+            node_type=NodeType.UnskinnedMesh,
 
             pos=adjusted_pos,
             rot=adjusted_rot,

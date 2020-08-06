@@ -67,7 +67,7 @@ class ValueAdaptor(Generic[TFrom, TTo], BaseUnpacker[TTo]):
     def validate_value(self, value: TTo):
         try:
             self.base_unpacker.validate_value(self.backwards(value))
-        except PackingValidationError as e:
+        except Exception as e:
             print(self.python_type, self.base_unpacker.python_type)
             raise PackingValidationError(f"{self.python_type.__name__} adaped to {self.base_unpacker.python_type.__name__}: {e}")
 
@@ -178,7 +178,7 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
             # Type checking for whether item is supported by elem_type is done in elem_type
             try:
                 elem_type.validate_value(item)
-            except PackingValidationError as e:
+            except Exception as e:
                 raise PackingValidationError(f"Element {i}: {e}")
         return True
 

@@ -17,11 +17,13 @@ class SubmeshBuilder:
     vertices: GMDVertexBuffer
     triangles: List[Tuple[int,int,int]]
     blender_vid_to_this_vid: Dict[int, int]
+    material_index: int
 
-    def __init__(self, layout: GMDVertexBufferLayout):
+    def __init__(self, layout: GMDVertexBufferLayout, material_index: int):
         self.vertices = GMDVertexBuffer.build_empty(layout, 0)
         self.triangles = []
         self.blender_vid_to_this_vid = {}
+        self.material_index = material_index
 
     # Adds the vertex if not already present
     # Used for smooth faces, where the vertex is reused in other faces as well

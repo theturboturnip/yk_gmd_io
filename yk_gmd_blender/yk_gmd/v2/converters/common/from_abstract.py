@@ -166,6 +166,9 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         elif want_push:
             stack_op = NodeStackOp.Push
 
+        if len(gmd_node.name.encode("shift-jis")) > 30:
+            error.fatal(f"Node {gmd_node.name} has a name that's longer than 30 bytes long. Please shorten it!")
+
         # emit (node, stackop)
         ordered_nodes.append((gmd_node, stack_op))
         node_id_to_node_index[id(gmd_node)] = i
@@ -174,6 +177,12 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
             node_id_to_object_index[id(gmd_node)] = len(ordered_objects)
             ordered_objects.append(gmd_node)
+
+        if isinstance(gmd_node, GMDSkinnedObject) and not gmd_node.mesh_list:
+            error.fatal(f"Skinned Object {gmd_node.name} has no meshes, cannot export")
+
+        if isinstance(gmd_node, GMDUnskinnedObject) and not gmd_node.children and not gmd_node.mesh_list:
+            error.recoverable(f"Unskinned object {gmd_node.name} has no meshes and no children, expected a child or mesh to be present.")
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -196,6 +205,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         for obj in ordered_objects
         for mesh in obj.mesh_list
     ]
+
     for mesh in meshes:
         shader_names.add(mesh.attribute_set.shader.name)
 
@@ -283,7 +293,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             attribute_set_id_to_mesh_index_range[id(curr_attribute_set)] = (attr_index_start, attr_index_end)
             attr_index_start = i
             ordered_attribute_sets.append(m.attribute_set)
-    attribute_set_id_to_mesh_index_range[id(ordered_attribute_sets[-1])] = (attr_index_start, len(ordered_meshes))
+    if ordered_attribute_sets:
+        attribute_set_id_to_mesh_index_range[id(ordered_attribute_sets[-1])] = (attr_index_start, len(ordered_meshes))
 
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)

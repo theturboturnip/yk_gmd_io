@@ -89,6 +89,9 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
     return bounds_from_minmax(min_pos, max_pos)
 
 
+def vec3_to_vec4(vec: Vector, w: float = 0):
+    return Vector((vec.x, vec.y, vec.z, w))
+
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
                                scene: GMDScene, error: ErrorReporter) -> FileData_YK1:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
@@ -123,8 +126,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             bone_pos = gmd_node.bone_pos
             bone_axis = gmd_node.bone_axis
         else:
-            bone_pos = gmd_node.pos
-            bone_pos.w = 1
+            bone_pos = Vector((gmd_node.pos.x, gmd_node.pos.y, gmd_node.pos.z, 1))
             bone_axis = Quaternion((0, 0, 0, 0))
             pass
 
@@ -138,11 +140,11 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             name_index=rearranged_data.node_names_index[gmd_node.name],
             node_type=gmd_node.node_type,
 
-            pos=gmd_node.pos,
+            pos=vec3_to_vec4(gmd_node.pos),
             rot=gmd_node.rot,
-            scale=gmd_node.scale,
+            scale=vec3_to_vec4(gmd_node.scale),
 
-            bone_pos=bone_pos,
+            bone_pos=vec3_to_vec4(bone_pos, 1),
             bone_axis=bone_axis,
             # TODO: GMD Node Flags
             flags=[0, 0, 0, 0],
