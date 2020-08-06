@@ -12,6 +12,7 @@ from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Vector, Quaternion
 
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
+from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData, depth_first_iterate
@@ -40,9 +41,15 @@ class ExportGMD(Operator, ExportHelper):
     strict: BoolProperty(name="Strict File Export",
                          description="If True, will fail the export even on recoverable errors.",
                          default=True)
-    validate_hierarchy: BoolProperty(name="Validate Hierarchy",
-                                     description="If True, will check the bone hierarchy in the original file against the one you're trying to export.",
+    copy_bones_from_file: BoolProperty(name="Copy Bones from Original File",
+                                     description="If True, will reuse the bone hierarchy in the original file.\n"
+                                                 "If False, will export the bones from scratch.\n"
+                                                 "WARNING: This is experimental - don't set it to False unless you know what you're doing.",
                                      default=True)
+    debug_compare_matrices: BoolProperty(name="[DEBUG] Compare Matrices",
+                                         description="If True, will print out a comparison of the scene matrices (for bones and unskinned objects)\n"
+                                         "between the original file and the new file.",
+                                         default=False)
     # TODO - dry run feature
     #  when set, instead of exporting it will open a window with a report on what would be exported
 
@@ -54,7 +61,8 @@ class ExportGMD(Operator, ExportHelper):
 
         # When properties are added, use "layout.prop" here to display them
         layout.prop(self, 'strict')
-        layout.prop(self, 'validate_hierarchy')
+        layout.prop(self, 'copy_bones_from_file')
+        layout.prop(self, 'debug_compare_matrices')
 
     def execute(self, context):
         base_error_reporter = StrictErrorReporter() if self.strict else LenientErrorReporter()
@@ -68,20 +76,20 @@ class ExportGMD(Operator, ExportHelper):
                 name=file_data.name.text,
                 overall_hierarchy=HierarchyData([])
             )
-            try_validate_hierarchy = self.validate_hierarchy
-            if self.validate_hierarchy:
+            try_copy_bones = self.copy_bones_from_file
+            if self.copy_bones_from_file or self.debug_compare_matrices:
                 try:
                     original_scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
                 except Exception as e:
                     # TODO - error reporter.info
                     print(e)
                     self.report({"ERROR"}, f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
-                    try_validate_hierarchy = False
+                    try_copy_bones = False
 
-            scene_gatherer = GMDSceneGatherer(original_scene, try_validate_hierarchy, error_reporter)
+            scene_gatherer = GMDSceneGatherer(original_scene, try_copy_bones, error_reporter)
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
             # TODO - pull GMDScene out of blender
-            scene_gatherer.gather_exported_items(context)
+            scene_gatherer.gather_exported_items(context, self.debug_compare_matrices)
             self.report({"INFO"}, "Finished extracting abstract scene")
 
             gmd_scene = scene_gatherer.build()
@@ -107,17 +115,17 @@ class GMDSceneGatherer:
     node_roots: List[GMDNode]
     bone_name_map: Dict[str, GMDNode]
     error: ErrorReporter
-    try_validate_hierarchy: bool
+    try_copy_bones: bool
 
     blender_to_gmd_space_matrix: Matrix
 
-    def __init__(self, original_scene: GMDScene, try_validate_hierarchy: bool, error: ErrorReporter):
+    def __init__(self, original_scene: GMDScene, try_copy_bones: bool, error: ErrorReporter):
         self.name = original_scene.name
         self.original_scene = original_scene
         self.node_roots = []
         self.bone_name_map = {}
         self.error = error
-        self.try_validate_hierarchy = try_validate_hierarchy
+        self.try_copy_bones = try_copy_bones
         self.blender_to_gmd_space_matrix = Matrix((
             Vector((-1, 0, 0, 0)),
             Vector((0, 0, 1, 0)),
@@ -143,7 +151,7 @@ class GMDSceneGatherer:
         return True
 
 
-    def gather_exported_items(self, context: bpy.types.Context):
+    def gather_exported_items(self, context: bpy.types.Context, debug_compare_matrices: bool):
         # Decide on an export root
             # Require a collection to be selected I guess?
             # Issue a warning if the name is different?
@@ -207,58 +215,10 @@ class GMDSceneGatherer:
         if old_pose_position != "REST":
             armature_data.pose_position = "REST"
 
-        def add_bone(blender_bone: bpy.types.Bone, parent_gmd_bone: Optional[GMDBone] = None):
-            gmd_pos = self.blender_to_gmd_space_matrix @ blender_bone.head.xyz
-            bone = GMDBone(
-                name=blender_bone.name,
-                node_type=NodeType.MatrixTransform,
-                parent=parent_gmd_bone,
-
-                pos=gmd_pos,
-                rot=Quaternion(), # TODO - Is there a better way to handle this? Does the game react to this at all?
-                scale=Vector((1,1,1)),
-
-                bone_pos=Vector((gmd_pos.x, gmd_pos.y, gmd_pos.z, 1)),
-                bone_axis=Quaternion((self.blender_to_gmd_space_matrix @ (blender_bone.tail - blender_bone.head).xyz).xyz.normalized(), 0),
-
-                # TODO: This might negate X scale, is that bad?
-                # TODO: This needs to just be (Translation(gmd_pos) * Rotation(gmd_rot) * Scale(gmd_scale)).inverted()
-                # matrix_local is relative to the armature - because the armature is the
-                matrix=(self.blender_to_gmd_space_matrix @ blender_bone.matrix_local).inverted()
-            )
-
-            if not parent_gmd_bone:
-                self.node_roots.append(bone)
-            self.bone_name_map[blender_bone.name] = bone
-
-            if self.try_validate_hierarchy and bone.name in self.original_scene.overall_hierarchy.elem_from_name:
-                # Optional check against original setup
-                # Just like before - see if the children names are the same
-                # Do a recoverable_error? or a fail? maybe fail only if it's enabled
-                blender_children = {x.name for x in blender_bone.children}
-                old_gmd_children = {x.name for x in self.original_scene.overall_hierarchy.elem_from_name[bone.name].children if x.node_type == NodeType.MatrixTransform}
-                if blender_children != old_gmd_children:
-                    missing_names = old_gmd_children - blender_children
-                    unexpected_names = blender_children - old_gmd_children
-                    self.error.recoverable(
-                        f"Bones under {bone.name} didn't match between the file and the Blender object. Missing {missing_names}, and found unexpected names {unexpected_names}")
-
-            for child in blender_bone.children:
-                add_bone(child, bone)
-
-        # Build a GMDNode structure for the armature only (objects will be added to this later)
-        for root_bone in armature_data.bones:
-            if root_bone.parent:
-                continue
-            add_bone(root_bone, None)
-        if self.try_validate_hierarchy:
-            blender_roots = {x.name for x in self.node_roots}
-            old_gmd_roots = {x.name for x in self.original_scene.overall_hierarchy.roots if x.node_type == NodeType.MatrixTransform}
-            if blender_roots != old_gmd_roots:
-                missing_names = old_gmd_roots - blender_roots
-                unexpected_names = blender_roots - old_gmd_roots
-                self.error.recoverable(
-                    f"Root bones didn't match between the file and the Blender object. Missing {missing_names}, and found unexpected names {unexpected_names}")
+        if self.try_copy_bones:
+            self.copy_bones_from_original(armature_data)
+        else:
+            self.load_bones_from_blender(armature_data)
 
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
@@ -307,7 +267,7 @@ class GMDSceneGatherer:
                 child_of_constraint = cast(ChildOfConstraint, child_of_constraints[0])
                 if child_of_constraint.target != selected_armature:
                     self.error.fatal(f"Mesh {object.name} is a Child Of a different skeleton! Change this in the Object Constraints tab.")
-                if child_of_constraint.subtarget not in armature_data.bones:
+                if child_of_constraint.subtarget not in self.bone_name_map:
                     self.error.fatal(f"Mesh {object.name} is a Child Of the bone '{child_of_constraint.subtarget}' that doesn't exist in the skeleton!")
 
                 # Object is a Child-Of an existing bone
@@ -355,13 +315,13 @@ class GMDSceneGatherer:
             self.export_skinned_object(skinned_object)
 
         for parent, unskinned_object in unskinned_object_roots:
-            self.export_unskinned_object(unskinned_object, parent)
+            self.export_unskinned_object(selected_collection, unskinned_object, parent)
 
         print(f"NODE REPORT")
         for node in depth_first_iterate(self.node_roots):
             print(f"{node.name} - {node.node_type}")
 
-        if self.try_validate_hierarchy:
+        if debug_compare_matrices:
             print(f"MATRIX COMPARISONS")
             for node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
@@ -374,6 +334,86 @@ class GMDSceneGatherer:
 
         pass
 
+    def load_bones_from_blender(self, armature_data: bpy.types.Armature):
+        def add_bone(blender_bone: bpy.types.Bone, parent_gmd_bone: Optional[GMDBone] = None):
+            # Generating bone matrices is more difficult, because when we set the head/tail in the import process the blender matrix changes from the GMD version
+            # matrix_local is relative to the armature, not the parent
+            bone_matrix = transform_matrix_blender_to_gmd(blender_bone.matrix_local)
+            gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(*blender_bone.matrix.decompose())
+            bone = GMDBone(
+                name=blender_bone.name,
+                node_type=NodeType.MatrixTransform,
+                parent=parent_gmd_bone,
+
+                pos=gmd_bone_pos,
+                rot=Quaternion(), # TODO - Is there a better way to handle this? Does the game react to this at all?
+                scale=Vector((1,1,1)),
+
+                bone_pos=Vector((gmd_bone_pos.x, gmd_bone_pos.y, gmd_bone_pos.z, 1)),
+                bone_axis=gmd_bone_axis, # TODO - Kiwmai1 format might be using this for flags? in which case including it could crash
+                matrix=bone_matrix.inverted()
+            )
+
+            if not parent_gmd_bone:
+                self.node_roots.append(bone)
+            self.bone_name_map[blender_bone.name] = bone
+
+            for child in blender_bone.children:
+                add_bone(child, bone)
+
+        # Build a GMDNode structure for the armature only (objects will be added to this later)
+        for root_bone in armature_data.bones:
+            if root_bone.parent:
+                continue
+            add_bone(root_bone, None)
+
+    def copy_bones_from_original(self, armature_data: bpy.types.Armature):
+        original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
+
+        def check_bone_sets_match(parent_name: str, blender_bones: List[bpy.types.Bone], gmd_bones: List[GMDBone]):
+            blender_bone_dict = {x.name:x for x in blender_bones}
+            gmd_bone_dict = {x.name:x for x in gmd_bones}
+            if blender_bone_dict.keys() != gmd_bone_dict.keys():
+                blender_bone_names = set(blender_bone_dict.keys())
+                gmd_bone_names = set(gmd_bone_dict.keys())
+                missing_names = gmd_bone_names - blender_bone_names
+                unexpected_names = blender_bone_names - gmd_bone_names
+                self.error.fatal(f"Bones under {parent_name} didn't match between the file and the Blender object. Missing {missing_names}, and found unexpected names {unexpected_names}")
+            for (name, gmd_bone) in gmd_bone_dict.items():
+                blender_bone = blender_bone_dict[name]
+                check_bone_sets_match(name, blender_bone.children, [b for b in gmd_bone.children if isinstance(b, GMDBone)])
+
+        check_bone_sets_match("root",
+                              [b for b in armature_data.bones if not b.parent],
+                              original_root_bones)
+
+        def copy_bone(original_file_gmd_bone: GMDBone, new_gmd_parent: Optional[GMDBone] = None):
+            bone = GMDBone(
+                name=original_file_gmd_bone.name,
+                node_type=NodeType.MatrixTransform,
+                parent=new_gmd_parent,
+
+                pos=original_file_gmd_bone.pos,
+                rot=original_file_gmd_bone.rot,
+                scale=original_file_gmd_bone.scale,
+
+                bone_pos=original_file_gmd_bone.bone_pos,
+                bone_axis=original_file_gmd_bone.bone_axis,
+
+                matrix=original_file_gmd_bone.matrix
+            )
+            if not new_gmd_parent:
+                self.node_roots.append(bone)
+            self.bone_name_map[bone.name] = bone
+
+            for child in original_file_gmd_bone.children:
+                if not isinstance(child, GMDBone):
+                    continue
+                copy_bone(child, bone)
+
+        for root_bone in original_root_bones:
+            copy_bone(root_bone, None)
+
     def export_skinned_object(self, object: bpy.types.Object):
         """
         Export a Blender object into a GMDSkinnedObject
@@ -381,43 +421,56 @@ class GMDSceneGatherer:
         :return: TODO
         """
 
-        adjusted_rot = object.rotation_quaternion.rotate(self.blender_to_gmd_space_matrix)
         object = GMDSkinnedObject(
             name=object.name, node_type=NodeType.SkinnedMesh,
 
-            pos=self.blender_to_gmd_space_matrix @ object.location.xyz,
-            rot=adjusted_rot,
-            scale=object.scale.xzy, # TODO - better method of doing scaling
+            pos=Vector((0,0,0)),
+            rot=Quaternion(),
+            scale=Vector((1,1,1)),
             parent=None,
         )
         self.node_roots.append(object)
 
         # TODO - add meshes to object
+        # TODO - make sure to apply the object matrix to the mesh vertices - Yakuza expects skinned meshes to be at the identity
 
 
-    def export_unskinned_object(self, object: bpy.types.Object, parent: Optional[GMDNode]):
+    def export_unskinned_object(self, collection: bpy.types.Collection, object: bpy.types.Object, parent: Optional[GMDNode]):
         """
         Export a Blender object into a GMDUnskinnedObject
         :param object: TODO
         :return: TODO
         """
 
-        adjusted_rot = object.rotation_quaternion.rotate(self.blender_to_gmd_space_matrix)
-        object = GMDUnskinnedObject(
+        # adjusted_pos = self.blender_to_gmd_space_matrix @ object.location.xyz
+        #
+        # b_rot = object.rotation_quaternion
+        # adjusted_rot = Quaternion((b_rot.w, -b_rot.x, b_rot.z, b_rot.y))#object.rotation_quaternion.rotate(self.blender_to_gmd_space_matrix)
+
+        # matrix is inverse world space
+        gmd_world_matrix = transform_matrix_blender_to_gmd(object.matrix_world)
+        # pos, rot, scale are local
+        adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location, object.rotation_quaternion, object.scale)
+
+        gmd_object = GMDUnskinnedObject(
             name=object.name, node_type=NodeType.UnskinnedMesh,
 
-            pos=self.blender_to_gmd_space_matrix @ object.location.xyz,
+            pos=adjusted_pos,
             rot=adjusted_rot,
-            scale=object.scale.xzy,  # TODO - better method of doing scaling
+            scale=adjusted_scale,
             parent=parent,
-            # TODO: This negates X scale
-            # TODO - just do the same thing as for bones
-            matrix=(self.blender_to_gmd_space_matrix @ object.matrix_world).inverted()
+
+            matrix=gmd_world_matrix.inverted()
         )
         if not parent:
-            self.node_roots.append(object)
+            self.node_roots.append(gmd_object)
 
-        # TODO - add meshes to object
+        # TODO - add meshes to gmd_object
+
+        # Object.children returns all children, not just direct descendants.
+        direct_children = [o for o in collection.objects if o.parent == object]
+        for child_object in direct_children:
+            self.export_unskinned_object(collection, child_object, gmd_object)
 
 
 def menu_func_export(self, context):

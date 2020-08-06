@@ -16,6 +16,7 @@ from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
+from yk_gmd_blender.blender.coordinate_converter import transform_to_matrix
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
@@ -231,6 +232,14 @@ class GMDSceneCreator:
             else:
                 parent_matrix = Matrix.Identity(4)
 
+            print(f"bone {gmd_node.name}")
+            gmd_bone_pos, gmd_bone_axis_maybe, gmd_bone_scale = gmd_node.matrix.inverted().decompose()
+            print(f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
+            print(f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
+            print()
+
+            # TODO - this produces an uninvertible matrix - why?
+            #   this_bone_matrix = parent_matrix @ transform_to_matrix(gmd_node.pos, gmd_node.rot, gmd_node.scale)
             rot_matrix = gmd_node.rot.to_matrix()
             rot_matrix.resize_4x4()
             this_bone_matrix = parent_matrix @ (Matrix.Translation(gmd_node.pos.xyz) @ rot_matrix)# @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
