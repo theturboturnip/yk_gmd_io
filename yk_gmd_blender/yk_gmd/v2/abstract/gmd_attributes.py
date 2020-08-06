@@ -58,7 +58,7 @@ class GMDMaterial(GMDVersionRestricted):
 
 # TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
-class GMDUnk12(GMDVersionRestricted):
+class GMDUnk12:
     """
     This consists of 16 floats, which may or may not be transferrable between engines
     We don't know how to edit them, so they are frozen.
@@ -69,17 +69,17 @@ class GMDUnk12(GMDVersionRestricted):
     def get_default() -> List[float]:
         pass
 
-    def port_to_version(self, new_version: GMDVersion):
-        if new_version == self.origin_version:
-            return self
-        return GMDUnk12(
-            origin_version=new_version,
-            float_data=self.float_data
-        )
+    # def port_to_version(self, new_version: GMDVersion):
+    #     if new_version == self.origin_version:
+    #         return self
+    #     return GMDUnk12(
+    #         origin_version=new_version,
+    #         float_data=self.float_data
+    #     )
 
 # TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
-class GMDUnk14(GMDVersionRestricted):
+class GMDUnk14:
     """
     This consists of 16 uint32, which may or may not be transferrable between engines. They are mostly 0 in Kiwami 1 KiwamiBob.
     We don't know how to edit them, so they are frozen.
@@ -90,13 +90,13 @@ class GMDUnk14(GMDVersionRestricted):
     def get_default() -> List[int]:
         pass
 
-    def port_to_version(self, new_version: GMDVersion):
-        if new_version == self.origin_version:
-            return self
-        return GMDUnk14(
-            origin_version=new_version,
-            int_data=self.int_data
-        )
+    # def port_to_version(self, new_version: GMDVersion):
+    #     if new_version == self.origin_version:
+    #         return self
+    #     return GMDUnk14(
+    #         origin_version=new_version,
+    #         int_data=self.int_data
+    #     )
 
 
 @dataclass

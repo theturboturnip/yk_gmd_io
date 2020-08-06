@@ -181,14 +181,14 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
         return image_node, next_image_y
 
     # Create the diffuse texture
-    diffuse_tex, next_y = set_texture(yakuza_inputs["Diffuse Texture"], attribute_set.texture_diffuse)
+    diffuse_tex, next_y = set_texture(yakuza_inputs["texture_diffuse"], attribute_set.texture_diffuse)
     if diffuse_tex and re.search(r'^s_b', attribute_set.shader.name):
         # The shader name starts with s_b so we know it's transparent
         # Link the texture alpha with the Yakuza Shader, and make the material do alpha blending.
         material.node_tree.links.new(diffuse_tex.outputs["Alpha"], yakuza_inputs["Diffuse Alpha"])
         material.blend_method = "BLEND"
     # Attach the other textures.
-    _, next_y = set_texture(yakuza_inputs["Multi Texture"], attribute_set.texture_multi, next_y, DEFAULT_MULTI_COLOR)
+    _, next_y = set_texture(yakuza_inputs["texture_multi"], attribute_set.texture_multi, next_y, DEFAULT_MULTI_COLOR)
     _, next_y = set_texture(yakuza_inputs["texture_normal"], attribute_set.texture_normal, next_y, DEFAULT_NORMAL_COLOR)
     _, next_y = set_texture(yakuza_inputs["texture_refl"], attribute_set.texture_refl, next_y)
     _, next_y = set_texture(yakuza_inputs["texture_unk1"], attribute_set.texture_unk1, next_y)
@@ -222,11 +222,11 @@ def get_yakuza_shader_node_group():
     shader_is_skin.default_value = 0
 
     # Define the texture inputs that are actually used
-    shader_diffuse = shader.inputs.new("NodeSocketColor", "Diffuse Texture")
+    shader_diffuse = shader.inputs.new("NodeSocketColor", "texture_diffuse")
     shader_diffuse.default_value = DEFAULT_DIFFUSE_COLOR
     shader_alpha = shader.inputs.new("NodeSocketFloat", "Diffuse Alpha")
     shader_alpha.default_value = 1.0
-    shader_multi = shader.inputs.new("NodeSocketColor", "Multi Texture")
+    shader_multi = shader.inputs.new("NodeSocketColor", "texture_multi")
     shader_multi.default_value = DEFAULT_MULTI_COLOR
     # Define the texture inputs that aren't used
     shader_normal = shader.inputs.new("NodeSocketColor", "texture_normal")
@@ -258,7 +258,7 @@ def get_yakuza_shader_node_group():
     # Create multiple "Group Input" nodes containing only the bits we want
     group_input_diffuse = shader.nodes.new("NodeGroupInput")
     for output in group_input_diffuse.outputs:
-        output.hide = (output.name != "Diffuse Texture")
+        output.hide = (output.name != "texture_diffuse")
     group_input_diffuse.label = "Diffuse Input"
     group_input_diffuse.hide = True
     group_input_diffuse.location = (group_input_x, 0)
@@ -272,7 +272,7 @@ def get_yakuza_shader_node_group():
 
     group_input_multi = shader.nodes.new("NodeGroupInput")
     for output in group_input_multi.outputs:
-        output.hide = (output.name != "Multi Texture")
+        output.hide = (output.name != "texture_multi")
     group_input_multi.label = "Multi Input"
     group_input_multi.hide = True
     group_input_multi.location = (group_input_x, -400)
@@ -313,11 +313,11 @@ def get_yakuza_shader_node_group():
     # Split the color into R, G, B
     split_multi = shader.nodes.new("ShaderNodeSeparateRGB")
     split_multi.location = (-600, group_input_multi.location[1])
-    link(group_input_multi.outputs["Multi Texture"], split_multi.inputs[0])
+    link(group_input_multi.outputs["texture_multi"], split_multi.inputs[0])
     # The R is shininess
     link(split_multi.outputs['R'], principled_shader.inputs['Specular'])
     # The B is Ambient Occlusion, so it darkens the diffuse color to create a "main color"
-    main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['Diffuse Texture'], (0, 0, 0, 1))
+    main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
     main_color.label = "Main Color"
     main_color.hide = True
     main_color.location = (-400, 0)
@@ -343,6 +343,6 @@ def get_yakuza_shader_node_group():
     # Skin Shader = 1 if the shader is skin else 0. Attach this to the Subsurface control.
     link(group_input_is_skin.outputs['Skin Shader'], principled_shader.inputs['Subsurface'])
     # Use the base diffuse texture without any AO for the subsurface color. This may be wrong, but it looks OK.
-    link(group_input_diffuse.outputs['Diffuse Texture'], principled_shader.inputs['Subsurface Color'])
+    link(group_input_diffuse.outputs['texture_diffuse'], principled_shader.inputs['Subsurface Color'])
 
     return shader

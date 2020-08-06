@@ -528,7 +528,8 @@ class GMDSceneCreator:
                 uv_layer = bm.loops.layers.color.new(f"UV{i}")
                 for face in bm.faces:
                     for loop in face.loops:
-                        loop[uv_layer].uv = uv[loop.vert.index]
+                        original_uv = uv[loop.vert.index]
+                        loop[uv_layer] = original_uv.resized(4)
 
         # Removed unused verts
         # Typically the mesh passed into this function comes from make_merged_gmd_mesh, which "fuses" vertices by changing the index buffer

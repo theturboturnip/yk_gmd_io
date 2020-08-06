@@ -30,8 +30,11 @@ class GMDNode:
         self.rot = rot
         self.scale = scale
 
-        self.matrix = matrix.copy()
-        self.matrix.resize_4x4()
+        if matrix:
+            self.matrix = matrix.copy()
+            self.matrix.resize_4x4()
+        else:
+            self.matrix = None
 
         self.parent = parent
         self.children = []

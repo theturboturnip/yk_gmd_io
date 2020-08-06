@@ -67,152 +67,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def make_abstract_scene(self) -> GMDScene:
         raise NotImplementedError()
 
-    def build_vertex_buffer_layout_from_flags(self, vertex_packing_flags: int, checked: bool = True) -> GMDVertexBufferLayout:
-        # item_packing_flags = vertex_packing_flags & 0xFFFF_FFFF
-        # uv_list_flags = vertex_packing_flags >> 32
-
-        # This derived from the 010 template
-
-        if checked:
-            touched_packing_bits = set()
-
-            def touch_bits(bit_indices: Iterable[int]):
-                touched_bits = set(bit_indices)
-                if touched_bits.intersection(touched_packing_bits):
-                    self.error.recoverable(f"Retouching bits {touched_bits.intersection(touched_packing_bits)}")
-                touched_packing_bits.update(touched_bits)
-        else:
-            def touch_bits(bit_indices: Iterable[int]):
-                pass
-
-        def extract_bits(start, length):
-            touch_bits(range(start, start + length))
-
-            # Extract bits by shifting down to start and generating a mask of `length` 1's in binary
-            return (vertex_packing_flags >> start) & int('1' * length, 2)
-
-        def extract_bitmask(bitmask):
-            touch_bits([i for i in range(32) if ((bitmask >> i) & 1)])
-
-            return vertex_packing_flags & bitmask
-
-        def extract_vector_type(en: bool, start: int, expected_full_precision: VecStorage) -> Optional[VecStorage]:
-            bits = extract_bits(start, 2)
-            if en:
-                if bits == 0:
-                    return expected_full_precision
-                elif bits == 1:
-                    return VecStorage.Vec4Half
-                else:
-                    return VecStorage.Vec4Fixed
-            else:
-                return None
-
-        # pos can be (3 or 4) * (half or full) floats
-        pos_count = extract_bits(0, 3)
-        pos_precision = extract_bits(3, 1)
-        if pos_precision == 1:
-            pos_storage = VecStorage.Vec3Half if pos_count == 3 else VecStorage.Vec4Half
-        else:
-            pos_storage = VecStorage.Vec3Full if pos_count == 3 else VecStorage.Vec4Full
-
-        weight_en = extract_bitmask(0x70)
-        weights_storage = extract_vector_type(weight_en, 7, expected_full_precision=VecStorage.Vec4Full)
-
-        bones_en = extract_bitmask(0x200)
-        bones_storage = VecStorage.Vec4Fixed if bones_en else None
-
-        normal_en = extract_bitmask(0x400)
-        normal_storage = extract_vector_type(normal_en, 11, expected_full_precision=VecStorage.Vec3Full)
-
-        tangent_en = extract_bitmask(0x2000)
-        tangent_storage = extract_vector_type(tangent_en, 14, expected_full_precision=VecStorage.Vec3Full)
-
-        unk_en = extract_bitmask(0x0001_0000)
-        unk_storage = extract_vector_type(unk_en, 17, expected_full_precision=VecStorage.Vec3Full)
-
-        # TODO: Are we sure these bits aren't used for something?
-        touch_bits((19, 20))
-
-        # col0 is diffuse and opacity for GMD versions up to 0x03000B
-        col0_en = extract_bitmask(0x0020_0000)
-        col0_storage = extract_vector_type(col0_en, 22, expected_full_precision=VecStorage.Vec4Full)
-
-        # col1 is specular for GMD versions up to 0x03000B
-        col1_en = extract_bitmask(0x0100_0000)
-        col1_storage = extract_vector_type(col1_en, 25, expected_full_precision=VecStorage.Vec4Full)
-
-        # Extract the uv_enable and uv_count bits, to fill out the first 32 bits of the flags
-        uv_en = extract_bits(27, 1)
-        uv_count = extract_bits(28, 4)
-        uv_storages = []
-        if uv_count:
-            if uv_en:
-                # Iterate over all uv bits, checking for active UV slots
-                for i in range(8):
-                    uv_slot_bits = extract_bits(32 + (i * 4), 4)
-                    if uv_slot_bits == 0xF:
-                        continue
-
-                    format_bits = (uv_slot_bits >> 2) & 0b11
-                    if format_bits in [2, 3]:
-                        # This should be formatted as a [-1, 1] range thing
-                        # This is currently set in gmd_shader.py, although really it should be set in here
-                        # TODO: shift make_vector_unpacker logic out of abstract/gmd_shader and into here
-                        uv_storages.append(VecStorage.Vec4Fixed)
-                    else:
-                        bit_count_idx = uv_slot_bits & 0b11
-                        bit_count = (2, 3, 4, 1)[bit_count_idx]
-
-                        if bit_count == 1:
-                            self.error.fatal(f"UV with 1 element encountered - unsure how to proceed")
-                        elif bit_count == 2:
-                            uv_storages.append(VecStorage.Vec2Half if format_bits else VecStorage.Vec2Full)
-                        elif bit_count == 3:
-                            uv_storages.append(VecStorage.Vec3Half if format_bits else VecStorage.Vec3Full)
-                        elif bit_count == 4:
-                            uv_storages.append(VecStorage.Vec4Half if format_bits else VecStorage.Vec4Full)
-
-                    if len(uv_storages) == uv_count:
-                        # Touch the rest of the bits
-                        touch_bits(range(32 + ((i + 1) * 4), 64))
-                        break
-
-                if len(uv_storages) != uv_count:
-                    self.error.recoverable(
-                        f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs but specified {len(uv_storages)}")
-            else:
-                # Touch all of the uv bits, without doing anything with them
-                touch_bits(range(32, 64))
-                # TODO: Raise here? This is an unknown item
-                uv_storages = [VecStorage.Vec2Full] * uv_count
-            pass
-
-        # print(uv_storages)
-
-        if checked:
-            expected_touched_bits = {x for x in range(64)}
-            if touched_packing_bits != expected_touched_bits:
-                self.error.recoverable(
-                    f"Incomplete vertex format parse - bits {expected_touched_bits.difference(touched_packing_bits)} were not touched")
-
-        print(f"packing-flags: {vertex_packing_flags:x}")
-
-        return GMDVertexBufferLayout.make_vertex_buffer_layout(
-            pos_storage=pos_storage,
-            weights_storage=weights_storage,
-            bones_storage=bones_storage,
-            normal_storage=normal_storage,
-            tangent_storage=tangent_storage,
-            unk_storage=unk_storage,
-            col0_storage=col0_storage,
-            col1_storage=col1_storage,
-            uv_storages=uv_storages,
-
-            packing_flags=vertex_packing_flags,
-        )
-
-
     def build_vertex_buffers_from_structs(self,
 
                                           vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
@@ -223,7 +77,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = self.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
@@ -294,12 +148,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         ]
         if unk12_arr:
             gmd_unk12s = [
-                GMDUnk12(origin_version=self.version_props.major_version, float_data=unk12.data)
+                GMDUnk12(float_data=unk12.data)
                 for unk12 in unk12_arr
             ]
         if unk14_arr:
             gmd_unk14s = [
-                GMDUnk14(origin_version=self.version_props.major_version, int_data=unk14.data)
+                GMDUnk14(int_data=unk14.data)
                 for unk14 in unk14_arr
             ]
 

@@ -7,17 +7,19 @@ from bpy.props import (StringProperty,
                        EnumProperty,
                        IntProperty,
                        CollectionProperty)
-from bpy.types import Operator, ChildOfConstraint
+from bpy.types import Operator, ChildOfConstraint, ShaderNodeGroup, ShaderNodeTexImage
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Vector, Quaternion
 
+from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
+from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData, depth_first_iterate
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -134,6 +136,7 @@ class GMDSceneGatherer:
             Vector((0, 1, 0, 0)),
             Vector((0, 0, 0, 1)),
         ))
+        self.material_map = {}
 
     def build(self) -> GMDScene:
         return GMDScene(
@@ -472,17 +475,86 @@ class GMDSceneGatherer:
             self.node_roots.append(gmd_object)
 
         # TODO - add meshes to gmd_object
+        if not object.data.vertices:
+            print(f"Object {object.name} has no mesh")
+        else:
+            if not object.material_slots:
+                self.error.fatal(f"Object {object.name} has no materials")
+            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
+
 
         # Object.children returns all children, not just direct descendants.
         direct_children = [o for o in collection.objects if o.parent == object]
         for child_object in direct_children:
             self.export_unskinned_object(collection, child_object, gmd_object)
 
-    def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material) -> GMDAttributeSet:
+    def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material, referencing_object: bpy.types.Object) -> GMDAttributeSet:
         if material.name in self.material_map:
             return self.material_map[material.name]
 
-        raise NotImplementedError()
+        if (not material.yakuza_data.inited):
+            self.error.fatal(f"Material {material.name} on object {referencing_object.name} does not have any Yakuza Properties, and cannot be exported.\n"
+                             f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
+        if (not material.use_nodes):
+            self.error.fatal(
+                f"Material {material.name} on object {referencing_object.name} does not use nodes, and cannot be exported.\n"
+                f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
+
+        yakuza_shader_nodes = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and node.node_tree.name == YAKUZA_SHADER_NODE_GROUP]
+        print([node.name for node in material.node_tree.nodes])
+        print([node.bl_idname for node in material.node_tree.nodes])
+        print([node.bl_label for node in material.node_tree.nodes])
+        if not yakuza_shader_nodes:
+            self.error.fatal(
+                f"Material {material.name} on object {referencing_object.name} does not have a Yakuza Shader node, and cannot be exported.\n"
+                f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
+        elif len(yakuza_shader_nodes) > 1:
+            self.error.fatal(
+                f"Material {material.name} on object {referencing_object.name} has multiple Yakuza Shader nodes, and cannot be exported.\n"
+                f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
+        yakuza_shader_node = cast(ShaderNodeGroup, yakuza_shader_nodes[0])
+
+        yakuza_data: YakuzaPropertyGroup = material.yakuza_data
+        shader = GMDShader(
+            name=yakuza_data.shader_name,
+            vertex_buffer_layout=GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(int(yakuza_data.shader_vertex_layout_flags, base=16), self.error)
+        )
+        def get_texture(texture_name: str) -> Optional[str]:
+            input = yakuza_shader_node.inputs[texture_name]
+            if not input.links:
+                return None
+            if not isinstance(input.links[0].from_node, ShaderNodeTexImage):
+                self.error.fatal(f"Material {material.name} on object {referencing_object.name} has an input {texture_name} which is linked to a {type(input.links[0])} node.\n"
+                                 f"All the texture inputs on a Yakuza Shader node should either be linked to an Image Texture node or not linked at all.")
+            teximage_node: ShaderNodeTexImage = input.links[0].from_node
+            import os
+            image_filepath = os.path.basename(teximage_node.image.filepath)
+            image_name, ext = os.path.splitext(image_filepath)
+            if ext not in ['', '.dds']:
+                self.error.fatal(f"Input {texture_name} in material {material.name} on object {referencing_object.name} is '{image_filepath}', which is not a DDS file.\n"
+                                 f"Yakuza cannot handle these. Please change it to be a .dds file.")
+            return image_name
+
+        attribute_set = GMDAttributeSet(
+            shader=shader,
+
+            texture_diffuse=get_texture("texture_diffuse"),
+            texture_refl=get_texture("texture_refl"),
+            texture_multi=get_texture("texture_multi"),
+            texture_unk1=get_texture("texture_unk1"),
+            texture_rs=get_texture("texture_rs"),
+            texture_normal=get_texture("texture_normal"),
+            texture_rt=get_texture("texture_rt"),
+            texture_rd=get_texture("texture_rd"),
+
+            material=None,
+            unk12=GMDUnk12(list(yakuza_data.unk12)),
+            unk14 = GMDUnk14(list(yakuza_data.unk14)),
+            attr_flags=int(yakuza_data.attribute_set_flags, base=16),
+            attr_extra_properties=yakuza_data.attribute_set_floats,
+        )
+        self.material_map[material.name] = attribute_set
+        return attribute_set
 
 
 def menu_func_export(self, context):

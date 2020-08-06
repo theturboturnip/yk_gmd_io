@@ -69,7 +69,7 @@ class ValueAdaptor(Generic[TFrom, TTo], BaseUnpacker[TTo]):
             self.base_unpacker.validate_value(self.backwards(value))
         except Exception as e:
             print(self.python_type, self.base_unpacker.python_type)
-            raise PackingValidationError(f"{self.python_type.__name__} adaped to {self.base_unpacker.python_type.__name__}: {e}")
+            raise PackingValidationError(f"{self.python_type.__name__} adapted to {self.base_unpacker.python_type.__name__}: {e}")
 
     def sizeof(self):
         return self.base_unpacker.sizeof()
