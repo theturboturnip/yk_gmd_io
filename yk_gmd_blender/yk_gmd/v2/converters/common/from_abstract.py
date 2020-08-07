@@ -80,7 +80,7 @@ def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str,
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
-def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16bit: bool) -> Tuple[
+def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16bit: bool, big_endian: bool) -> Tuple[
     bytes, Dict[Tuple, int]]:
     matrixlist_bytearray = bytearray()
     matrixlist_index = {}
@@ -88,9 +88,12 @@ def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16b
         matrixlist_index[matrixlist] = len(matrixlist_bytearray)
 
         if pack_as_16bit:
-            matrixlist_bytearray += bytes([len(matrixlist)])
-            FixedSizeArrayUnpacker(c_uint16, len(matrixlist)).pack(big_endian=True, value=matrixlist,
+            c_uint16.pack(big_endian, value=len(matrixlist), append_to=matrixlist_bytearray)
+            FixedSizeArrayUnpacker(c_uint16, len(matrixlist)).pack(big_endian=big_endian, value=matrixlist,
                                                                    append_to=matrixlist_bytearray)
+            if not matrixlist:
+                # Add a padding byte in case?
+                c_uint16.pack(big_endian, value=0, append_to=matrixlist_bytearray)
         else:
             matrixlist_bytearray += bytes([len(matrixlist)] + list(matrixlist))
 

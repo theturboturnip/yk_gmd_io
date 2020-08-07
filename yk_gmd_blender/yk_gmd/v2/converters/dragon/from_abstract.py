@@ -20,9 +20,10 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
+from yk_gmd_blender.yk_gmd.v2.structure.dragon.attribute import TextureIndexStruct_Dragon, AttributeStruct_Dragon
+from yk_gmd_blender.yk_gmd.v2.structure.dragon.file import FileData_Dragon
 from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
@@ -98,18 +99,14 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
 def vec3_to_vec4(vec: Vector, w: float = 0):
     return Vector((vec.x, vec.y, vec.z, w))
 
-def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_YK1:
+def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
+                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
     bones_count = len([x for x, stackop in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
     int16_bone_indices = bones_count > 255
     print(bones_count, int16_bone_indices)
-
-    if int16_bone_indices:
-        error.recoverable(f"This file has >255 bones. Pre-dragon engine titles have not been tested with this value.\n"
-                          f"To keep going uncheck \"Strict Export\" in the Export window.")
 
     packed_mesh_matrixlists, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
         rearranged_data.mesh_matrixlist, int16_bone_indices, big_endian=file_big_endian)
@@ -289,7 +286,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
-    make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
+    make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
@@ -301,7 +298,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         ))
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
-        attribute_arr.append(AttributeStruct(
+        attribute_arr.append(AttributeStruct_Dragon(
             index=i,
             material_index=rearranged_data.material_id_to_index[id(gmd_attribute_set.material)],
             shader_index=rearranged_data.shader_names_index[gmd_attribute_set.shader.name],
@@ -322,6 +319,10 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
             texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
             texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
+
+            unk1_always_1=0,
+            unk2_always_0=1,
+            unk3_always_0=0
         ))
 
     file_endian_check = 1 if file_big_endian else 0
@@ -336,7 +337,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     # It could be worth passing on the flags from original files if we're still exporting "over" them
     flags[5] |= 0x20
 
-    return FileData_YK1(
+    return FileData_Dragon(
         magic="GSGM",
         file_endian_check=file_endian_check,
         vertex_endian_check=vertex_endian_check,

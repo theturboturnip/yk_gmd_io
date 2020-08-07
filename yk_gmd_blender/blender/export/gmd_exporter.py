@@ -79,7 +79,7 @@ class ExportGMD(Operator, ExportHelper):
         error_reporter = BlenderErrorReporter(self.report, base_error_reporter)
 
         try:
-            version_props, file_data = read_gmd_structures(self.filepath, error_reporter)
+            version_props, header, file_data = read_gmd_structures(self.filepath, error_reporter)
             check_version_writeable(version_props, error_reporter)
 
             original_scene = GMDScene(
@@ -97,7 +97,7 @@ class ExportGMD(Operator, ExportHelper):
                         error_reporter.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
                     try_copy_bones = False
 
-            scene_gatherer = GMDSceneGatherer(original_scene, try_copy_bones, error_reporter)
+            scene_gatherer = GMDSceneGatherer(original_scene, try_copy_bones, version_props.major_version, error_reporter)
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
             # TODO - pull GMDScene out of blender
             scene_gatherer.gather_exported_items(context, self.debug_compare_matrices)
@@ -128,10 +128,11 @@ class GMDSceneGatherer:
     error: ErrorReporter
     try_copy_bones: bool
     material_map: Dict[str, GMDAttributeSet]
+    export_version: GMDVersion
 
     blender_to_gmd_space_matrix: Matrix
 
-    def __init__(self, original_scene: GMDScene, try_copy_bones: bool, error: ErrorReporter):
+    def __init__(self, original_scene: GMDScene, try_copy_bones: bool, export_version: GMDVersion, error: ErrorReporter):
         self.name = original_scene.name
         self.original_scene = original_scene
         self.node_roots = []
@@ -145,6 +146,7 @@ class GMDSceneGatherer:
             Vector((0, 0, 0, 1)),
         ))
         self.material_map = {}
+        self.export_version = export_version
 
     def build(self) -> GMDScene:
         return GMDScene(
@@ -459,6 +461,7 @@ class GMDSceneGatherer:
             if any(not attr.shader.vertex_buffer_layout.weights_unpacker for attr in attribute_sets):
                 self.error.fatal(f"Object {object.name} uses a material which requires it to be not-skinned.\n"
                                  f"Try unparenting it from the skeleton, or changing to a different material.")
+            #bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
             gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32, self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
@@ -568,7 +571,7 @@ class GMDSceneGatherer:
             return image_name
 
         gmd_material_origin_version = GMDVersion(yakuza_data.material_origin_type)
-        if gmd_material_origin_version == GMDVersion.Kiwami1:
+        if gmd_material_origin_version == GMDVersion.Kiwami1 or gmd_material_origin_version == GMDVersion.Dragon:
             gmd_material = GMDMaterial(
                 origin_version=gmd_material_origin_version,
                 origin_data=MaterialStruct_YK1(**json.loads(yakuza_data.material_json))

@@ -9,7 +9,7 @@ class GMDVersion(Enum):
     Kenzan = 1 # a.k.a Magical V-Engine?
     # 5?/0/Kiwami era - unknown what this engine was called
     Kiwami1 = 3
-    #Dragon = 4
+    Dragon = 4
 
 @dataclass(frozen=True)
 class VersionProperties:
@@ -70,7 +70,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
     elif version_major == 4:
         # Dragon engine
         return VersionProperties(
-            major_version = GMDVersion.Kiwami1,
+            major_version = GMDVersion.Dragon,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
             mesh_vertex_offset_used=True

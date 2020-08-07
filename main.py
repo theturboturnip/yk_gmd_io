@@ -3,7 +3,8 @@ import math
 from pathlib import Path
 
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
+from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
+    pack_abstract_scene, pack_file_data
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.legacy_abstractor import convert_Kenzan_to_legacy_abstraction
@@ -258,18 +259,20 @@ if __name__ == '__main__':
 
     error_reporter = LenientErrorReporter()
 
-    version_props, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
+    version_props, header, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
     scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
 
     # for skinned_obj in scene.skinned_objects.depth_first_iterate():
     #     for mesh in skinned_obj.mesh_list:
     #         mesh.attribute_set.texture_diffuse = "dummy_white"
 
-    new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
-    new_file_bytearray = bytearray()
-    FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
+    # new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
+    # new_file_bytearray = bytearray()
+    # FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
+    unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
+    new_file_bytearray = pack_file_data(version_props, unabstracted_file_data, error_reporter)
 
-    new_version_props, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
+    new_version_props, new_header, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
     print(version_props == new_version_props)
     print(version_props)
     print(new_version_props)

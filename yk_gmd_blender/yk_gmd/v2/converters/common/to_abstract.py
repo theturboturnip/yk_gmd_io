@@ -7,7 +7,7 @@ from typing import List, Tuple, cast, Iterable, Optional, Union, TypeVar, Generi
 from mathutils import Matrix
 
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16
+from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -271,20 +271,23 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             if not mesh_matrix_bytestrings:
                 return []
 
-            len_bytes = length * (2 if bytestrings_are_16bit else 1)
-            actual_len = mesh_matrix_bytestrings[start_byte]
+            unpack_type = c_uint16 if bytestrings_are_16bit else c_uint8
+            #len_bytes = length * unpack_type.sizeof()
+            actual_len, offset = unpack_type.unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=start_byte)
             if actual_len != length:
                 self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}")
-
-            data_start = start_byte + 1
-            data_end = data_start + len_bytes
-            data = mesh_matrix_bytestrings[data_start:data_end]
-            if bytestrings_are_16bit:
-                # TODO: are 16bit strings always big-endian?
-                data, _ = FixedSizeArrayUnpacker(c_uint16, length).unpack(True, data, 0)
-                return data
-            else:
-                return [int(bone_idx_byte) for bone_idx_byte in data]
+            print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
+            # data_start = start_byte + 1
+            # data_end = data_start + len_bytes
+            # data = mesh_matrix_bytestrings[data_start:data_end]
+            # if bytestrings_are_16bit:
+            #     # TODO: are 16bit strings always big-endian?
+            #     data, _ = FixedSizeArrayUnpacker(c_uint16, length).unpack(True, data, 0)
+            #     return data
+            # else:
+            #     return [int(bone_idx_byte) for bone_idx_byte in data]
+            data, _ = FixedSizeArrayUnpacker(unpack_type, length).unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=offset)
+            return data
 
         def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0xFFFF,
                             max_index: int = -1) -> Tuple[array.ArrayType, int, int]:
