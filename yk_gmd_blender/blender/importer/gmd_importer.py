@@ -24,7 +24,7 @@ from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -497,7 +497,7 @@ class GMDSceneCreator:
                 face.smooth = True
                 face.material_index = material_index
             except ValueError:
-                self.error.recoverable(f"Adding face {face} resulted in ValueError - This should have been a valid triangle")
+                self.error.recoverable(f"Adding face {face} resulted in ValueError - This should have been a valid triangle. Vert count: {len(bm.verts)}")
 
         # For each triangle, add it to the bmesh
         for i in range(0, len(gmd_mesh.triangle_indices), 3):
@@ -524,6 +524,22 @@ class GMDSceneCreator:
                 for loop in face.loops:
                     color = vtx_buffer.col1[loop.vert.index]
                     loop[col1_layer] = (color.x, color.y, color.z, color.w)
+
+        # Tangent Data
+        if vtx_buffer.tangent:
+            tangent_layer = bm.loops.layers.color.new("TangentStorage")
+            for face in bm.faces:
+                for loop in face.loops:
+                    color = vtx_buffer.tangent[loop.vert.index]
+                    loop[tangent_layer] = (color.x, color.y, color.z, color.w)
+
+        # Normal W data
+        if vtx_buffer.layout.normal_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
+            normal_w_layer = bm.loops.layers.color.new("NormalW")
+            for face in bm.faces:
+                for loop in face.loops:
+                    # normals are stored [-1, 1] so convert to [0, 1] range
+                    loop[normal_w_layer] = ((vtx_buffer.normal[vert.index].w + 1) / 2, 0, 0, 0)
 
         # UVs
         # Yakuza has 3D/4D UV coordinates. Blender doesn't support this in the UV channel.

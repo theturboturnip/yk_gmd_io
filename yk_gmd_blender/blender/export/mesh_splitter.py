@@ -266,6 +266,8 @@ class VertexFetcher:
     #deform_layer: Optional[BMLayerItem]
     col0_layer: Optional[bpy.types.MeshLoopColorLayer]
     col1_layer: Optional[bpy.types.MeshLoopColorLayer]
+    tangent_layer: Optional[bpy.types.MeshLoopColorLayer]
+    normal_w_layer: Optional[bpy.types.MeshLoopColorLayer]
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]]]
     error: ErrorReporter
@@ -279,6 +281,8 @@ class VertexFetcher:
                  #deform_layer: Optional[BMLayerItem],
                  col0_layer: Optional[bpy.types.MeshLoopColorLayer],
                  col1_layer: Optional[bpy.types.MeshLoopColorLayer],
+                 tangent_layer: Optional[bpy.types.MeshLoopColorLayer],
+                 normal_w_layer: Optional[bpy.types.MeshLoopColorLayer],
                  uv_primary: Optional[bpy.types.MeshUVLoopLayer],
                  uv_numbered: Dict[int, bpy.types.MeshLoopColorLayer],
                  error: ErrorReporter
@@ -319,6 +323,27 @@ class VertexFetcher:
             # TODO - error reporter log
             print(f"VertexFetcher given a layout that doesn't use col1, but also given a col1 layer")
 
+        self.tangent_layer = None
+        if vertex_layout.tangent_storage:
+            self.tangent_layer = tangent_layer
+
+            if not self.tangent_layer:
+                error.recoverable(f"VertexFetcher expected a tangent layer but got None - tangents will be (0.5, 0.5, 0.5, 0.5)")
+        elif tangent_layer:
+            # TODO - error reporter log
+            print(f"VertexFetcher given a layout that doesn't use tangent, but also given a tangent layer")
+
+        self.normal_w_layer = None
+        if vertex_layout.tangent_storage in [VecStorage.Vec4Full, VecStorage.Vec4Fixed, VecStorage.Vec4Half]:
+            self.normal_w_layer = normal_w_layer
+
+            if not self.normal_w_layer:
+                error.recoverable(
+                    f"VertexFetcher expected a normal W component layer but got None - normal.W will be 0.5")
+        elif normal_w_layer:
+            # TODO - error reporter log
+            print(f"VertexFetcher given a layout that doesn't use normals, but also given a normal_w_layer layer")
+
         self.primary_uv_i = vertex_layout.get_primary_uv_index()
         if self.primary_uv_i != -1 and self.primary_uv_i in uv_numbered:
             error.recoverable(
@@ -342,10 +367,20 @@ class VertexFetcher:
 
         vertex_buffer.pos.append((self.transformation_position @ self.mesh.vertices[i].co).resized(4))
         if vertex_buffer.normal is not None:
-            vertex_buffer.normal.append(
-                (self.transformation_direction @ (normal if normal is not None else Vector(loop.split_normals[tri_index]))).resized(4))
+            normal = (self.transformation_direction @ (normal if normal is not None else Vector(loop.split_normals[tri_index]))).resized(4)
+            if self.normal_w_layer:
+                # normals are stored [-1, 1] so convert from [0, 1] range
+                normal.w = (self.normal_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
+            else:
+                normal.w = 0.5
+            vertex_buffer.normal.append(normal)
         if vertex_buffer.tangent is not None:
-            vertex_buffer.tangent.append((self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4))
+            if self.tangent_layer:
+                tangent = Vector(self.tangent_layer.data[loop.loops[tri_index]].color)
+            else:
+                tangent = Vector((0.5, 0.5, 0.5, 0.5))
+            vertex_buffer.tangent.append(tangent)
+            #vertex_buffer.tangent.append((self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4))
 
         if vertex_buffer.bone_weights is not None:
             #if self.deform_layer:
@@ -410,12 +445,14 @@ def split_mesh_by_material(name: str, mesh: bpy.types.Mesh, object_blender_trans
     List[SubmeshBuilder], List[SkinnedSubmeshBuilder]]:
     col0_layer = mesh.vertex_colors["Color0"] if "Color0" in mesh.vertex_colors else None
     col1_layer = mesh.vertex_colors["Color1"] if "Color1" in mesh.vertex_colors else None
+    tangent_layer = mesh.vertex_colors["TangentStorage"] if "TangentStorage" in mesh.vertex_colors else None
+    normal_w_layer = mesh.vertex_colors["NormalW"] if "NormalW" in mesh.vertex_colors else None
 
     uv_primary = "UV_Primary"
     uv_numbered_regex = re.compile(r'UV(\d+)')
 
     primary_uv_layer = mesh.uv_layers[uv_primary] if uv_primary in mesh.uv_layers else mesh.uv_layers.active
-    numbered_uv_layers: Dict[int, BMLayerItem] = {}
+    numbered_uv_layers = {}
     if mesh.vertex_colors:
         for name, layer in mesh.vertex_colors.items():
             match = uv_numbered_regex.match(name)
@@ -459,6 +496,8 @@ def split_mesh_by_material(name: str, mesh: bpy.types.Mesh, object_blender_trans
                                        #deform_layer=deform_layer,
                                        col0_layer=col0_layer,
                                        col1_layer=col1_layer,
+                                       tangent_layer=tangent_layer,
+                                       normal_w_layer=normal_w_layer,
                                        uv_primary=primary_uv_layer,
                                        uv_numbered=numbered_uv_layers,
                                        error=error)
