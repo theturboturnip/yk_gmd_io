@@ -145,7 +145,6 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         else:
             # The texture does exist, load it!
             image = bpy.data.images.load(tex_filepath, check_existing=True)
-            image.name = tex_name
             image_node.image = image
 
     return cast(ShaderNodeTexImage, image_node)

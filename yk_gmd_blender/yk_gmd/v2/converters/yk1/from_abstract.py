@@ -3,6 +3,7 @@ from collections import Iterator
 from typing import List, Iterable, Tuple, Dict
 
 from mathutils import Quaternion, Vector
+from yk_gmd_blender.structurelib.base import PackingValidationError
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
@@ -98,11 +99,13 @@ def vec3_to_vec4(vec: Vector, w: float = 0):
     return Vector((vec.x, vec.y, vec.z, w))
 
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter) -> FileData_YK1:
+                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_YK1:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
-    int16_bone_indices = len([x for x in rearranged_data.ordered_nodes if isinstance(x, GMDBone)]) > 255
+    bones_count = len([x for x, stackop in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
+    int16_bone_indices = bones_count > 255
+    print(bones_count, int16_bone_indices)
 
     packed_mesh_matrixlists, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
         rearranged_data.mesh_matrixlist, int16_bone_indices)
@@ -184,7 +187,10 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
             vertex_offset = vertex_buffer_length
             vertex_count = len(gmd_mesh.vertices_data)
-            gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
+            try:
+                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
+            except PackingValidationError as e:
+                error.fatal(f"Error while packing a mesh for {node.name}: {e}")
             vertex_buffer_length += vertex_count
 
             if isinstance(gmd_mesh, GMDSkinnedMesh):
@@ -317,7 +323,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
-    flags = [0, 0, 0, 0, 0, 0]
+    flags = list(base_flags)
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
     else:

@@ -493,11 +493,13 @@ class GMDSceneCreator:
                 # [1, 2, 2] is degenerate
                 # This should never be called with degenerate triangles, but if there is one we skip it and recover.
                 face = bm.faces.new((bm.verts[face[0]], bm.verts[face[1]], bm.verts[face[2]]))
-
+            except ValueError as e:
+                self.error.recoverable(
+                    f"Adding face {face} resulted in ValueError - This should have been a valid triangle. Vert count: {len(bm.verts)}.\n{e}")
+            else:
                 face.smooth = True
                 face.material_index = material_index
-            except ValueError:
-                self.error.recoverable(f"Adding face {face} resulted in ValueError - This should have been a valid triangle. Vert count: {len(bm.verts)}")
+
 
         # For each triangle, add it to the bmesh
         for i in range(0, len(gmd_mesh.triangle_indices), 3):

@@ -17,3 +17,7 @@ class BlenderErrorReporter(ErrorReporter):
         self.base.fatal(msg)
         # If this runs, then base.fatal screwed up and didn't throw anything
         raise GMDImportExportError(msg)
+
+    def info(self, msg: str):
+        self.base.info(msg)
+        self.report({"INFO"}, msg)

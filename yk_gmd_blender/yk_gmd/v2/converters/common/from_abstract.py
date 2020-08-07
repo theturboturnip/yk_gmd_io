@@ -134,7 +134,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
     ordered_nodes = []
     ordered_matrices = []
-    ordered_objects = []
+    ordered_skinned_objects = []
+    ordered_unskinned_objects = []
 
     root_node_indices = []
     node_id_to_node_index = {}
@@ -174,21 +175,26 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         node_id_to_node_index[id(gmd_node)] = i
 
         # if node is instance of GMDObject (skinned or unskinned) add to ordered_objects
-        if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
-            node_id_to_object_index[id(gmd_node)] = len(ordered_objects)
-            ordered_objects.append(gmd_node)
+        if isinstance(gmd_node, GMDSkinnedObject):
+            ordered_skinned_objects.append(gmd_node)
+
+        if isinstance(gmd_node, GMDUnskinnedObject):
+            ordered_unskinned_objects.append(gmd_node)
 
         if isinstance(gmd_node, GMDSkinnedObject) and not gmd_node.mesh_list:
             error.fatal(f"Skinned Object {gmd_node.name} has no meshes, cannot export")
 
         if isinstance(gmd_node, GMDUnskinnedObject) and not gmd_node.children and not gmd_node.mesh_list:
-            # TODO - error.info
             print(f"Unskinned object {gmd_node.name} has no meshes and no children, expected a child or mesh to be present.")
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
             node_id_to_matrix_index[id(gmd_node)] = len(ordered_matrices)
             ordered_matrices.append(gmd_node.matrix)
+        # else:
+        #     # also emit an identity matrix for skinned meshes just in case - it can't hurt
+        #     node_id_to_matrix_index[id(gmd_node)] = len(ordered_matrices)
+        #     ordered_matrices.append(Matrix.Identity(4))
 
         # if node has no parent, add index to roots
         if not gmd_node.parent:
@@ -196,6 +202,11 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
         # Add name to node names
         node_names.add(gmd_node.name)
+
+    # Put unskinned objects before skinned ones
+    # Skinned objects don't have matrices, so don't put them before things that do, because it's a sequential id and it could go wrong.
+    ordered_objects = ordered_unskinned_objects + ordered_skinned_objects
+    node_id_to_object_index = build_index_mapping(ordered_objects, key=id)
 
     # make sure to maintain original object order for scene
     # involves making sure the DFA happens with objects in order

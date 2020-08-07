@@ -273,6 +273,7 @@ class VertexFetcher:
     error: ErrorReporter
 
     def __init__(self, #bm_vertices: List[BMVert],
+                 mesh_name: str,
                  vertex_layout: GMDVertexBufferLayout,
                  transformation_position: Matrix,
                  transformation_direction: Matrix,
@@ -293,61 +294,47 @@ class VertexFetcher:
         self.mesh = mesh
         self.vertex_group_bone_index_map = vertex_group_bone_index_map
 
-        # self.deform_layer = None
-        # if vertex_layout.weights_storage:
-        #     self.deform_layer = deform_layer
-        #
-        #     if not self.deform_layer:
-        #         error.recoverable(f"VertexFetcher expected a deform layer but got None - weights will be all-zero")
-        # elif deform_layer:
-        #     # TODO - error reporter log
-        #     print(f"VertexFetcher given a layout that doesn't use weights, but also given a deform layer")
-
         self.col0_layer = None
         if vertex_layout.col0_storage:
             self.col0_layer = col0_layer
 
             if not self.col0_layer:
-                error.recoverable(f"VertexFetcher expected a color0 layer but got None - colors will be all-white")
+                error.info(f"VertexFetcher for mesh {mesh_name} expected a color0 layer but got None - colors will be all-white")
         elif col0_layer:
-            # TODO - error reporter log
-            print(f"VertexFetcher given a layout that doesn't use col0, but also given a col0 layer")
+            error.info(f"VertexFetcher for mesh {mesh_name} given a layout that doesn't use col0, but also given a col0 layer")
 
         self.col1_layer = None
         if vertex_layout.col1_storage:
             self.col1_layer = col1_layer
 
             if not self.col1_layer:
-                error.recoverable(f"VertexFetcher expected a color1 layer but got None - colors will be all-white")
+                error.info(f"VertexFetcher for mesh {mesh_name} expected a color1 layer but got None - colors will be all-white")
         elif col1_layer:
-            # TODO - error reporter log
-            print(f"VertexFetcher given a layout that doesn't use col1, but also given a col1 layer")
+            error.info(f"VertexFetcher for mesh {mesh_name} given a layout that doesn't use col1, but also given a col1 layer")
 
         self.tangent_layer = None
         if vertex_layout.tangent_storage:
             self.tangent_layer = tangent_layer
 
             if not self.tangent_layer:
-                error.recoverable(f"VertexFetcher expected a tangent layer but got None - tangents will be (0.5, 0.5, 0.5, 0.5)")
+                error.info(f"VertexFetcher for mesh {mesh_name} expected a tangent layer but got None - tangents will be (0.5, 0.5, 0.5, 0.5)")
         elif tangent_layer:
-            # TODO - error reporter log
-            print(f"VertexFetcher given a layout that doesn't use tangent, but also given a tangent layer")
+            error.info(f"VertexFetcher for mesh {mesh_name} given a layout that doesn't use tangent, but also given a tangent layer")
 
         self.normal_w_layer = None
         if vertex_layout.tangent_storage in [VecStorage.Vec4Full, VecStorage.Vec4Fixed, VecStorage.Vec4Half]:
             self.normal_w_layer = normal_w_layer
 
             if not self.normal_w_layer:
-                error.recoverable(
-                    f"VertexFetcher expected a normal W component layer but got None - normal.W will be 0.5")
+                error.info(
+                    f"VertexFetcher for mesh {mesh_name} expected a normal W component layer but got None - normal.W will be 0.5")
         elif normal_w_layer:
-            # TODO - error reporter log
-            print(f"VertexFetcher given a layout that doesn't use normals, but also given a normal_w_layer layer")
+            error.info(f"VertexFetcher for mesh {mesh_name} given a layout that doesn't use normals, but also given a normal_w_layer layer")
 
         self.primary_uv_i = vertex_layout.get_primary_uv_index()
         if self.primary_uv_i != -1 and self.primary_uv_i in uv_numbered:
             error.recoverable(
-                f"VertexFetcher given a primary uv index that overlaps with a UV layer. The primary UV will take precedence.")
+                f"VertexFetcher for mesh {mesh_name} given a primary uv index that overlaps with a UV layer. The primary UV will take precedence.")
         self.uv_layers = []
         for i, storage in enumerate(vertex_layout.uv_storages):
             if self.primary_uv_i == i:
@@ -356,7 +343,7 @@ class VertexFetcher:
                 layer = uv_numbered[i]
                 self.uv_layers.append((VecStorage.component_count(storage), layer))
             else:
-                error.recoverable(f"VertexFetcher didn't have a UV for layer {i}, values will be all-0")
+                error.info(f"VertexFetcher for mesh {mesh_name} didn't have a UV for layer {i}, values will be all-0")
                 self.uv_layers.append((VecStorage.component_count(storage), None))
 
         self.error = error
@@ -397,24 +384,24 @@ class VertexFetcher:
             weight_sum = sum(weight for (vtx, weight) in b_weights)
             if weight_sum < 0.0:
                 self.error.fatal(f"Weights {b_weights} summed to negative number!")
-
-            b_weights = [(vtx_group, weight / weight_sum) for (vtx_group, weight) in b_weights]
-            # Convert the weights to the yk_gmd abstract BoneWeight format
-            weights_list = [BoneWeight(bone=self.vertex_group_bone_index_map[vtx], weight=weight) for vtx, weight in
-                            b_weights]
-            vertex_buffer.bone_weights.append((
-                weights_list[0],
-                weights_list[1],
-                weights_list[2],
-                weights_list[3],
-            ))
-            # else:
-            #     vertex_buffer.bone_weights.append((
-            #         BoneWeight(bone=0, weight=0),
-            #         BoneWeight(bone=0, weight=0),
-            #         BoneWeight(bone=0, weight=0),
-            #         BoneWeight(bone=0, weight=0),
-            #     ))
+            if weight_sum > 0:
+                b_weights = [(vtx_group, weight / weight_sum) for (vtx_group, weight) in b_weights]
+                # Convert the weights to the yk_gmd abstract BoneWeight format
+                weights_list = [BoneWeight(bone=self.vertex_group_bone_index_map[vtx], weight=weight) for vtx, weight in
+                                b_weights]
+                vertex_buffer.bone_weights.append((
+                    weights_list[0],
+                    weights_list[1],
+                    weights_list[2],
+                    weights_list[3],
+                ))
+            else: # weight_sum == 0
+                vertex_buffer.bone_weights.append((
+                    BoneWeight(bone=0, weight=0.0),
+                    BoneWeight(bone=0, weight=0.0),
+                    BoneWeight(bone=0, weight=0.0),
+                    BoneWeight(bone=0, weight=0.0),
+                ))
 
         if vertex_buffer.col0 is not None:
             if self.col0_layer:
@@ -434,13 +421,13 @@ class VertexFetcher:
                     blender_uv = layer.data[loop.loops[tri_index]].uv
                     value = Vector((blender_uv[0], 1 - blender_uv[1]))
                 else:
-                    value = Vector(layer.data[loop.loops[tri_index]].color.resized(component_count))
+                    value = Vector(layer.data[loop.loops[tri_index]].color).resized(component_count)
             else:
                 value = Vector([0] * component_count)
             vertex_buffer.uvs[i].append(value)
 
 
-def split_mesh_by_material(name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
+def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
                            vertex_group_mapping: Dict[int, GMDBone], error: ErrorReporter) -> Union[
     List[SubmeshBuilder], List[SkinnedSubmeshBuilder]]:
     col0_layer = mesh.vertex_colors["Color0"] if "Color0" in mesh.vertex_colors else None
@@ -487,7 +474,8 @@ def split_mesh_by_material(name: str, mesh: bpy.types.Mesh, object_blender_trans
 
     vertex_fetchers = []
     for attribute_set in attribute_sets:
-        vertex_fetcher = VertexFetcher(attribute_set.shader.vertex_buffer_layout,
+        vertex_fetcher = VertexFetcher(mesh_name,
+                                       attribute_set.shader.vertex_buffer_layout,
                                        transformation_position=transformation_position,
                                        transformation_direction=transformation_direction,
                                        vertex_group_bone_index_map=vertex_group_bone_index_map,
@@ -506,7 +494,7 @@ def split_mesh_by_material(name: str, mesh: bpy.types.Mesh, object_blender_trans
     for tri_loops in mesh.loop_triangles:
         if not (0 <= tri_loops.material_index < len(attribute_sets)):
             error.recoverable(
-                f"Mesh {name} has a face with out-of-bounds material index {l0.face.material_index}. It will be skipped!")
+                f"Mesh {mesh_name} has a face with out-of-bounds material index {l0.face.material_index}. It will be skipped!")
             continue
 
         builder = submesh_builders[tri_loops.material_index]
@@ -620,15 +608,18 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 #     pass
 
 
+#def prepare_mesh()
+
 def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object, materials: List[GMDAttributeSet], bone_name_map: Dict[str, GMDBone], bone_limit: int,
                                       error: ErrorReporter) -> List[GMDSkinnedMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
     dg = context.evaluated_depsgraph_get()
 
-    mesh = object.data#object.evaluated_get(dg).data
+    mesh = object.evaluated_get(dg).data
     mesh.calc_normals_split()
     mesh.calc_loop_triangles()
+    mesh.transform(object.matrix_world)
     # TODO: mesh.transform(object.matrix_world)
 
     # bm = bmesh.new()
@@ -664,9 +655,16 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
     # https://blender.stackexchange.com/a/146911
     dg = context.evaluated_depsgraph_get()
 
-    mesh = object.data#evaluated_get(dg).data
+    # mesh = object.data#evaluated_get(dg).data
+    # mesh.calc_normals_split()
+    # mesh.calc_loop_triangles()
+
+    dg = context.evaluated_depsgraph_get()
+
+    mesh = object.evaluated_get(dg).data
     mesh.calc_normals_split()
     mesh.calc_loop_triangles()
+    mesh.transform(object.matrix_world)
 
     # bm = bmesh.new()
     # bm.from_mesh(mesh)
