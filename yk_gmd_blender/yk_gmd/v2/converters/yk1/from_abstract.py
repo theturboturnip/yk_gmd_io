@@ -244,6 +244,8 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     obj_arr = []
     # This isn't going to have duplicates -> don't bother with the packing
     drawlist_bytearray = bytearray()
+    touched_meshes = set()
+    print(rearranged_data.ordered_objects)
     for i, obj in enumerate(rearranged_data.ordered_objects):
 
         mesh_bounds = combine_bounds([bounds_of(gmd_mesh) for gmd_mesh in obj.mesh_list])
@@ -252,11 +254,13 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         drawlist_rel_ptr = len(drawlist_bytearray)
         c_uint16.pack(file_big_endian, len(obj.mesh_list), drawlist_bytearray)
         c_uint16.pack(file_big_endian, 0, drawlist_bytearray)
-        for i, mesh in enumerate(obj.mesh_list):
+        for mesh in obj.mesh_list:
             c_uint16.pack(file_big_endian, rearranged_data.attribute_set_id_to_index[id(mesh.attribute_set)],
                           drawlist_bytearray)
             c_uint16.pack(file_big_endian, rearranged_data.mesh_id_to_index[id(mesh)], drawlist_bytearray)
+            touched_meshes.add(id(mesh))
 
+        print(f"object struct {i}")
         obj_arr.append(ObjectStruct_YK1(
             index=i,
             node_index_1=node_index,
@@ -265,6 +269,8 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
             bbox=mesh_bounds,
         ))
+    if len(touched_meshes) != len(mesh_arr):
+        error.fatal(f"Didn't export drawlists for all meshes")
     overall_bounds = combine_bounds(obj.bbox for obj in obj_arr)
 
     material_arr = []

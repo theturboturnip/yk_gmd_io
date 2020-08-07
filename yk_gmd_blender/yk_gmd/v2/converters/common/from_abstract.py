@@ -234,6 +234,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
     # ordering meshes:
     # build list of vertex buffer layouts to use
+    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=lambda a: a.attr_flags)
     known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
         mesh.vertices_data.layout
         for mesh in meshes
@@ -246,7 +247,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     for layout, flag in known_vertex_layouts_and_flags:
         meshes_for_buffer = [m for m in meshes if m.attribute_set.shader.vertex_buffer_layout == layout]
         # sort meshes by id(material) - just to group the common materials together
-        meshes_for_buffer.sort(key=lambda m: id(m.attribute_set))
+        meshes_for_buffer.sort(key=lambda m: expected_attribute_set_order.index(m.attribute_set))
         # emit buffer_layout, meshes_for_buffer
         vertex_layout_groups.append((layout, flag, meshes_for_buffer))
 

@@ -12,7 +12,8 @@ from bpy.types import Operator, ChildOfConstraint, ShaderNodeGroup, ShaderNodeTe
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Vector, Quaternion
 
-from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_mesh_object
+from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_mesh_object, \
+    split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
@@ -121,7 +122,7 @@ class GMDSceneGatherer:
     name: str
     original_scene: GMDScene
     node_roots: List[GMDNode]
-    bone_name_map: Dict[str, GMDNode]
+    bone_name_map: Dict[str, GMDBone]
     error: ErrorReporter
     try_copy_bones: bool
     material_map: Dict[str, GMDAttributeSet]
@@ -324,7 +325,7 @@ class GMDSceneGatherer:
             # if object has child-of for our armature => warning??
 
         for skinned_object in root_skinned_objects:
-            self.export_skinned_object(skinned_object)
+            self.export_skinned_object(context, skinned_object)
 
         for parent, unskinned_object in unskinned_object_roots:
             self.export_unskinned_object(context, selected_collection, unskinned_object, parent)
@@ -426,14 +427,14 @@ class GMDSceneGatherer:
         for root_bone in original_root_bones:
             copy_bone(root_bone, None)
 
-    def export_skinned_object(self, object: bpy.types.Object):
+    def export_skinned_object(self, context: bpy.types.Context, object: bpy.types.Object):
         """
         Export a Blender object into a GMDSkinnedObject
         :param object: TODO
         :return: TODO
         """
 
-        object = GMDSkinnedObject(
+        gmd_object = GMDSkinnedObject(
             name=self.remove_blender_duplicate(object.name),
             node_type=NodeType.SkinnedMesh,
 
@@ -442,10 +443,19 @@ class GMDSceneGatherer:
             scale=Vector((1,1,1)),
             parent=None,
         )
-        self.node_roots.append(object)
+        self.node_roots.append(gmd_object)
 
         # TODO - add meshes to object
         # TODO - make sure to apply the object matrix to the mesh vertices - Yakuza expects skinned meshes to be at the identity
+        if not object.data.vertices:
+            print(f"Object {object.name} has no mesh")
+        else:
+            if not object.material_slots:
+                self.error.fatal(f"Object {object.name} has no materials")
+            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
+            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32, self.error)
+            for gmd_mesh in gmd_meshes:
+                gmd_object.add_mesh(gmd_mesh)
 
 
     def export_unskinned_object(self, context: bpy.types.Context, collection: bpy.types.Collection, object: bpy.types.Object, parent: Optional[GMDNode]):
@@ -524,7 +534,7 @@ class GMDSceneGatherer:
         yakuza_data: YakuzaPropertyGroup = material.yakuza_data
         vertex_layout_flags = int(yakuza_data.shader_vertex_layout_flags, base=16)
         vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, self.error)
-        print(f"material {material.name} shader {yakuza_data.shader_name} flags {vertex_layout_flags} layout {vertex_layout}")
+        #print(f"material {material.name} shader {yakuza_data.shader_name} flags {vertex_layout_flags} layout {vertex_layout}")
         shader = GMDShader(
             name=yakuza_data.shader_name,
             vertex_buffer_layout=vertex_layout

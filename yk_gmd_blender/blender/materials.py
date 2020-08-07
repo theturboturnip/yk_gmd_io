@@ -87,7 +87,7 @@ DEFAULT_DIFFUSE_COLOR = (0.9, 0.9, 0.9, 1)
 DEFAULT_UNUSED_COLOR = (0, 0, 0, 1)
 # TODO: Some normal maps use the G/A channels for normals instead of the R/B. Figure out how to handle that
 DEFAULT_NORMAL_COLOR = (0.5, 0.5, 1, 1)
-DEFAULT_MULTI_COLOR = (0, 0, 0, 1)
+DEFAULT_MULTI_COLOR = (0, 0, 1, 1)
 
 
 def create_single_color_texture(name: str, filepath: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
@@ -166,7 +166,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
-    print(f"import shader {attribute_set.shader.name} flags {attribute_set.shader.vertex_buffer_layout.packing_flags} layout {attribute_set.shader.vertex_buffer_layout}")
+    #print(f"import shader {attribute_set.shader.name} flags {attribute_set.shader.vertex_buffer_layout.packing_flags} layout {attribute_set.shader.vertex_buffer_layout}")
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
     material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
     material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32
@@ -327,7 +327,7 @@ def get_yakuza_shader_node_group():
     # The R is shininess
     link(split_multi.outputs['R'], principled_shader.inputs['Specular'])
     # The B is Ambient Occlusion, so it darkens the diffuse color to create a "main color"
-    main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
+    main_color = mix_between(split_multi.outputs['B'], (0, 0, 0, 1), group_input_diffuse.outputs['texture_diffuse'])
     main_color.label = "Main Color"
     main_color.hide = True
     main_color.location = (-400, 0)

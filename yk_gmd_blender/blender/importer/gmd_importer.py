@@ -353,6 +353,8 @@ class GMDSceneCreator:
 
             is_skinned = isinstance(gmd_node, GMDSkinnedObject)
 
+            custom_normals = []
+
             # 1. Make a single BMesh containing all meshes referenced by this object.
             # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
             # originally split up for the sake of bone limits, and not merging them would make blender bug up.
@@ -370,9 +372,9 @@ class GMDSceneCreator:
                 # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
                 if use_materials:
                     blender_material_list.append(self.make_material(collection, merged_gmd_mesh.attribute_set))
-                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=i)
+                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=i, custom_normals=custom_normals)
                 else:
-                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=0)
+                    new_bmesh = self.gmd_to_bmesh(merged_gmd_mesh, vertex_group_indices, material_index=0, custom_normals=custom_normals)
 
                 # Merge it in to the overall bmesh.
                 new_bmesh.to_mesh(temp_mesh)
@@ -386,6 +388,13 @@ class GMDSceneCreator:
             if use_materials:
                 for mat in blender_material_list:
                     overall_mesh.materials.append(mat)
+            print(len(custom_normals))
+            # For the normals to work right, you have 1. create and set the "split normals" for each vertex
+            # 2. enable "use_auto_smooth", which tells blender to actually use the custom split normals data.
+            overall_mesh.create_normals_split()
+            overall_mesh.normals_split_custom_set_from_vertices(custom_normals)
+            overall_mesh.auto_smooth_angle = 0
+            overall_mesh.use_auto_smooth = True
 
             # Create the final object representing this GMDNode
             mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
@@ -436,7 +445,7 @@ class GMDSceneCreator:
 
         bpy.data.meshes.remove(temp_mesh)
 
-    def gmd_to_bmesh(self, gmd_mesh: Union[GMDMesh, GMDSkinnedMesh], vertex_group_indices: Dict[str, int], material_index: int) -> bmesh.types.BMesh:
+    def gmd_to_bmesh(self, gmd_mesh: Union[GMDMesh, GMDSkinnedMesh], vertex_group_indices: Dict[str, int], material_index: int, custom_normals: List[Vector]) -> bmesh.types.BMesh:
         """
         Given a GMDMesh/GMDSkinnedMesh, convert it to a BMesh.
         :param gmd_mesh: The mesh to convert.
@@ -452,13 +461,17 @@ class GMDSceneCreator:
         if apply_bone_weights:
             deform = bm.verts.layers.deform.new("Vertex Weights")
 
+        custom_normals_with_unused = []
+
         vtx_buffer = gmd_mesh.vertices_data
         for i in range(len(vtx_buffer)):
             vert = bm.verts.new(self.gmd_to_blender_world @ vtx_buffer.pos[i].xyz)
             if vtx_buffer.normal:
                 # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
                 # Just using .xyz would make blender apply a translation (TODO - check this?)
-                vert.normal = (self.gmd_to_blender_world @ (vtx_buffer.normal[i].xyz.resized(4))).xyz
+                normal = (self.gmd_to_blender_world @ (vtx_buffer.normal[i].xyz.resized(4))).xyz
+                custom_normals_with_unused.append(normal)
+                vert.normal = normal
             # Tangents cannot be applied
             if apply_bone_weights and vtx_buffer.bone_weights:
                 for bone_weight in vtx_buffer.bone_weights[i]:
@@ -535,12 +548,18 @@ class GMDSceneCreator:
         # Typically the mesh passed into this function comes from make_merged_gmd_mesh, which "fuses" vertices by changing the index buffer
         # However, the unused verts themselves are still in the buffer, and should be removed.
         # THIS MUST ONLY HAPPEN AFTER ALL OTHER LOADING - otherwise different data channels will be messed up
-        unused_verts = [v for v in bm.verts if not v.link_faces]
+        # Remove indices in reverse order, so we can remove them from custom_normals_with_unused
+        unused_verts = sorted([v for v in bm.verts if not v.link_faces], key=lambda v: v.index, reverse=True)
         # equiv of bmesh.ops.delete(bm, geom=verts, context='VERTS')
+        #unused_indices = [v.index for v in unused_verts]
         for v in unused_verts:
+            # Deleting from the middle of a list sucks and is slow, but idk how to do it better
+            del custom_normals_with_unused[v.index]
             bm.verts.remove(v)
         bm.verts.ensure_lookup_table()
         bm.verts.index_update()
+
+        custom_normals.extend(custom_normals_with_unused)
 
         return bm
 
