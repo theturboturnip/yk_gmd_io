@@ -1,3 +1,4 @@
+import json
 import re
 from typing import List, Union, Dict, Optional, cast, Tuple
 
@@ -17,7 +18,7 @@ from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData, depth_first_iterate
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout
@@ -30,8 +31,11 @@ from yk_gmd_blender.yk_gmd.v2.io import get_file_header, check_version_writeable
     read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan
 
-from yk_gmd_blender.yk_gmd.v2.structure.version import combine_versions
+from yk_gmd_blender.yk_gmd.v2.structure.version import combine_versions, GMDVersion
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
+
 
 class ExportGMD(Operator, ExportHelper):
     """Export scene as glTF 2.0 file"""
@@ -518,9 +522,12 @@ class GMDSceneGatherer:
         yakuza_shader_node = cast(ShaderNodeGroup, yakuza_shader_nodes[0])
 
         yakuza_data: YakuzaPropertyGroup = material.yakuza_data
+        vertex_layout_flags = int(yakuza_data.shader_vertex_layout_flags, base=16)
+        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, self.error)
+        print(f"material {material.name} shader {yakuza_data.shader_name} flags {vertex_layout_flags} layout {vertex_layout}")
         shader = GMDShader(
             name=yakuza_data.shader_name,
-            vertex_buffer_layout=GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(int(yakuza_data.shader_vertex_layout_flags, base=16), self.error)
+            vertex_buffer_layout=vertex_layout
         )
         def get_texture(texture_name: str) -> Optional[str]:
             input = yakuza_shader_node.inputs[texture_name]
@@ -538,6 +545,20 @@ class GMDSceneGatherer:
                                  f"Yakuza cannot handle these. Please change it to be a .dds file.")
             return image_name
 
+        gmd_material_origin_version = GMDVersion(yakuza_data.material_origin_type)
+        if gmd_material_origin_version == GMDVersion.Kiwami1:
+            gmd_material = GMDMaterial(
+                origin_version=gmd_material_origin_version,
+                origin_data=MaterialStruct_YK1(**json.loads(yakuza_data.material_json))
+            )
+        elif gmd_material_origin_version == GMDVersion.Kenzan:
+            gmd_material = GMDMaterial(
+                origin_version=gmd_material_origin_version,
+                origin_data=MaterialStruct_Kenzan(**json.loads(yakuza_data.material_json))
+            )
+        else:
+            self.error.fatal(f"Unknown GMDVersion {gmd_material_origin_version}")
+
         attribute_set = GMDAttributeSet(
             shader=shader,
 
@@ -550,9 +571,9 @@ class GMDSceneGatherer:
             texture_rt=get_texture("texture_rt"),
             texture_rd=get_texture("texture_rd"),
 
-            material=None,
+            material=gmd_material,
             unk12=GMDUnk12(list(yakuza_data.unk12)),
-            unk14 = GMDUnk14(list(yakuza_data.unk14)),
+            unk14 = GMDUnk14(list([int(x) for x in yakuza_data.unk14])),
             attr_flags=int(yakuza_data.attribute_set_flags, base=16),
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )

@@ -44,24 +44,29 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1
 
 
 def bounds_of(mesh) -> BoundsDataStruct_YK1:
-    min_pos = Vector(mesh.vertices_data.pos[0])
-    max_pos = Vector(mesh.vertices_data.pos[0])
+    # min_pos = Vector(mesh.vertices_data.pos[0])
+    # max_pos = Vector(mesh.vertices_data.pos[0])
+    #
+    # for pos in mesh.vertices_data.pos:
+    #     min_pos.x = min(pos.x, min_pos.x)
+    #     min_pos.y = min(pos.y, min_pos.y)
+    #     min_pos.z = min(pos.z, min_pos.z)
+    #
+    #     max_pos.x = max(pos.x, max_pos.x)
+    #     max_pos.y = max(pos.y, max_pos.y)
+    #     max_pos.z = max(pos.z, max_pos.z)
 
-    for pos in mesh.vertices_data.pos:
-        min_pos.x = min(pos.x, min_pos.x)
-        min_pos.y = min(pos.y, min_pos.y)
-        min_pos.z = min(pos.z, min_pos.z)
-
-        max_pos.x = max(pos.x, max_pos.x)
-        max_pos.y = max(pos.y, max_pos.y)
-        max_pos.z = max(pos.z, max_pos.z)
+    min_pos = Vector((-1000, -1000, -1000))
+    max_pos = Vector((+1000, +1000, +1000))
 
     return bounds_from_minmax(min_pos, max_pos)
 
 
 def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
-    min_pos = None
-    max_pos = None
+    # min_pos = None
+    # max_pos = None
+    min_pos = Vector((-1000, -1000, -1000))
+    max_pos = Vector((+1000, +1000, +1000))
 
     for bound in bounds:
         min_for_bound = bound.center - bound.box_extents
@@ -82,9 +87,9 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
     # TODO - This is for the sake of hierarchy objects which have no meshes themselves, but presumably have children with meshes.
     # Will these BBOXes need to be calculated with those other ones in mind?
     # Will these BBOXes need to be calculated with object position in mind?
-    if min_pos is None:
-        min_pos = Vector((0, 0, 0, 0))
-        max_pos = Vector((0, 0, 0, 0))
+    # if min_pos is None:
+    #     min_pos = Vector((0, 0, 0, 0))
+    #     max_pos = Vector((0, 0, 0, 0))
 
     return bounds_from_minmax(min_pos, max_pos)
 
@@ -271,11 +276,11 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
-            data=gmd_attribute_set.unk12.port_to_version(version_properties.major_version).float_data
+            data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
             if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
-            data=gmd_attribute_set.unk14.port_to_version(version_properties.major_version).int_data
+            data=gmd_attribute_set.unk14.int_data#port_to_version(version_properties.major_version).int_data
             if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 

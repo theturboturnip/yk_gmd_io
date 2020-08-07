@@ -400,7 +400,7 @@ def split_mesh_by_material(name: str, bm: bmesh.types.BMesh, object_blender_tran
     uv_primary = "UV_Primary"
     uv_numbered_regex = re.compile(r'UV(\d+)')
 
-    primary_uv_layer = bm.loops.layers.uv[uv_primary] if uv_primary in bm.loops.layers.uv else None
+    primary_uv_layer = bm.loops.layers.uv[uv_primary] if uv_primary in bm.loops.layers.uv else bm.loops.layers.uv.active
     numbered_uv_layers: Dict[int, BMLayerItem] = {}
     if bm.loops.layers.color:
         for name, layer in bm.loops.layers.color.items():

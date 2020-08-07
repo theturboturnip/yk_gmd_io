@@ -238,6 +238,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         mesh.vertices_data.layout
         for mesh in meshes
     }
+    print(known_vertex_layouts_set)
     # sort by descending flags int value (?)
     known_vertex_layouts_and_flags = [(l, generate_vertex_layout_packing_flags(l)) for l in known_vertex_layouts_set]
     known_vertex_layouts_and_flags.sort(key=lambda l_with_flags: l_with_flags[1], reverse=True)

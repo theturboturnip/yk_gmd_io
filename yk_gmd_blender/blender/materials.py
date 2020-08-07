@@ -1,9 +1,10 @@
+import json
 import os
 import re
 from typing import Optional, Tuple, cast
 
 import bpy
-from bpy.props import FloatVectorProperty, StringProperty, BoolProperty
+from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, IntProperty
 from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
 
@@ -32,8 +33,9 @@ class YakuzaPropertyGroup(PropertyGroup):
     unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)
     unk14: FloatVectorProperty(name="GMD Unk14 Data", size=32)
     attribute_set_floats: FloatVectorProperty(name="GMD Attribute Set Floats", size=16)
-    material_floats: FloatVectorProperty(name="GMD Material Floats", size=16)
-
+    #material_floats: FloatVectorProperty(name="GMD Material Floats", size=16)
+    material_origin_type: IntProperty(name="GMDMaterial origin type")
+    material_json: StringProperty(name="GMDMaterial data JSON")
 
 class YakuzaPropertyPanel(bpy.types.Panel):
     """
@@ -52,6 +54,9 @@ class YakuzaPropertyPanel(bpy.types.Panel):
         ob = context.object
         ma = ob.active_material
 
+        if not ma:
+            return
+
         def matrix_prop(prop_name, length: int, text=""):
             self.layout.label(text=text)
             box = self.layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
@@ -64,8 +69,10 @@ class YakuzaPropertyPanel(bpy.types.Panel):
             self.layout.prop(ma.yakuza_data, "shader_vertex_layout_flags")
             self.layout.prop(ma.yakuza_data, "attribute_set_flags")
 
+            self.layout.prop(ma.yakuza_data, "material_origin_type")
+            self.layout.prop(ma.yakuza_data, "material_json")
             matrix_prop("attribute_set_floats", 16, text="Attribute Set Floats")
-            matrix_prop("material_floats", 16, text="Material Floats")
+            #matrix_prop("material_floats", 16, text="Material Floats")
             matrix_prop("unk12", 32, text="Unk 12")
             matrix_prop("unk14", 32, text="Unk 14 (Should be ints)")
         else:
@@ -159,10 +166,13 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
+    print(f"import shader {attribute_set.shader.name} flags {attribute_set.shader.vertex_buffer_layout.packing_flags} layout {attribute_set.shader.vertex_buffer_layout}")
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
     material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
     material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32
     material.yakuza_data.attribute_set_floats = attribute_set.attr_extra_properties
+    material.yakuza_data.material_origin_type = attribute_set.material.origin_version.value
+    material.yakuza_data.material_json = json.dumps(vars(attribute_set.material.origin_data))
 
     # Set the skin shader to 1 if the shader is a skin shader
     yakuza_inputs["Skin Shader"].default_value = 1.0 if "[skin]" in attribute_set.shader.name else 0.0
@@ -174,7 +184,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
             return None, next_image_y
         image_node = load_texture_from_name(material.node_tree, gmd_folder, tex_name, color_if_not_found)
         image_node.location = (-500, next_image_y)
-        image_node.label = tex_name
+        #image_node.label = tex_name
         image_node.hide = True
         material.node_tree.links.new(image_node.outputs["Color"], set_into)
         next_image_y -= 100
