@@ -502,16 +502,15 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
 
         def parse_loop_elem(i):
             # TODO - Reenable if smooth
-            #if tri_loops.use_smooth:
-            # Smoothed vertices can be shared between different triangles that use them
-            return builder.add_vertex(tri_loops.vertices[i],
-                                      lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer,
-                                                                                          tri_loops.vertices[i], None, tri_loops, i))
-            #else:
-            #    # Vertices on hard edges cannot be shared and must be duplicated per-face
-            #    return builder.add_unique_vertex(
-            #        lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer, l.vert.index, l.calc_normal(),
-            #                                                            l))
+            if tri_loops.use_smooth:
+                # Smoothed vertices can be shared between different triangles that use them
+                return builder.add_vertex(tri_loops.vertices[i],
+                                          lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer,
+                                                                                              tri_loops.vertices[i], None, tri_loops, i))
+            else:
+                # Vertices on hard edges cannot be shared and must be duplicated per-face
+                return builder.add_unique_vertex(
+                    lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer, tri_loops.vertices[i], Vector(tri_loops.normal), tri_loops, i))
 
         triangle = (
             parse_loop_elem(0),
@@ -618,6 +617,7 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
 
     mesh = object.evaluated_get(dg).data
     mesh.calc_normals_split()
+    mesh.calc_tangents()
     mesh.calc_loop_triangles()
     mesh.transform(object.matrix_world)
     # TODO: mesh.transform(object.matrix_world)
@@ -663,6 +663,7 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
 
     mesh = object.evaluated_get(dg).data
     mesh.calc_normals_split()
+    mesh.calc_tangents()
     mesh.calc_loop_triangles()
     mesh.transform(object.matrix_world)
 

@@ -388,7 +388,8 @@ class GMDSceneCreator:
             if use_materials:
                 for mat in blender_material_list:
                     overall_mesh.materials.append(mat)
-            print(len(custom_normals))
+            print(f"total custom normals: {len(custom_normals)}")
+            print(f"total verts: {len(overall_mesh.vertices)}")
             # For the normals to work right, you have 1. create and set the "split normals" for each vertex
             # 2. enable "use_auto_smooth", which tells blender to actually use the custom split normals data.
             overall_mesh.create_normals_split()
@@ -590,8 +591,10 @@ class GMDSceneCreator:
         if len(gmd_meshes) == 0:
             self.error.fatal("Called make_merged_gmd_mesh with 0 meshes!")
 
-        if len(gmd_meshes) == 1:
-            return gmd_meshes[0]
+        print(f"make_merged_gmd_mesh called with {gmd_meshes} fusing={remove_dupes}")
+
+        #if len(gmd_meshes) == 1:
+        #    return gmd_meshes[0]
 
         # All of the meshes should have the same attribute set
         if not all(gmd_mesh.attribute_set is gmd_meshes[0].attribute_set for gmd_mesh in gmd_meshes[1:]):
@@ -615,10 +618,9 @@ class GMDSceneCreator:
                     bone_index_mapping[i] = relevant_bones.index(bone)
 
                 def remap_weight(bone_weight: BoneWeight):
-                    # If the weight is 0 the bone is unused, so don't remap it.
-                    # It's usually 0, which is a valid remappable value, but if we remap it then BoneWeight(bone=0, weight=0) != BoneWeight(bone=remapped 0, weight=0)
+                    # If the weight is 0 the bone is unused, so map it to a consistent 0.
                     if bone_weight.weight == 0:
-                        return bone_weight
+                        return BoneWeight(0, weight=0.0)
                     else:
                         return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
 

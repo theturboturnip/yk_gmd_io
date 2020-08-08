@@ -598,7 +598,7 @@ class GMDSceneGatherer:
 
             material=gmd_material,
             unk12=GMDUnk12(list(yakuza_data.unk12)),
-            unk14 = GMDUnk14(list([int(x) for x in yakuza_data.unk14])),
+            unk14=GMDUnk14(list([int(x) for x in yakuza_data.unk14])),
             attr_flags=int(yakuza_data.attribute_set_flags, base=16),
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )

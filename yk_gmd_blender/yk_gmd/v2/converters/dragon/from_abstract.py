@@ -298,6 +298,16 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         ))
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
+        texture_index = AttributeStruct_Dragon.calculate_texture_count(
+            texture_diffuse=(gmd_attribute_set.texture_diffuse),
+            texture_refl=(gmd_attribute_set.texture_refl),
+            texture_multi=(gmd_attribute_set.texture_multi),
+            texture_unk1=(gmd_attribute_set.texture_unk1),
+            texture_ts=(gmd_attribute_set.texture_rs),
+            texture_normal=(gmd_attribute_set.texture_normal),
+            texture_rt=(gmd_attribute_set.texture_rt),
+            texture_rd=(gmd_attribute_set.texture_rd),
+        )
         attribute_arr.append(AttributeStruct_Dragon(
             index=i,
             material_index=rearranged_data.material_id_to_index[id(gmd_attribute_set.material)],
@@ -307,7 +317,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=8,  # TODO: Set this properly?
+            texture_init_count=texture_index,  # TODO: Set this properly?
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
@@ -333,9 +343,10 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         flags[5] |= 0x8000_0000
     else:
         flags[5] &= ~0x8000_0000
-    # TODO: This is in all(?) Yakuza Kiwami 1 files
+    # TODO: This is in all(?) Yakuza Dragon files
     # It could be worth passing on the flags from original files if we're still exporting "over" them
-    flags[5] |= 0x20
+    flags[5] |= 0x22
+    flags[4] = 0x32b7c266 # TODO - wtf
 
     return FileData_Dragon(
         magic="GSGM",
