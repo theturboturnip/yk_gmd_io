@@ -95,7 +95,7 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
     return bounds_from_minmax(min_pos, max_pos)
 
 
-def vec3_to_vec4(vec: Vector, w: float = 0):
+def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
 def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,

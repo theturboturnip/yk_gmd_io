@@ -259,13 +259,16 @@ class GMDSceneCreator:
                 # First, check if we have siblings in a similar position to ours - these are the bones we want to be different from
                 adjacent_siblings = [child for child in gmd_node.parent.children if child is not gmd_node and (child.pos - gmd_node.pos).length < 0.01]
                 if adjacent_siblings:
-                    # If we're trying to be different from our sibling, we pick a direction that is perpendicular to the direction we would normally pick
-                    # i.e. a vector perpendicular to the "parent direction"
-                    parent_dir = gmd_node.pos.xyz.normalized() # gmd_node.pos is relative to the parent already
-                    tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
-                    # Extend the tail in the direction of the delta
-                    print(f"Extending in the direction {tail_delta_dir}")
-                    tail_delta = (tail_delta_dir.xyz * 0.1)
+                    if gmd_node.pos.xyz.length < 0.00001:
+                        tail_delta = Vector((0, 0, 0.05))
+                    else:
+                        # If we're trying to be different from our sibling, we pick a direction that is perpendicular to the direction we would normally pick
+                        # i.e. a vector perpendicular to the "parent direction"
+                        parent_dir = gmd_node.pos.xyz.normalized() # gmd_node.pos is relative to the parent already
+                        tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
+                        # Extend the tail in the direction of the delta
+                        print(f"Extending in the direction {tail_delta_dir}")
+                        tail_delta = (tail_delta_dir.xyz * 0.1)
                 else:
                     # There aren't any bones we have to differentiate ourselves from -> just follow the parent delta, like the default for having no children
                     if gmd_node.pos.xyz.length < 0.00001:
@@ -283,9 +286,12 @@ class GMDSceneCreator:
                     tail_delta = sum(countable_children_gmd_positions, Vector((0,0,0))) / len(countable_children_gmd_positions)
 
                     if tail_delta.length < 0.001:
-                        parent_dir = gmd_node.pos.xyz.normalized()  # gmd_node.pos is relative to the parent already
-                        tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
-                        tail_delta = (tail_delta_dir.xyz * 0.1)
+                        if gmd_node.pos.xyz.length < 0.00001:
+                            tail_delta = Vector((0, 0, 0.05))
+                        else:
+                            parent_dir = gmd_node.pos.xyz.normalized()  # gmd_node.pos is relative to the parent already
+                            tail_delta_dir = generate_perpendicular_bone_direction(this_bone_matrix, parent_dir)
+                            tail_delta = (tail_delta_dir.xyz * 0.1)
                 else:
                     # Extend the tail in the direction of the parent
                     # gmd_node.pos.xyz is relative to the parent already

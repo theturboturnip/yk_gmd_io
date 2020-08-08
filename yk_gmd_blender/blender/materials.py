@@ -326,16 +326,17 @@ def get_yakuza_shader_node_group():
     # The R is shininess
     link(split_multi.outputs['R'], principled_shader.inputs['Specular'])
     # The B is Ambient Occlusion, so it darkens the diffuse color to create a "main color"
-    main_color = mix_between(split_multi.outputs['B'], (0, 0, 0, 1), group_input_diffuse.outputs['texture_diffuse'])
-    main_color.label = "Main Color"
-    main_color.hide = True
-    main_color.location = (-400, 0)
+    # TODO - this isn't consistent for Y3/4/5 models
+    # main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
+    # main_color.label = "Main Color"
+    # main_color.hide = True
+    # main_color.location = (-400, 0)
     # The G is emission, so use it to mix between diffuse and emission
-    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], main_color.outputs[0], (0, 0, 0, 1))
+    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
     main_color_diffuse_portion.label = "Diffuse Portion"
     main_color_diffuse_portion.hide = True
     main_color_diffuse_portion.location = (-200, 0)
-    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1), main_color.outputs[0])
+    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1), group_input_diffuse.outputs['texture_diffuse'])
     main_color_emissive_portion.label = "Emissive Portion"
     main_color_emissive_portion.hide = True
     main_color_emissive_portion.location = (-200, -50)

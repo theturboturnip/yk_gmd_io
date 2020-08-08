@@ -291,7 +291,14 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0xFFFF,
                             max_index: int = -1) -> Tuple[array.ArrayType, int, int]:
-            index_offset = 0 if file_uses_relative_indices else mesh_struct.vertex_offset
+            if file_uses_relative_indices:
+                index_offset = 0
+            else:
+                if file_uses_vertex_offset:
+                    index_offset = mesh_struct.vertex_offset
+                else:
+                    # Look through the range and find the smallest index, take everything relative to that.
+                    index_offset = min(index_buffer[i] for i in range(indices_range.index_offset, indices_range.index_offset + indices_range.index_count))
             indices = array.array("H")
             for i in range(indices_range.index_offset, indices_range.index_offset + indices_range.index_count):
                 index = index_buffer[i]
@@ -319,7 +326,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 self.error.fatal(
                     f"Mesh uses a minimum absolute index of {min_index}, but file specifies a vertex offset of {mesh_struct.vertex_offset}")
 
-            vertex_start = mesh_struct.vertex_offset if file_uses_relative_indices else min_index
+            vertex_start = mesh_struct.vertex_offset if file_uses_vertex_offset else min_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 
             if (not file_uses_relative_indices) and vertex_end < max_index:

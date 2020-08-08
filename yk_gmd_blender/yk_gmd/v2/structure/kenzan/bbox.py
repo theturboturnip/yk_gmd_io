@@ -14,8 +14,8 @@ class BoundsDataStruct_Kenzan:
     aabox_bottomleft: Vector
     aabox_topright: Vector
 
-    padding: float = 0
-    padding2: float = 0
+    padding: float = 0.0
+    padding2: float = 0.0
 
 
 BoundsDataStruct_Kenzan_Unpack = StructureUnpacker(

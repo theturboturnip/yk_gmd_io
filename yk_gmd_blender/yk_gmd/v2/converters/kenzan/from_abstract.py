@@ -20,16 +20,15 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
-from yk_gmd_blender.yk_gmd.v2.structure.dragon.attribute import TextureIndexStruct_Dragon, AttributeStruct_Dragon
-from yk_gmd_blender.yk_gmd.v2.structure.dragon.file import FileData_Dragon
 from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.mesh import MeshStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan
 
 
-def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1:
+def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_Kenzan:
     box_rotation = Quaternion()
     box_rotation.identity()
 
@@ -37,15 +36,16 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1
     box_extents = (max_pos - center)
     sphere_radius = (box_extents).length
 
-    return BoundsDataStruct_YK1(
-        center=center,
+    return BoundsDataStruct_Kenzan(
+        sphere_pos=center,
         sphere_radius=sphere_radius,
-        box_extents=box_extents,
-        box_rotation=box_rotation
+
+        aabox_bottomleft=min_pos,
+        aabox_topright=max_pos
     )
 
 
-def bounds_of(mesh) -> BoundsDataStruct_YK1:
+def bounds_of(mesh) -> BoundsDataStruct_Kenzan:
     # min_pos = Vector(mesh.vertices_data.pos[0])
     # max_pos = Vector(mesh.vertices_data.pos[0])
     #
@@ -64,15 +64,15 @@ def bounds_of(mesh) -> BoundsDataStruct_YK1:
     return bounds_from_minmax(min_pos, max_pos)
 
 
-def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
+def combine_bounds(bounds: Iterable[BoundsDataStruct_Kenzan]) -> BoundsDataStruct_Kenzan:
     # min_pos = None
     # max_pos = None
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
     for bound in bounds:
-        min_for_bound = bound.center - bound.box_extents
-        max_for_bound = bound.center - bound.box_extents
+        min_for_bound = bound.aabox_bottomleft
+        max_for_bound = bound.aabox_topright
 
         if min_pos is None:
             min_pos = min_for_bound
@@ -99,14 +99,18 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
-def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
+def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
+                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Kenzan:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
     bones_count = len([x for x, stackop in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
     int16_bone_indices = bones_count > 255
     print(bones_count, int16_bone_indices)
+
+    if int16_bone_indices:
+        error.recoverable(f"This file has >255 bones. Pre-dragon engine titles have not been tested with this value.\n"
+                          f"To keep going uncheck \"Strict Export\" in the Export window.")
 
     packed_mesh_matrixlists, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
         rearranged_data.mesh_matrixlist, int16_bone_indices, big_endian=file_big_endian)
@@ -167,7 +171,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             rearranged_data.vertex_layout_groups):
         buffer_vertex_count = sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
 
-        vertex_buffer_arr.append(VertexBufferLayoutStruct_YK1(
+        vertex_buffer_arr.append(VertexBufferLayoutStruct_Kenzan(
             index=buffer_idx,
 
             vertex_count=buffer_vertex_count,
@@ -228,7 +232,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             # then add them to the data
             index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_reset_indices]
 
-            mesh_arr.append(MeshStruct_YK1(
+            mesh_arr.append(MeshStruct_Kenzan(
                 index=len(mesh_arr),
                 attribute_index=rearranged_data.attribute_set_id_to_index[id(gmd_mesh.attribute_set)],
                 vertex_buffer_index=buffer_idx,
@@ -268,7 +272,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             touched_meshes.add(id(mesh))
 
         print(f"object struct {i}")
-        obj_arr.append(ObjectStruct_YK1(
+        obj_arr.append(ObjectStruct_Kenzan(
             index=i,
             node_index_1=node_index,
             node_index_2=node_index,  # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
@@ -286,7 +290,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
-    make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
+    make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
@@ -298,17 +302,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         ))
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
-        texture_index = AttributeStruct_Dragon.calculate_texture_count(
-            texture_diffuse=(gmd_attribute_set.texture_diffuse),
-            texture_refl=(gmd_attribute_set.texture_refl),
-            texture_multi=(gmd_attribute_set.texture_multi),
-            texture_unk1=(gmd_attribute_set.texture_unk1),
-            texture_ts=(gmd_attribute_set.texture_rs),
-            texture_normal=(gmd_attribute_set.texture_normal),
-            texture_rt=(gmd_attribute_set.texture_rt),
-            texture_rd=(gmd_attribute_set.texture_rd),
-        )
-        attribute_arr.append(AttributeStruct_Dragon(
+        attribute_arr.append(AttributeStruct(
             index=i,
             material_index=rearranged_data.material_id_to_index[id(gmd_attribute_set.material)],
             shader_index=rearranged_data.shader_names_index[gmd_attribute_set.shader.name],
@@ -317,7 +311,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=texture_index,  # TODO: Set this properly?
+            texture_init_count=8,  # TODO: Set this properly?
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
@@ -329,10 +323,6 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
             texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
             texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
-
-            unk1_always_1=0,
-            unk2_always_0=1,
-            unk3_always_0=0
         ))
 
     file_endian_check = 1 if file_big_endian else 0
@@ -343,12 +333,11 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         flags[5] |= 0x8000_0000
     else:
         flags[5] &= ~0x8000_0000
-    # TODO: This is in all(?) Yakuza Dragon files
+    # TODO: This is in all(?) Yakuza Kiwami 1 files
     # It could be worth passing on the flags from original files if we're still exporting "over" them
-    flags[5] |= 0x22
-    flags[4] = 0x32b7c266 # TODO - wtf
+    flags[5] |= 0x20
 
-    return FileData_Dragon(
+    return FileData_Kenzan(
         magic="GSGM",
         file_endian_check=file_endian_check,
         vertex_endian_check=vertex_endian_check,

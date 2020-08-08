@@ -5,6 +5,8 @@ from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.converters.dragon.from_abstract import pack_abstract_contents_Dragon
 from yk_gmd_blender.yk_gmd.v2.converters.dragon.to_abstract import GMDAbstractor_Dragon
+from yk_gmd_blender.yk_gmd.v2.converters.kenzan.from_abstract import pack_abstract_contents_Kenzan
+from yk_gmd_blender.yk_gmd.v2.converters.kenzan.to_abstract import GMDAbstractor_Kenzan
 from yk_gmd_blender.yk_gmd.v2.converters.yk1.from_abstract import pack_abstract_contents_YK1
 from yk_gmd_blender.yk_gmd.v2.converters.yk1.to_abstract import GMDAbstractor_YK1
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import InvalidGMDFormatError
@@ -86,6 +88,9 @@ def read_abstract_scene_from_filedata_object(version_props: VersionProperties, c
         return GMDAbstractor_YK1(version_props, cast(FileData_YK1, contents), error_reporter).make_abstract_scene()
     elif version_props.major_version == GMDVersion.Dragon:
         return GMDAbstractor_Dragon(version_props, cast(FileData_Dragon, contents), error_reporter).make_abstract_scene()
+    elif version_props.major_version == GMDVersion.Kenzan:
+        return GMDAbstractor_Kenzan(version_props, cast(FileData_Kenzan, contents),
+                                error_reporter).make_abstract_scene()
     else:
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not abstractable")
 
@@ -102,6 +107,8 @@ def check_version_writeable(version_props: VersionProperties, error_reporter: Er
         return
     elif version_props.major_version == GMDVersion.Dragon:
         return
+    elif version_props.major_version == GMDVersion.Kenzan:
+        return
     else:
         error_reporter.fatal(f"File format version {version_props.version_str} is not writeable")
 
@@ -113,6 +120,9 @@ def pack_abstract_scene(version_props: VersionProperties, file_is_big_endian: bo
         return file_data
     elif version_props.major_version == GMDVersion.Dragon:
         file_data = pack_abstract_contents_Dragon(version_props, file_is_big_endian, vertices_are_big_endian, scene, error_reporter)
+        return file_data
+    elif version_props.major_version == GMDVersion.Kenzan:
+        file_data = pack_abstract_contents_Kenzan(version_props, file_is_big_endian, vertices_are_big_endian, scene, error_reporter)
         return file_data
     else:
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not packable")
@@ -130,6 +140,13 @@ def pack_file_data(version_props: VersionProperties, file_data: FileData_Common,
         data_bytearray = bytearray()
         try:
             FilePacker_Dragon.pack(file_data.file_is_big_endian(), file_data, data_bytearray)
+        except PackingValidationError as e:
+            error_reporter.fatal(str(e))
+        return data_bytearray
+    elif version_props.major_version == GMDVersion.Kenzan:
+        data_bytearray = bytearray()
+        try:
+            FilePacker_Kenzan.pack(file_data.file_is_big_endian(), file_data, data_bytearray)
         except PackingValidationError as e:
             error_reporter.fatal(str(e))
         return data_bytearray
