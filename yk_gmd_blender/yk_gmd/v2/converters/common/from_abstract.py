@@ -246,6 +246,10 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     shader_names, shader_names_index = build_pools(shader_names)
     node_names, node_names_index = build_pools(node_names)
 
+    # TODO - order attributesets first.
+    #  then, order meshes based only on attributesets.
+    #  then, order vertexlayouts independently.
+
     # ordering meshes:
     # build list of vertex buffer layouts to use
     expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=lambda a: a.attr_flags)
