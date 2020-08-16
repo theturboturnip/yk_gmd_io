@@ -246,18 +246,20 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     shader_names, shader_names_index = build_pools(shader_names)
     node_names, node_names_index = build_pools(node_names)
 
-    # TODO - order attributesets first.
+    # Order attributesets first.
     #  then, order meshes based only on attributesets.
     #  then, order vertexlayouts independently.
 
     # ordering meshes:
     # build list of vertex buffer layouts to use
-    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=lambda a: a.attr_flags)
+    # TODO - sorting order
+    # YK2 kiryu sort order is by prefix (sd_o*, sd_d*, sd_c*, sd_b*) and then some unknown ordering within those groups.
+    # This will achieve the requested ordering for prefixes, but not for other things. However, we only care about ordering transparent shaders together at the end.
+    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=lambda a: a.shader.name, reverse=True)
     known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
         mesh.vertices_data.layout
         for mesh in meshes
     }
-    print(known_vertex_layouts_set)
     # sort by descending flags int value (?)
     known_vertex_layouts_and_flags = [(l, generate_vertex_layout_packing_flags(l)) for l in known_vertex_layouts_set]
     known_vertex_layouts_and_flags.sort(key=lambda l_with_flags: l_with_flags[1], reverse=True)
@@ -269,7 +271,9 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         # emit buffer_layout, meshes_for_buffer
         vertex_layout_groups.append((layout, flag, meshes_for_buffer))
 
-    ordered_meshes = sum([ms for _, _, ms in vertex_layout_groups], [])
+    #ordered_meshes = sum([ms for _, _, ms in vertex_layout_groups], [])
+    ordered_meshes = meshes[:]
+    ordered_meshes.sort(key=lambda m: expected_attribute_set_order.index(m.attribute_set))
     mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
 
     mesh_id_to_object_index = {}
@@ -316,6 +320,9 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             ordered_attribute_sets.append(m.attribute_set)
     if ordered_attribute_sets:
         attribute_set_id_to_mesh_index_range[id(ordered_attribute_sets[-1])] = (attr_index_start, len(ordered_meshes))
+    if ordered_attribute_sets != expected_attribute_set_order:
+        error.recoverable(f"Export Error - Attribute Sets were reordered from the intended order!")
+
 
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)

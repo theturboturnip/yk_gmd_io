@@ -162,7 +162,8 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
     index_buffer = []
-    mesh_arr = []
+    # Dict of GMDMesh id -> (buffer_id, vertex_offset, vertex_count)
+    mesh_buffer_stats = {}
     for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(
             rearranged_data.vertex_layout_groups):
         buffer_vertex_count = sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
@@ -184,7 +185,6 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         for gmd_mesh in meshes_for_buffer:
             object_index = rearranged_data.mesh_id_to_object_index[id(gmd_mesh)]
             node = rearranged_data.ordered_objects[object_index]
-            node_index = rearranged_data.node_id_to_node_index[id(node)]
 
             vertex_offset = vertex_buffer_length
             vertex_count = len(gmd_mesh.vertices_data)
@@ -194,59 +194,68 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
                 error.fatal(f"Error while packing a mesh for {node.name}: {e}")
             vertex_buffer_length += vertex_count
 
-            if isinstance(gmd_mesh, GMDSkinnedMesh):
-                matrix_list = rearranged_data.mesh_id_to_matrixlist[id(gmd_mesh)]
-            else:
-                matrix_list = []
-
-            if version_properties.relative_indices_used:
-                pack_index = lambda x: x
-            else:
-                pack_index = lambda x: 0xFFFF if x == 0xFFFF else (x + vertex_offset)
-
-            # Set up the pointer for the next set of indices
-            triangle_indices = IndicesStruct(
-                index_offset=len(index_buffer),
-                index_count=len(gmd_mesh.triangle_indices)
-            )
-            # then add them to the data
-            index_buffer += [pack_index(x) for x in gmd_mesh.triangle_indices]
-
-            # Set up the pointer for the next set of indices
-            triangle_strip_noreset_indices = IndicesStruct(
-                index_offset=len(index_buffer),
-                index_count=len(gmd_mesh.triangle_strip_noreset_indices)
-            )
-            # then add them to the data
-            index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_noreset_indices]
-
-            # Set up the pointer for the next set of indices
-            triangle_strip_reset_indices = IndicesStruct(
-                index_offset=len(index_buffer),
-                index_count=len(gmd_mesh.triangle_strip_reset_indices)
-            )
-            # then add them to the data
-            index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_reset_indices]
-
-            mesh_arr.append(MeshStruct_YK1(
-                index=len(mesh_arr),
-                attribute_index=rearranged_data.attribute_set_id_to_index[id(gmd_mesh.attribute_set)],
-                vertex_buffer_index=buffer_idx,
-                object_index=object_index,
-                node_index=node_index,
-
-                matrixlist_offset=packed_mesh_matrix_strings_index[tuple(matrix_list)] if matrix_list else 0,
-                matrixlist_length=len(matrix_list),
-
-                vertex_offset=vertex_offset,
-                vertex_count=vertex_count,
-
-                triangle_list_indices=triangle_indices,
-                noreset_strip_indices=triangle_strip_noreset_indices,
-                reset_strip_indices=triangle_strip_reset_indices,
-            ))
+            mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset, vertex_count)
 
         pass
+
+    mesh_arr = []
+    for gmd_mesh in rearranged_data.ordered_meshes:
+        object_index = rearranged_data.mesh_id_to_object_index[id(gmd_mesh)]
+        node = rearranged_data.ordered_objects[object_index]
+        node_index = rearranged_data.node_id_to_node_index[id(node)]
+        (buffer_idx, vertex_offset, vertex_count) = mesh_buffer_stats[id(gmd_mesh)]
+
+        if isinstance(gmd_mesh, GMDSkinnedMesh):
+            matrix_list = rearranged_data.mesh_id_to_matrixlist[id(gmd_mesh)]
+        else:
+            matrix_list = []
+
+        if version_properties.relative_indices_used:
+            pack_index = lambda x: x
+        else:
+            pack_index = lambda x: 0xFFFF if x == 0xFFFF else (x + vertex_offset)
+
+        # Set up the pointer for the next set of indices
+        triangle_indices = IndicesStruct(
+            index_offset=len(index_buffer),
+            index_count=len(gmd_mesh.triangle_indices)
+        )
+        # then add them to the data
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_indices]
+
+        # Set up the pointer for the next set of indices
+        triangle_strip_noreset_indices = IndicesStruct(
+            index_offset=len(index_buffer),
+            index_count=len(gmd_mesh.triangle_strip_noreset_indices)
+        )
+        # then add them to the data
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_noreset_indices]
+
+        # Set up the pointer for the next set of indices
+        triangle_strip_reset_indices = IndicesStruct(
+            index_offset=len(index_buffer),
+            index_count=len(gmd_mesh.triangle_strip_reset_indices)
+        )
+        # then add them to the data
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_reset_indices]
+
+        mesh_arr.append(MeshStruct_YK1(
+            index=len(mesh_arr),
+            attribute_index=rearranged_data.attribute_set_id_to_index[id(gmd_mesh.attribute_set)],
+            vertex_buffer_index=buffer_idx,
+            object_index=object_index,
+            node_index=node_index,
+
+            matrixlist_offset=packed_mesh_matrix_strings_index[tuple(matrix_list)] if matrix_list else 0,
+            matrixlist_length=len(matrix_list),
+
+            vertex_offset=vertex_offset,
+            vertex_count=vertex_count,
+
+            triangle_list_indices=triangle_indices,
+            noreset_strip_indices=triangle_strip_noreset_indices,
+            reset_strip_indices=triangle_strip_reset_indices,
+        ))
 
     obj_arr = []
     # This isn't going to have duplicates -> don't bother with the packing

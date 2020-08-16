@@ -12,7 +12,7 @@ class GMDAbstractor_Kenzan(GMDAbstractor_Common[FileData_Kenzan]):
         start_time = time.time()
 
         bytestrings_are_16bit = bool(self.file_data.flags[5] & 0x8000_0000)
-        print(f"bytestirngs 16 {bytestrings_are_16bit}")
+        #print(f"bytestirngs 16 {bytestrings_are_16bit}")
         vertices_are_big_endian = self.file_data.vertices_are_big_endian()
 
         abstract_vertex_buffers = self.build_vertex_buffers_from_structs(

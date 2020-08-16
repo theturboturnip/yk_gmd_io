@@ -2,6 +2,7 @@ import argparse
 import math
 from pathlib import Path
 
+from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
     pack_abstract_scene, pack_file_data
@@ -45,6 +46,19 @@ def print_each(iter):
     for x in iter:
         print(x)
 
+
+def unpack_drawlist_bytes(file_data: FileData_Common, obj):
+    offset = obj.drawlist_rel_ptr
+    big_endian = file_data.file_is_big_endian()
+    drawlist_len, offset = c_uint16.unpack(big_endian, file_data.object_drawlist_bytes, offset)
+    zero, offset = c_uint16.unpack(big_endian, file_data.object_drawlist_bytes, offset)
+    data = [drawlist_len, zero]
+    for i in range(drawlist_len):
+        material_idx, offset = c_uint16.unpack(big_endian, file_data.object_drawlist_bytes, offset)
+        mesh_idx, offset = c_uint16.unpack(big_endian, file_data.object_drawlist_bytes, offset)
+        data.append(material_idx)
+        data.append(mesh_idx)
+    return data
 
 def old_main(args):
 
@@ -273,9 +287,9 @@ if __name__ == '__main__':
     new_file_bytearray = pack_file_data(version_props, unabstracted_file_data, error_reporter)
 
     new_version_props, new_header, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
-    print(version_props == new_version_props)
-    print(version_props)
-    print(new_version_props)
+    #print(version_props == new_version_props)
+    #print(version_props)
+    #print(new_version_props)
     new_scene = read_abstract_scene_from_filedata_object(new_version_props, new_file_data, error_reporter)
 
     if args.output_dir:
