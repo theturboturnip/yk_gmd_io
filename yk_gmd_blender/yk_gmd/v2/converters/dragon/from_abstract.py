@@ -295,7 +295,16 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
-    make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
+    # DRAGON ENGINE DIFFERENCE - ordered textures
+    # duplicates are allowed, each attribute set *must* use contiguous texture indices.
+    ordered_texture_arr = []
+    def make_texture_index(name: str):
+        if name:
+            idx = len(ordered_texture_arr)
+            ordered_texture_arr.append(ChecksumStrStruct.make_from_str(name))
+            return TextureIndexStruct_Dragon(idx)
+        return TextureIndexStruct_Dragon(-1)
+    #make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
@@ -330,14 +339,15 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
+# DRAGON ENGINE CHANGE - TEXTURES MUST BE DECLARED IN ORDER TO MAKE SURE THE RANGE IS CORRECT
             texture_diffuse=make_texture_index(gmd_attribute_set.texture_diffuse),
-            texture_refl=make_texture_index(gmd_attribute_set.texture_refl),
             texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
-            texture_unk1=make_texture_index(gmd_attribute_set.texture_unk1),
-            texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
-            texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
             texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
+            texture_unk1=make_texture_index(gmd_attribute_set.texture_unk1),
+            texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
+            texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
+            texture_refl=make_texture_index(gmd_attribute_set.texture_refl),
 
             unk1_always_1=0,
             unk2_always_0=1,
@@ -375,7 +385,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         matrix_arr=rearranged_data.ordered_matrices,
         vertex_buffer_arr=vertex_buffer_arr,
         vertex_data=bytes(vertex_data_bytearray),
-        texture_arr=rearranged_data.texture_names,
+        texture_arr=ordered_texture_arr, # DRAGON ENGINE DIFFERENCE
         shader_arr=rearranged_data.shader_names,
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,

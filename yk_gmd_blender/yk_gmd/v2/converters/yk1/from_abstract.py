@@ -272,6 +272,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         drawlist_rel_ptr = len(drawlist_bytearray)
         c_uint16.pack(file_big_endian, len(obj.mesh_list), drawlist_bytearray)
         c_uint16.pack(file_big_endian, 0, drawlist_bytearray)
+        # TODO - is order important here?
         for mesh in obj.mesh_list:
             c_uint16.pack(file_big_endian, rearranged_data.attribute_set_id_to_index[id(mesh.attribute_set)],
                           drawlist_bytearray)

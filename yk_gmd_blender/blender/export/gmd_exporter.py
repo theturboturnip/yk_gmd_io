@@ -584,6 +584,8 @@ class GMDSceneGatherer:
         else:
             self.error.fatal(f"Unknown GMDVersion {gmd_material_origin_version}")
 
+        # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data, and compare against provided in the node.
+
         attribute_set = GMDAttributeSet(
             shader=shader,
 
