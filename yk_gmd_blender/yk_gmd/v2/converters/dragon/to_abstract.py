@@ -16,6 +16,8 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
         print(f"bytestirngs 16 {bytestrings_are_16bit}")
         vertices_are_big_endian = self.file_data.vertices_are_big_endian()
 
+        # TODO - thought on dragon engine normals - they're kinda weird
+        #  they could be compressed into 2 floats and then the other ones used for other stuff? like the w component
         abstract_vertex_buffers = self.build_vertex_buffers_from_structs(
                                                                     self.file_data.vertex_buffer_arr, self.file_data.vertex_data,
                                                                     )

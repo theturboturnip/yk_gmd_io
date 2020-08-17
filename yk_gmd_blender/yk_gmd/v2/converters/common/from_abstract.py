@@ -1,3 +1,5 @@
+import functools
+import re
 from dataclasses import dataclass
 from typing import TypeVar, Tuple, List, Dict, Iterable, Callable, Set, Union
 
@@ -73,10 +75,9 @@ def build_index_mapping(pool: List[T], key: Callable[[T], TKey] = lambda x: x) -
 
 def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str, int]]:
     # Given a set of strings, build the list of checksumstrs
-    # sort the list by checksum (?) - I think RGG do this
+    # don't sort the list by checksum - RGG *may* do this, but it's unlikely to affect anything
     # return mapping of string -> index in list
     pool = [ChecksumStrStruct.make_from_str(s) for s in strs]
-    pool.sort(key=lambda css: css.checksum)
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
@@ -241,9 +242,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         if mesh.attribute_set.texture_rd:
             texture_names.add(mesh.attribute_set.texture_rd)
 
-    # build texture, shader, node name pools
+    # build texture, node name pools
     texture_names, texture_names_index = build_pools(texture_names)
-    shader_names, shader_names_index = build_pools(shader_names)
     node_names, node_names_index = build_pools(node_names)
 
     # Order attributesets first.
@@ -252,10 +252,42 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
     # ordering meshes:
     # build list of vertex buffer layouts to use
-    # TODO - sorting order
+    # TODO - sorting order is required for Dragon Engine, but not other engines.
+    # TODO - with this setup K2 kiryu has unused shader names?
     # YK2 kiryu sort order is by prefix (sd_o*, sd_d*, sd_c*, sd_b*) and then some unknown ordering within those groups.
     # This will achieve the requested ordering for prefixes, but not for other things. However, we only care about ordering transparent shaders together at the end.
-    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=lambda a: a.shader.name, reverse=True)
+    def compare_attr_sets(a1: GMDAttributeSet, a2: GMDAttributeSet):
+        a1_prefix = re.match(r'^[a-z]+_[a-z]', a1.shader.name).group(0)
+        a2_prefix = re.match(r'^[a-z]+_[a-z]', a2.shader.name).group(0)
+
+        print(f"'{a1_prefix}' '{a2_prefix}'")
+
+        if a1_prefix < a2_prefix:
+            # sort by inverted prefix first
+            return 1
+        elif a1_prefix > a2_prefix:
+            # sort by inverted prefix first
+            return -1
+        else:
+            # just sort by name???
+            if a1.shader.name > a2.shader.name:
+                return 1
+            elif a1.shader.name < a2.shader.name:
+                return -1
+            else:
+                return 0
+
+    # Order the attribute sets, and get a nice order for shaders too
+    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=functools.cmp_to_key(compare_attr_sets))
+    shader_names = [a.shader.name for a in expected_attribute_set_order]
+    # remove dupes
+    shader_names = list(dict.fromkeys(shader_names))
+    print("\n".join(x for x in shader_names))
+    print()
+    shader_names, shader_names_index = build_pools(shader_names)
+    print("\n".join(x.text for x in shader_names))
+    print(shader_names_index)
+
     known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
         mesh.vertices_data.layout
         for mesh in meshes
