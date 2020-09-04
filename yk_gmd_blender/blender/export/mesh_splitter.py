@@ -387,7 +387,7 @@ class VertexFetcher:
             if weight_sum > 0:
                 b_weights = [(vtx_group, weight / weight_sum) for (vtx_group, weight) in b_weights]
                 # Convert the weights to the yk_gmd abstract BoneWeight format
-                weights_list = [BoneWeight(bone=self.vertex_group_bone_index_map[vtx], weight=weight) for vtx, weight in
+                weights_list = [BoneWeight(bone=self.vertex_group_bone_index_map[vtx] if weight else 0, weight=weight) for vtx, weight in
                                 b_weights]
                 vertex_buffer.bone_weights.append((
                     weights_list[0],
