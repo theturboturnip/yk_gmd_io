@@ -25,8 +25,15 @@ class GMDMaterial(GMDVersionRestricted):
     """
     origin_data: Union[MaterialStruct_YK1, MaterialStruct_Kenzan]
 
+    @staticmethod
+    def target_struct_type(version: GMDVersion):
+        if version in [GMDVersion.Kiwami1, GMDVersion.Dragon]:
+            return MaterialStruct_YK1
+        else:
+            return MaterialStruct_Kenzan
+
     def port_to_version(self, new_version: GMDVersion) -> 'GMDMaterial':
-        if new_version == self.origin_version:
+        if self.target_struct_type(new_version) == self.target_struct_type(self.origin_version):
             return self
         if isinstance(self.origin_data, MaterialStruct_YK1) and new_version == GMDVersion.Kenzan:
             return GMDMaterial(
@@ -43,7 +50,7 @@ class GMDMaterial(GMDVersionRestricted):
                     padding=0,
                 )
             )
-        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version == GMDVersion.Kiwami1:
+        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version in [GMDVersion.Kiwami1, GMDVersion.Dragon]:
             return GMDMaterial(
                 origin_version=new_version,
                 origin_data=MaterialStruct_YK1(
