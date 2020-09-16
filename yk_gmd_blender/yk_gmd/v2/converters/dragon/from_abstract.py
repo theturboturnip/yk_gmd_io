@@ -135,6 +135,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             bone_pos = gmd_node.bone_pos
             bone_axis = gmd_node.bone_axis
         else:
+            # TODO - UnskinnedObjects should also export a bone_pos equal to their world-space position
             bone_pos = Vector((gmd_node.pos.x, gmd_node.pos.y, gmd_node.pos.z, 1))
             bone_axis = Quaternion((0, 0, 0, 0))
             pass

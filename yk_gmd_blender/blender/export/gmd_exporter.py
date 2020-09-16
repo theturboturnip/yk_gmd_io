@@ -17,7 +17,7 @@ from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd, \
-    transform_position_gmd_to_blender
+    transform_position_gmd_to_blender, invert_transformation_matrix
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
@@ -309,12 +309,10 @@ class GMDSceneGatherer:
             elif armature_modifiers and not object.vertex_groups:
                 self.error.fatal(f"Mesh {object.name} is a child of the skeleton, but it doesn't have any vertex groups.")
             elif object.vertex_groups and not armature_modifiers:
-                # TODO - .info
                 self.error.info(f"Mesh {object.name} is a child of the skeleton, but it doesn't have an armature modifier!\nIt will still be exported")
                 # TODO - only do this if .lenient?
                 root_skinned_objects.append(object)
             else:
-                # TODO - .info
                 self.error.info(f"Mesh {object.name} is a child of the skeleton, but it doesn't have an armature modifier or a vertex group! Exporting as an unskinned mesh")
                 unskinned_object_roots.append((None, object))
 
@@ -483,25 +481,25 @@ class GMDSceneGatherer:
         # The transformation is applied at the mesh level
 
         # matrix is inverse world space
-        # gmd_world_matrix = transform_matrix_blender_to_gmd(object.matrix_world)
-        # # pos, rot, scale are local
-        # adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location, object.rotation_quaternion, object.scale)
+        gmd_world_matrix = transform_matrix_blender_to_gmd(object.matrix_world)
+        # pos, rot, scale are local
+        adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location, object.rotation_quaternion, object.scale)
 
         gmd_object = GMDUnskinnedObject(
             name=self.remove_blender_duplicate(object.name),
             node_type=NodeType.UnskinnedMesh,
 
-            pos=Vector((0,0,0)),
-            rot=Quaternion(),
-            scale=Vector((1,1,1)),
+            pos=adjusted_pos,#Vector((0,0,0)),
+            rot=adjusted_rot,#Quaternion(),
+            scale=adjusted_scale,#Vector((1,1,1)),
             parent=parent,
 
-            matrix=Matrix.Identity(4)#gmd_world_matrix.inverted()
+            matrix=invert_transformation_matrix(gmd_world_matrix)#Matrix.Identity(4)#gmd_world_matrix.inverted()
         )
         if not parent:
             self.node_roots.append(gmd_object)
 
-        # TODO - add meshes to gmd_object
+        # Add meshes to gmd_object
         if not object.data.vertices:
             print(f"Object {object.name} has no mesh")
         else:
@@ -585,6 +583,7 @@ class GMDSceneGatherer:
             self.error.fatal(f"Unknown GMDVersion {gmd_material_origin_version}")
 
         # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data, and compare against provided in the node.
+        # TODO - image nodes will null textures exist - those currently break the export
 
         attribute_set = GMDAttributeSet(
             shader=shader,

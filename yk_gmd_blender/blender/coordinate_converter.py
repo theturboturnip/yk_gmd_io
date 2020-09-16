@@ -36,3 +36,17 @@ def transform_to_matrix(pos: Vector, rot: Quaternion, scale: Vector) -> Matrix:
     pos_matrix = Matrix.Translation(pos.xyz)
     pos_matrix.resize_4x4()
     return pos_matrix @ rot_matrix @ scale_matrix
+
+
+def invert_transformation_matrix(mat: Matrix) -> Matrix:
+    # https://math.stackexchange.com/a/152686
+    p = mat.to_3x3()
+    p_inv = p.inverted()
+    v = mat.col[3][0:2]
+
+    neg_p_inv_v = -(p_inv @ Vector(v))
+
+    m_inv = p_inv.to_4x4()
+    m_inv.col[3] = list(neg_p_inv_v[0:2]) + [1]
+
+    return m_inv
