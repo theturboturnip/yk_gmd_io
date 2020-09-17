@@ -11,7 +11,7 @@ from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 
 
-class YakuzaPropertyGroup(PropertyGroup):
+class YakuzaAttrSetPropertyGroup(PropertyGroup):
     """
     PropertyGroup holding all of the Yakuza data for an attribute set that can't be easily changed by the user
     or stored in the Yakuza Shader node.
@@ -37,9 +37,9 @@ class YakuzaPropertyGroup(PropertyGroup):
     material_origin_type: IntProperty(name="GMDMaterial origin type")
     material_json: StringProperty(name="GMDMaterial data JSON")
 
-class YakuzaPropertyPanel(bpy.types.Panel):
+class YakuzaAttrSetPropertyPanel(bpy.types.Panel):
     """
-    Panel that displays the YakuzaPropertyGroup attached to the selected material.
+    Panel that displays the YakuzaAttrSetPropertyGroup attached to the selected material.
     """
 
     bl_label = "Yakuza Properties"

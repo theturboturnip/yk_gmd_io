@@ -20,6 +20,8 @@ class GMDMesh:
 
     attribute_set: GMDAttributeSet
 
+    flags: int
+
     def __post_init__(self):
         if not hasattr(self, "relevant_bones") and self.vertices_data.bone_weights:
             raise TypeError(f"GMDMesh {self} which is not skinned has vertices with bone weights")

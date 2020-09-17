@@ -30,15 +30,18 @@
 import bpy
 from bpy.props import PointerProperty
 
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel
+from yk_gmd_blender.blender.materials import YakuzaAttrSetPropertyGroup, YakuzaAttrSetPropertyPanel
+from yk_gmd_blender.blender.meshes import YakuzaMeshPropertyPanel, YakuzaMeshPropertyGroup
 from .export.gmd_exporter import ExportGMD, menu_func_export
 from .importer.gmd_importer import ImportGMD, menu_func_import
 
 classes = (
     ImportGMD,
     ExportGMD,
-    YakuzaPropertyGroup,
-    YakuzaPropertyPanel,
+    YakuzaAttrSetPropertyGroup,
+    YakuzaAttrSetPropertyPanel,
+    YakuzaMeshPropertyGroup,
+    YakuzaMeshPropertyPanel
 )
 
 def register():
@@ -49,11 +52,13 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
-    bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
+    bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaAttrSetPropertyGroup)
+    bpy.types.Mesh.yakuza_data = PointerProperty(type=YakuzaMeshPropertyGroup)
 
 
 def unregister():
     del bpy.types.Material.yakuza_data
+    del bpy.types.Mesh.yakuza_data
 
     for c in classes:
         bpy.utils.unregister_class(c)

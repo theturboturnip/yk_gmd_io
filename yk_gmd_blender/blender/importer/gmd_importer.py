@@ -361,6 +361,12 @@ class GMDSceneCreator:
 
             custom_normals = []
 
+            # TODO - this just fucking breaks
+            flag_set = {gmd_mesh.flags for gmd_mesh in gmd_node.mesh_list}
+            if len(flag_set) > 1:
+                self.error.recoverable(f"Meshes for object {gmd_node.name} have multiple different sets of flags {flag_set}")
+            flag_str = f"{flag_set.pop() if flag_set else 0:b}"
+
             # 1. Make a single BMesh containing all meshes referenced by this object.
             # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
             # originally split up for the sake of bone limits, and not merging them would make blender bug up.
@@ -402,6 +408,9 @@ class GMDSceneCreator:
             overall_mesh.normals_split_custom_set_from_vertices(custom_normals)
             overall_mesh.auto_smooth_angle = 0
             overall_mesh.use_auto_smooth = True
+            overall_mesh.yakuza_data.inited = True
+            overall_mesh.yakuza_data.origin_version = self.gmd_scene.version.value
+            overall_mesh.yakuza_data.flag_str = flag_str
 
             # Create the final object representing this GMDNode
             mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
@@ -718,7 +727,8 @@ class GMDSceneCreator:
                 triangle_strip_noreset_indices=array.array('i'),
                 triangle_strip_reset_indices=array.array('i'),
 
-                relevant_bones=relevant_bones
+                relevant_bones=relevant_bones,
+                flags=gmd_meshes[0].flags,
             )
         else:
             return GMDMesh(
@@ -728,6 +738,7 @@ class GMDSceneCreator:
                 triangle_indices=triangle_indices,
                 triangle_strip_noreset_indices=array.array('i'),
                 triangle_strip_reset_indices=array.array('i'),
+                flags=gmd_meshes[0].flags,
             )
 
     def make_material(self, collection: bpy.types.Collection, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:

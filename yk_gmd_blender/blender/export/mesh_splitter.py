@@ -99,7 +99,7 @@ class SubmeshBuilder:
 
         return triangle_list, triangle_strip_noreset, triangle_strip_reset
 
-    def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet]):
+    def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet], mesh_flags: int):
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
 
         return GMDMesh(
@@ -108,6 +108,7 @@ class SubmeshBuilder:
             triangle_indices=triangle_list,
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,
+            flags=mesh_flags,
         )
 
 
@@ -192,7 +193,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
                 self.weighted_bone_faces[bone].append(triangle_index)
 
 
-    def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet]) -> GMDSkinnedMesh:
+    def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet], mesh_flags: int) -> GMDSkinnedMesh:
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
 
         return GMDSkinnedMesh(
@@ -202,7 +203,8 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,
 
-            relevant_bones=self.relevant_gmd_bones
+            relevant_bones=self.relevant_gmd_bones,
+            flags=mesh_flags,
         )
 
 
@@ -609,7 +611,7 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 
 #def prepare_mesh()
 
-def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object, materials: List[GMDAttributeSet], bone_name_map: Dict[str, GMDBone], bone_limit: int,
+def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object, materials: List[GMDAttributeSet], mesh_flags: int, bone_name_map: Dict[str, GMDBone], bone_limit: int,
                                       error: ErrorReporter) -> List[GMDSkinnedMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
@@ -644,13 +646,13 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
             error.fatal(f"split_mesh_by_material gave a {type(builder).__name__} when a SkinnedSubmeshBuilder was expected")
         for split_builder in split_submesh_builder_by_bones(builder, bone_limit, error):
             print(f"Adding skinned mesh of vert count {len(split_builder.vertices)}")
-            gmd_skinned_meshes.append(split_builder.build_to_gmd(materials))
+            gmd_skinned_meshes.append(split_builder.build_to_gmd(materials, mesh_flags))
 
     return gmd_skinned_meshes
 
 
 def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,
-                                        materials: List[GMDAttributeSet], error: ErrorReporter) -> List[GMDMesh]:
+                                        materials: List[GMDAttributeSet], mesh_flags: int, error: ErrorReporter) -> List[GMDMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
     dg = context.evaluated_depsgraph_get()
@@ -676,4 +678,4 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
 
     #bm.free()
 
-    return [builder.build_to_gmd(materials) for builder in submesh_builders]
+    return [builder.build_to_gmd(materials, mesh_flags) for builder in submesh_builders]

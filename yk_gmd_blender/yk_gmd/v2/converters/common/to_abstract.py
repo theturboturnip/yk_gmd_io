@@ -349,7 +349,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
                     triangle_strip_reset_indices=triangle_strip_reset_indices,
 
-                    attribute_set=abstract_attributes[mesh_struct.attribute_index]
+                    attribute_set=abstract_attributes[mesh_struct.attribute_index],
+
+                    flags=mesh_struct.flags
                 ))
             else:
                 meshes.append(GMDMesh(
@@ -359,7 +361,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
                     triangle_strip_reset_indices=triangle_strip_reset_indices,
 
-                    attribute_set=abstract_attributes[mesh_struct.attribute_index]
+                    attribute_set=abstract_attributes[mesh_struct.attribute_index],
+
+                    flags=mesh_struct.flags
                 ))
 
         return meshes

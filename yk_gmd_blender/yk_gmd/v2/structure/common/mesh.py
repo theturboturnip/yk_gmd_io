@@ -44,3 +44,5 @@ class MeshStruct:
     triangle_list_indices: IndicesStruct
     noreset_strip_indices: IndicesStruct
     reset_strip_indices: IndicesStruct
+
+    flags: int = 0

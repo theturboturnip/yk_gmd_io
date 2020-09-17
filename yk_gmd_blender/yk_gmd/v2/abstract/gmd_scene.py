@@ -5,6 +5,7 @@ from typing import Dict, List, Generic, TypeVar, Optional, Generator
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
 
 TNode = TypeVar('TNode', bound=GMDNode)
 
@@ -43,6 +44,7 @@ class HierarchyData(Generic[TNode]):
 
 @dataclass(repr=False)
 class GMDScene:
+    version: GMDVersion
     name: str
 
     # Node Hierarchy stuff

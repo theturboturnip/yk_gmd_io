@@ -70,6 +70,7 @@ class GMDAbstractor_YK1(GMDAbstractor_Common[FileData_YK1]):
 
         roots = [n for n in abstract_nodes if not n.parent]
         return GMDScene(
+            version=self.version_props.major_version,
             name=self.file_data.name.text,
 
             overall_hierarchy=HierarchyData[GMDNode](roots),

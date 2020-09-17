@@ -14,7 +14,7 @@ from mathutils import Matrix, Vector, Quaternion
 
 from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_mesh_object, \
     split_skinned_blender_mesh_object
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
+from yk_gmd_blender.blender.materials import YakuzaAttrSetPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd, \
     transform_position_gmd_to_blender, invert_transformation_matrix
@@ -84,7 +84,8 @@ class ExportGMD(Operator, ExportHelper):
 
             original_scene = GMDScene(
                 name=file_data.name.text,
-                overall_hierarchy=HierarchyData([])
+                overall_hierarchy=HierarchyData([]),
+                version=version_props.major_version
             )
             try_copy_bones = self.copy_bones_from_file
             if self.copy_bones_from_file or self.debug_compare_matrices:
@@ -151,7 +152,8 @@ class GMDSceneGatherer:
     def build(self) -> GMDScene:
         return GMDScene(
             name=self.name,
-            overall_hierarchy=HierarchyData(self.node_roots)
+            overall_hierarchy=HierarchyData(self.node_roots),
+            version=self.export_version
         )
 
     def name_matches_expected(self, name, expected):
@@ -430,6 +432,24 @@ class GMDSceneGatherer:
         for root_bone in original_root_bones:
             copy_bone(root_bone, None)
 
+    def get_mesh_flags(self, object: bpy.types.Object) -> int:
+        if object.data.yakuza_data.inited:
+            if object.data.yakuza_data.origin_version == GMDVersion.Kenzan.value:
+                self.error.info(
+                    f"Object {object.name} has nonzero Mesh flags, but is exporting to Kenzan which doesn't store them. They will be stored as all 0's.")
+                return 0
+            else:
+                if object.data.yakuza_data.origin_version != self.original_scene.version.value:
+                    self.error.info(f"Object {object.name} has nonzero Mesh flags, which are being exported into a different engine! This may cause issues.")
+                try:
+                    return int(object.data.yakuza_data.flag_str, base=2)
+                except ValueError as ex:
+                    self.error.recoverable(
+                        f"Object {object.name} has invalid Mesh flag string {object.data.yakuza_data.flag_str}. {ex}")
+        else:
+            self.error.info(f"Object {object.name} has no Yakuza data, so will export without mesh flags.")
+            return 0
+
     def export_skinned_object(self, context: bpy.types.Context, object: bpy.types.Object):
         """
         Export a Blender object into a GMDSkinnedObject
@@ -459,8 +479,9 @@ class GMDSceneGatherer:
             if any(not attr.shader.vertex_buffer_layout.weights_unpacker for attr in attribute_sets):
                 self.error.fatal(f"Object {object.name} uses a material which requires it to be not-skinned.\n"
                                  f"Try unparenting it from the skeleton, or changing to a different material.")
-            #bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
-            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32, self.error)
+            mesh_flags = self.get_mesh_flags(object)
+            bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
+            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, mesh_flags, self.bone_name_map, bone_limit, self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
 
@@ -509,7 +530,8 @@ class GMDSceneGatherer:
             if any(attr.shader.vertex_buffer_layout.weights_unpacker for attr in attribute_sets):
                 self.error.fatal(f"Object {object.name} uses a material which requires it to be skinned.\n"
                                  f"Try parenting it to the skeleton using Ctrl P > Empty Weights, or changing it to a different material.")
-            gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
+            mesh_flags = self.get_mesh_flags(object)
+            gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, mesh_flags, self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
 
@@ -544,7 +566,7 @@ class GMDSceneGatherer:
                 f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
         yakuza_shader_node = cast(ShaderNodeGroup, yakuza_shader_nodes[0])
 
-        yakuza_data: YakuzaPropertyGroup = material.yakuza_data
+        yakuza_data: YakuzaAttrSetPropertyGroup = material.yakuza_data
         vertex_layout_flags = int(yakuza_data.shader_vertex_layout_flags, base=16)
         vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, self.error)
         #print(f"material {material.name} shader {yakuza_data.shader_name} flags {vertex_layout_flags} layout {vertex_layout}")
