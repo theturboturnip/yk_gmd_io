@@ -526,7 +526,7 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
 
 def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilder, bone_limit: int, error: ErrorReporter) -> List[SkinnedSubmeshBuilder]:
     skinned_submesh_builder.reduce_to_used_bones()
-    if len(skinned_submesh_builder.relevant_gmd_bones) <= bone_limit:
+    if len(skinned_submesh_builder.relevant_gmd_bones) <= bone_limit or bone_limit <= 0:
         return [skinned_submesh_builder]
 
     # Split SubmeshHelpers so that you never get >32 unique bones weighting a single submesh
