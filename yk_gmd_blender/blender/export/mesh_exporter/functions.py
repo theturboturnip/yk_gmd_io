@@ -295,8 +295,10 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
     return [builder for builder in submesh_builders if len(builder.vertices)]
 
 
-def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilder, bone_limit: int, error: ErrorReporter) -> List[SkinnedSubmeshBuilder]:
+def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilder, bone_limit: int, object_name: str, error: ErrorReporter) -> List[SkinnedSubmeshBuilder]:
     skinned_submesh_builder.reduce_to_used_bones()
+    if not skinned_submesh_builder.relevant_gmd_bones:
+        error.fatal(f"A submesh of {object_name} does not reference any bones. Make sure all of the vertices of {object_name} have their bone weights correct!")
     if len(skinned_submesh_builder.relevant_gmd_bones) <= bone_limit:
         return [skinned_submesh_builder]
 
@@ -412,10 +414,11 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
     #bm.free()
 
     gmd_skinned_meshes = []
+    print(f"Exporting skinned meshes for {object.name}")
     for builder in submesh_builders:
         if not isinstance(builder, SkinnedSubmeshBuilder):
             error.fatal(f"split_mesh_by_material gave a {type(builder).__name__} when a SkinnedSubmeshBuilder was expected")
-        for split_builder in split_submesh_builder_by_bones(builder, bone_limit, error):
+        for split_builder in split_submesh_builder_by_bones(builder, bone_limit, object.name, error):
             print(f"Adding skinned mesh of vert count {len(split_builder.vertices)}")
             gmd_skinned_meshes.append(split_builder.build_to_gmd(materials))
 

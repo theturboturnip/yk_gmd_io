@@ -268,14 +268,16 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
 
         def read_bytestring(start_byte: int, length: int):
-            if not mesh_matrix_bytestrings:
+            if (not mesh_matrix_bytestrings) or (length == 0):
                 return []
 
             unpack_type = c_uint16 if bytestrings_are_16bit else c_uint8
             #len_bytes = length * unpack_type.sizeof()
             actual_len, offset = unpack_type.unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=start_byte)
             if actual_len != length:
-                self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}")
+                actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte+actual_len*unpack_type.sizeof()]
+                actual_bytes = [f"{x:02x}" for x in actual_bytes]
+                self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
             print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
             # data_start = start_byte + 1
             # data_end = data_start + len_bytes
