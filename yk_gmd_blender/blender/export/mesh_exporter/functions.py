@@ -125,7 +125,8 @@ class VertexFetcher:
     def uv_for(self, uv_idx: int, loop: bpy.types.MeshLoopTriangle, tri_index: int):
         component_count, layer = self.uv_layers[uv_idx]
         if layer:
-            if component_count == 2:
+            # If component_count == 2 then we should be storing it in a UV layer. For backwards compatibility, check if the layer actually has a "uv" section
+            if component_count == 2 and hasattr(layer.data[loop.loops[tri_index]], "uv"):
                 blender_uv = layer.data[loop.loops[tri_index]].uv
                 return Vector((blender_uv[0], 1 - blender_uv[1]))
             else:
