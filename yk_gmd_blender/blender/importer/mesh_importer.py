@@ -42,6 +42,7 @@ def gmd_meshes_to_bmesh(gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]], 
                     return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
 
             index_start_to_adjust_bones = len(merged_vertex_buffer)
+            merged_vertex_buffer += gmd_mesh.vertices_data
             for i in range(index_start_to_adjust_bones, len(merged_vertex_buffer)):
                 old_weights = merged_vertex_buffer.bone_weights[i]
                 merged_vertex_buffer.bone_weights[i] = (
