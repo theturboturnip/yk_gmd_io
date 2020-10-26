@@ -18,6 +18,15 @@ from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from mathutils import Vector, Matrix
 
 
+@dataclass(frozen=True)
+class PerLoopVertexData:
+    normal: Optional[Vector]
+    tangent: Optional[Vector]
+    col0: Optional[Vector]
+    col1: Optional[Vector]
+    uvs: Tuple
+
+
 class VertexFetcher:
     bm_vertices: List[BMVert]
     vertex_layout: GMDVertexBufferLayout
@@ -89,8 +98,9 @@ class VertexFetcher:
 
         self.error = error
 
-    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int, normal: Optional[Vector]):
-        normal = (self.transformation_direction @ (normal if normal is not None else Vector(loop.split_normals[tri_index]))).resized(4)
+    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int): #, normal: Optional[Vector]
+        #normal = (self.transformation_direction @ (normal if normal is not None else Vector(loop.split_normals[tri_index]))).resized(4)
+        normal = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].normal)).resized(4)
         # if self.tangent_w_layer:
         #     # normals are stored [-1, 1] so convert from [0, 1] range
         #     normal.w = (self.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
@@ -172,7 +182,19 @@ class VertexFetcher:
                 BoneWeight(bone=0, weight=0.0),
             )
 
-    def extract_vertex(self, vertex_buffer: GMDVertexBuffer, i: int, normal: Optional[Vector], loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def get_per_loop_data(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+        # The importer merges vertices with the same (position, boneweights, normal)
+        # The position and boneweights should match exactly the GMD, so they will always be the same for fused vertices
+        # However because Blender recalculates the normal it is also per-loop, so it might be different between fused vertices
+        return PerLoopVertexData(
+            normal=self.normal_for(loop, tri_index).freeze(),
+            tangent=self.tangent_for(loop, tri_index).freeze(),
+            col0=self.col0_for(loop, tri_index).freeze(),
+            col1=self.col1_for(loop, tri_index).freeze(),
+            uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.uv_layers))])
+        )
+
+    def extract_vertex(self, vertex_buffer: GMDVertexBuffer, i: int, per_loop_data: PerLoopVertexData):
         if vertex_buffer.layout != self.vertex_layout:
             self.error.fatal(f"VertexFetcher told to fetch vertex for a buffer with a different layout")
 
@@ -180,15 +202,15 @@ class VertexFetcher:
         if vertex_buffer.bone_weights is not None:
             vertex_buffer.bone_weights.append(self.boneweights_for(i))
         if vertex_buffer.normal is not None:
-            vertex_buffer.normal.append(self.normal_for(loop, tri_index, normal))
+            vertex_buffer.normal.append(per_loop_data.normal)
         if vertex_buffer.tangent is not None:
-            vertex_buffer.tangent.append(self.tangent_for(loop, tri_index))
+            vertex_buffer.tangent.append(per_loop_data.tangent)
         if vertex_buffer.col0 is not None:
-            vertex_buffer.col0.append(self.col0_for(loop, tri_index))
+            vertex_buffer.col0.append(per_loop_data.col0)
         if vertex_buffer.col1 is not None:
-            vertex_buffer.col1.append(self.col1_for(loop, tri_index))
+            vertex_buffer.col1.append(per_loop_data.col1)
         for uv_idx in range(len(self.uv_layers)):
-            vertex_buffer.uvs[uv_idx].append(self.uv_for(uv_idx, loop, tri_index))
+            vertex_buffer.uvs[uv_idx].append(per_loop_data.uvs[uv_idx])
 
 
 def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
@@ -274,16 +296,10 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
         vertex_fetcher = vertex_fetchers[tri_loops.material_index]
 
         def parse_loop_elem(i):
-            # TODO - Reenable if smooth
-            if tri_loops.use_smooth:
-                # Smoothed vertices can be shared between different triangles that use them
-                return builder.add_vertex(tri_loops.vertices[i],
-                                          lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer,
-                                                                                              tri_loops.vertices[i], None, tri_loops, i))
-            else:
-                # Vertices on hard edges cannot be shared and must be duplicated per-face
-                return builder.add_unique_vertex(
-                    lambda vertex_buffer: vertex_fetcher.extract_vertex(vertex_buffer, tri_loops.vertices[i], Vector(tri_loops.normal), tri_loops, i))
+            return builder.add_vertex(tri_loops.vertices[i],
+                                      vertex_fetcher,
+                                      tri_loops,
+                                      i)
 
         triangle = (
             parse_loop_elem(0),

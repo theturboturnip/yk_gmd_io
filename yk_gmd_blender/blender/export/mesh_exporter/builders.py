@@ -14,26 +14,49 @@ class SubmeshBuilder:
 
     vertices: GMDVertexBuffer
     triangles: List[Tuple[int, int, int]]
-    blender_vid_to_this_vid: Dict[int, int]
+    blender_vid_to_this_vid: Dict[Tuple[int, 'PerLoopData'], int]
+    # This could use a Set with hashing, but Vectors aren't hashable by default and there's at most like 5 per list
+    per_loop_data_for_blender_vid: Dict[int, List['PerLoopData']]
     material_index: int
 
     def __init__(self, layout: GMDVertexBufferLayout, material_index: int):
         self.vertices = GMDVertexBuffer.build_empty(layout, 0)
         self.triangles = []
         self.blender_vid_to_this_vid = {}
+        self.per_loop_data_for_blender_vid = collections.defaultdict(list)
         self.material_index = material_index
+
+    def add_vertex(self, blender_vid: int, vertex_fetcher: 'VertexFetcher', blender_loop_tri: 'bpy.types.MeshLoopTriangle', tri_index: int) -> int:
+        per_loop_data = vertex_fetcher.get_per_loop_data(blender_loop_tri, tri_index)
+        # Make sure to use a key based on the per_loop_data here, because otherwise if two vertices with equal blender_vid and unequal per_loop_data are reused, only one will get returned
+        overall_blender_idx = (blender_vid, per_loop_data)
+        if overall_blender_idx not in self.blender_vid_to_this_vid:
+            idx = self.add_anonymous_vertex(lambda verts: vertex_fetcher.extract_vertex(verts, blender_vid, per_loop_data))
+            self.blender_vid_to_this_vid[overall_blender_idx] = idx
+            self.per_loop_data_for_blender_vid[blender_vid].append(per_loop_data)
+            return idx
+
+        return self.blender_vid_to_this_vid[overall_blender_idx]
+
 
     # Adds the vertex if not already present
     # Used for smooth faces, where the vertex is reused in other faces as well
-    def add_vertex(self, blender_vid, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
-        if blender_vid not in self.blender_vid_to_this_vid:
-            self.blender_vid_to_this_vid[blender_vid] = self.add_unique_vertex(generate_vertex)
+    # def add_vertex(self, blender_vid, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    #     if blender_vid not in self.blender_vid_to_this_vid:
+    #         self.blender_vid_to_this_vid[blender_vid] = self.add_unique_vertex(generate_vertex)
+    #
+    #     return self.blender_vid_to_this_vid[blender_vid]
+    #
+    # # Adds a unique vertex, which we assume is never duplicated
+    # # Used for hard edges
+    # def add_unique_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    #     idx = len(self.vertices)
+    #     generate_vertex(self.vertices)
+    #     return idx
 
-        return self.blender_vid_to_this_vid[blender_vid]
-
-    # Adds a unique vertex, which we assume is never duplicated
-    # Used for hard edges
-    def add_unique_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    # Calls the function to add the vertex to the buffer and returns the index of the generated vertex.
+    # This is anonymous, it will not be considered for per-loop duplication and will not be added to any vertex ID counts
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
         idx = len(self.vertices)
         generate_vertex(self.vertices)
         return idx
@@ -121,8 +144,8 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         self.weighted_bone_faces = collections.defaultdict(list)
         self.relevant_gmd_bones = relevant_gmd_bones
 
-    def add_unique_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
-        idx = super().add_unique_vertex(generate_vertex)
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+        idx = super().add_anonymous_vertex(generate_vertex)
         self.update_bone_vtx_lists(self.vertices.bone_weights[idx], idx)
         return idx
 
@@ -222,7 +245,7 @@ class SkinnedSubmeshBuilderSubset:
         return SkinnedSubmeshBuilderSubset(base, set(range(len(base.triangles))), set(range(len(base.vertices))))
 
     def convert_to_submesh_builder(self) -> SkinnedSubmeshBuilder:
-        # TODO - This should remap bones in skinned submeshes
+        # TODO - This should remap bones in skinned submeshes, instead of making the base SkinnedSubmeshBuilder remap them later?
         sm = SkinnedSubmeshBuilder(self.base.vertices.layout, self.base.material_index, self.base.relevant_gmd_bones)
         vertex_remap = {}
 
@@ -232,7 +255,7 @@ class SkinnedSubmeshBuilderSubset:
             vtx_buffer += self.base.vertices[vert_idx:vert_idx + 1]
 
         for vert_idx in sorted(self.referenced_verts):
-            new_idx = sm.add_unique_vertex(lambda vtx_buffer: add_vtx(vert_idx, vtx_buffer))
+            new_idx = sm.add_anonymous_vertex(lambda vtx_buffer: add_vtx(vert_idx, vtx_buffer))
             vertex_remap[vert_idx] = new_idx
         for tri_idx in self.referenced_triangles:
             sm.add_triangle((
