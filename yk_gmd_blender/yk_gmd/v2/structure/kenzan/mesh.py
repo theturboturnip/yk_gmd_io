@@ -11,7 +11,7 @@ class MeshStruct_Kenzan(MeshStruct):
 
     def check_padding(self):
         if self.padding:
-            raise TypeError(f"Unexpected nonzero padding {self.padding}")
+            print(f"Unexpected nonzero padding {self.padding}")
 
 
 MeshStruct_Kenzan_Unpack = StructureUnpacker(
