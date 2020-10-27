@@ -195,32 +195,36 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 
     return split_submeshes
 
-# @overload
-# def submesh_builder_to_gmd(submesh_builder: SkinnedSubmeshBuilder) -> GMDSkinnedMesh:
-#     pass
-# def submesh_builder_to_gmd(submesh_builder: SubmeshBuilder) -> GMDMesh:
-#     pass
 
+def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object):
+    dg = context.evaluated_depsgraph_get()
 
-#def prepare_mesh()
+    mesh = object.evaluated_get(dg).data
+
+    # TODO: Creating a new mesh just to triangulate sucks for perf I'd expect
+    tempmesh = bmesh.new()
+    tempmesh.from_mesh(mesh)
+
+    bmesh.ops.triangulate(tempmesh, faces=tempmesh.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+
+    # Finish up, write the bmesh back to the mesh
+    tempmesh.to_mesh(mesh)
+    tempmesh.free()
+
+    # Now it's triangulated we can calculate tangents (TODO calc_normals_split may not be necessary anymore)
+    mesh.calc_normals_split()
+    mesh.calc_tangents()
+    mesh.calc_loop_triangles()
+    mesh.transform(object.matrix_world)
+
+    return mesh
 
 def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object, materials: List[GMDAttributeSet], bone_name_map: Dict[str, GMDBone], bone_limit: int,
                                       error: ErrorReporter) -> List[GMDSkinnedMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
-    dg = context.evaluated_depsgraph_get()
-
-    mesh = object.evaluated_get(dg).data
-    mesh.calc_normals_split()
-    mesh.calc_tangents()
-    mesh.calc_loop_triangles()
-    mesh.transform(object.matrix_world)
+    mesh = prepare_mesh(context, object)
     # TODO: mesh.transform(object.matrix_world)
-
-    # bm = bmesh.new()
-    # bm.from_mesh(mesh)
-    # bm.verts.ensure_lookup_table()
-    # bm.verts.index_update()
 
     vertex_group_mapping = {
         i: bone_name_map[group.name]
@@ -231,7 +235,6 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
     submesh_builders = split_mesh_by_material(object.name, mesh, Matrix.Identity(4), materials, True,
                                               vertex_group_mapping, error=error)
 
-    #bm.free()
 
     gmd_skinned_meshes = []
     print(f"Exporting skinned meshes for {object.name}")
@@ -249,27 +252,8 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
                                         materials: List[GMDAttributeSet], error: ErrorReporter) -> List[GMDMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
-    dg = context.evaluated_depsgraph_get()
-
-    # mesh = object.data#evaluated_get(dg).data
-    # mesh.calc_normals_split()
-    # mesh.calc_loop_triangles()
-
-    dg = context.evaluated_depsgraph_get()
-
-    mesh = object.evaluated_get(dg).data
-    mesh.calc_normals_split()
-    mesh.calc_tangents()
-    mesh.calc_loop_triangles()
-    mesh.transform(object.matrix_world)
-
-    # bm = bmesh.new()
-    # bm.from_mesh(mesh)
-    # bm.verts.ensure_lookup_table()
-    # bm.verts.index_update()
+    mesh = prepare_mesh(context, object)
 
     submesh_builders = split_mesh_by_material(object.name, mesh, Matrix.Identity(4), materials, False, vertex_group_mapping={}, error=error)
-
-    #bm.free()
 
     return [builder.build_to_gmd(materials) for builder in submesh_builders]
