@@ -41,7 +41,7 @@ class NodeStruct:
     scale: Vector
 
     bone_pos: Vector
-    bone_axis: Quaternion
+    bone_axis: Vector
     flags: List[int]
 
 
@@ -70,7 +70,7 @@ NodeStruct_Unpack = StructureUnpacker(
         ("scale", Vec4Unpacker),
 
         ("bone_pos", Vec4Unpacker),
-        ("bone_axis", QuatUnpacker),
+        ("bone_axis", Vec4Unpacker),
         ("flags", FixedSizeArrayUnpacker(c_uint32, 4)),
     ]
 )

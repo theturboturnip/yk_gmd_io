@@ -16,7 +16,7 @@ from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
 import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
-from yk_gmd_blender.blender.coordinate_converter import transform_to_matrix
+from yk_gmd_blender.blender.coordinate_converter import transform_to_matrix, transform_rotation_gmd_to_blender
 
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
@@ -62,6 +62,10 @@ class ImportGMD(Operator, ImportHelper):
     fuse_object_meshes: BoolProperty(name="Fuse Object Meshes",
                                      description="If True, meshes that are attached to the same object will have duplicate vertices removed.",
                                      default=True)
+    
+    anim_skeleton: BoolProperty(name="Load Animation Skeleton",
+                                     description="If True, will modify skeleton before importing to allow for proper animation imports",
+                                     default=False)
 
     def draw(self, context):
         layout = self.layout
@@ -75,6 +79,7 @@ class ImportGMD(Operator, ImportHelper):
         layout.prop(self, 'import_objects')
         layout.prop(self, 'import_materials')
         layout.prop(self, 'fuse_object_meshes')
+        layout.prop(self, 'anim_skeleton')
 
     def execute(self, context):
         base_error_reporter = StrictErrorReporter() if self.strict else LenientErrorReporter()
@@ -114,7 +119,7 @@ class ImportGMD(Operator, ImportHelper):
 
             if self.import_hierarchy:
                 self.report({"INFO"}, "Importing bone hierarchy...")
-                gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
+                gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection, anim_skeleton=self.anim_skeleton)
 
             if self.import_objects:
                 self.report({"INFO"}, "Importing objects...")
@@ -168,7 +173,7 @@ class GMDSceneCreator:
         context.collection.children.link(collection)
         return collection
 
-    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection) -> bpy.types.Object:
+    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection, anim_skeleton: bool) -> bpy.types.Object:
         """
         Make an Armature representing all of the GMDBones in the imported scene hierarchy.
         :param context: The context used by the import process.
@@ -228,9 +233,9 @@ class GMDSceneCreator:
 
             # Find the local->world matrix for the parent bone, and use this to find the local->world matrix for the current bone
             if gmd_node.parent:
-                parent_matrix = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
+                parent_matrix_unrotated = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
             else:
-                parent_matrix = Matrix.Identity(4)
+                parent_matrix_unrotated = Matrix.Identity(4)
 
             print(f"bone {gmd_node.name}")
             gmd_bone_pos, gmd_bone_axis_maybe, gmd_bone_scale = gmd_node.matrix.inverted().decompose()
@@ -240,11 +245,13 @@ class GMDSceneCreator:
 
             # TODO - this produces an uninvertible matrix - why?
             #   this_bone_matrix = parent_matrix @ transform_to_matrix(gmd_node.pos, gmd_node.rot, gmd_node.scale)
-            rot_matrix = gmd_node.rot.to_matrix()
-            rot_matrix.resize_4x4()
-            this_bone_matrix = parent_matrix @ (Matrix.Translation(gmd_node.pos.xyz) @ rot_matrix)# @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
-            self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix
+            this_bone_matrix_unrotated = parent_matrix_unrotated @ Matrix.Translation(gmd_node.pos.xyz)# @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
+            head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0,0,0))
+            self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix_unrotated
 
+            tail_delta = gmd_node.bone_pos.xyz + gmd_node.bone_axis.xyz
+            # This is unused now because we can just use the gmd bone axis
+            """
             # Take a page out of XNA Importer's book for bone tails - make roots just stick towards the camera
             # and make nodes with (non-twist) children try to go to the average of those children's positions
             if not gmd_node.parent:
@@ -299,23 +306,39 @@ class GMDSceneCreator:
                         tail_delta = Vector((0, 0, 0.05))
                     else:
                         tail_delta = gmd_node.pos.xyz.normalized() * 0.05
+            """
 
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            bone.head = self.gmd_to_blender_world @ this_bone_matrix @ Vector((0,0,0))
-            bone.tail = self.gmd_to_blender_world @ this_bone_matrix @ tail_delta
+            if tail_delta.xyz == (0, 0, 0) or gmd_node.bone_axis.w < 0.00001:
+               tail_delta = Vector((0, 0, 0.5))
+            if not anim_skeleton:
+                bone.head = self.gmd_to_blender_world @ gmd_node.bone_pos.xyz
+                bone.tail = self.gmd_to_blender_world @ tail_delta
+                if gmd_node.bone_axis.w < 0.00001:
+                    bone.length = 0.0001
+                else:
+                    bone.length = gmd_node.bone_axis.w
+            else:
+                bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,0))
+                bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,1))
+                bone.length = 0.0001
             if tail_delta.length < 0.00001:
                 self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.00001:
+                if (bone.head - bone.parent.tail).length < 0.00001 and not anim_skeleton:
                     bone.use_connect = True
                 else:
                     bone.use_connect = False
             else:
                 bone.parent = None
+
+            # Store bone pos and local rotation as custom properties to be used by the animation importer
+            bone["head_no_rot"] = head_no_rot
+            bone["local_rot"] = transform_rotation_gmd_to_blender(gmd_node.rot)
 
         bpy.ops.object.mode_set(mode='POSE')
 
