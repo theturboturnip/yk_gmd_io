@@ -157,11 +157,11 @@ def gmd_meshes_to_bmesh(gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]], 
             face = bm.faces.new((bm.verts[face_idx[0]], bm.verts[face_idx[1]], bm.verts[face_idx[2]]))
         except ValueError as e:
             error.recoverable(
-                f"Adding face {face} resulted in ValueError - This should have been a valid triangle. Vert count: {len(bm.verts)}.\n{e}")
+                f"Adding face {face_idx} resulted in ValueError - This should have been a valid triangle. Vert count: {len(bm.verts)}.\n{e}")
         else:
             face.smooth = True
             face.material_index = attr_idx
-            triangles.add(face_idx)
+            triangles.add(tuple(sorted(face_idx)))
             return face
 
     for m_i, gmd_mesh in enumerate(gmd_meshes):
@@ -176,7 +176,7 @@ def gmd_meshes_to_bmesh(gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]], 
             # If face doesn't already exist, and is valid
             if len(set(remapped_tri_idxs)) != 3:
                 continue
-            if remapped_tri_idxs in triangles:
+            if tuple(sorted(remapped_tri_idxs)) in triangles:
                 continue
             # Create face
             face = add_face_to_bmesh(remapped_tri_idxs)
