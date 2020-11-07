@@ -32,5 +32,7 @@ class GMDSkinnedMesh(GMDMesh):
     def __post_init__(self):
         super().__post_init__()
         referenced_bone_indices = {w.bone for ws in self.vertices_data.bone_weights for w in ws if w.weight > 0}
+        if not referenced_bone_indices or not self.relevant_bones:
+            raise TypeError(f"Mesh is skinned but references no bones. referenced_indices: {referenced_bone_indices}, relevant_bones: {self.relevant_bones}")
         if referenced_bone_indices and max(referenced_bone_indices) >= len(self.relevant_bones):
             raise Exception(f"Mesh uses {len(self.relevant_bones)} bones but references {referenced_bone_indices} in {len(self.vertices_data)} verts")

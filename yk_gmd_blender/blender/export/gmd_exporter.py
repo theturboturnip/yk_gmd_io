@@ -12,7 +12,7 @@ from bpy.types import Operator, ChildOfConstraint, ShaderNodeGroup, ShaderNodeTe
 from bpy_extras.io_utils import ExportHelper
 from mathutils import Matrix, Vector, Quaternion
 
-from yk_gmd_blender.blender.export.mesh_splitter import split_unskinned_blender_mesh_object, \
+from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
     split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
