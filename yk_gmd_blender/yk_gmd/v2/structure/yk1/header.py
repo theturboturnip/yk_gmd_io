@@ -5,79 +5,74 @@ import mathutils
 
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32, c_float32
-from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointer, ArrayPointerUnpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeader, StructureUnpacker, GMDHeaderUnpack
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import Node
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import Object_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerUnpack, SizedPointer
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsData_YK1, BoundsData_YK1_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import Material_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayout_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct, StructureUnpacker, GMDHeaderStruct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 
-
-UNK12_Unpack = FixedSizeArrayUnpacker(c_float32, 32)
-UNK14_Unpack = FixedSizeArrayUnpacker(c_uint32, 32)
 
 @dataclass(frozen=True)
-class GMDHeader_YK1(GMDHeader):
-    node_arr: ArrayPointer[Node]
-    obj_arr: ArrayPointer[Object_Kenzan]
-    mesh_arr: ArrayPointer[Mesh]
-    attribute_arr: ArrayPointer[Attribute]
-    material_arr: ArrayPointer[Material_YK1]
-    matrix_arr: ArrayPointer[mathutils.Matrix]
-    vertex_buffer_arr: ArrayPointer[VertexBufferLayout_YK1]
-    vertex_data: SizedPointer  # byte data
-    texture_arr: ArrayPointer[ChecksumStr]
-    shader_arr: ArrayPointer[ChecksumStr]
-    node_name_arr: ArrayPointer[ChecksumStr]
-    index_data: ArrayPointer[int]
-    meshset_data: SizedPointer
-    mesh_matrix_bytestrings: SizedPointer
+class GMDHeader_YK1(GMDHeaderStruct):
+    node_arr: ArrayPointerStruct[NodeStruct]
+    obj_arr: ArrayPointerStruct[ObjectStruct_Kenzan]
+    mesh_arr: ArrayPointerStruct[MeshStruct]
+    attribute_arr: ArrayPointerStruct[AttributeStruct]
+    material_arr: ArrayPointerStruct[MaterialStruct_YK1]
+    matrix_arr: ArrayPointerStruct[mathutils.Matrix]
+    vertex_buffer_arr: ArrayPointerStruct[VertexBufferLayoutStruct_YK1]
+    vertex_data: SizedPointerStruct  # byte data
+    texture_arr: ArrayPointerStruct[ChecksumStrStruct]
+    shader_arr: ArrayPointerStruct[ChecksumStrStruct]
+    node_name_arr: ArrayPointerStruct[ChecksumStrStruct]
+    index_data: ArrayPointerStruct[int]
+    object_drawlist_bytes: SizedPointerStruct
+    mesh_matrixlist_bytes: SizedPointerStruct
 
-    overall_bounds: BoundsData_YK1
+    overall_bounds: BoundsDataStruct_YK1
 
-    unk12: ArrayPointer[List[float]]
-    unk13: ArrayPointer[int]  # Is sequence 00, 7C, 7D, 7E... 92 in Kiwami bob
-    # # 0x7C = 124
-    # # 0x92 = 146 => this is likely a bone address
-    # # 24 elements in total
-    unk14: ArrayPointer[List[int]]
+    unk12: ArrayPointerStruct[Unk12Struct] # Material properties
+    unk13: ArrayPointerStruct[int] # List of root node indices - those without parents
+    unk14: ArrayPointerStruct[Unk14Struct] # Material properties
     flags: List[int]
 
 
 GMDHeader_YK1_Unpack = StructureUnpacker(
     GMDHeader_YK1,
     fields=[
-        ("node_arr", ArrayPointerUnpack),
-        ("obj_arr", ArrayPointerUnpack),
-        ("mesh_arr", ArrayPointerUnpack),
-        ("attribute_arr", ArrayPointerUnpack),
-        ("material_arr", ArrayPointerUnpack),
-        ("matrix_arr", ArrayPointerUnpack),
+        ("node_arr", ArrayPointerStruct_Unpack),
+        ("obj_arr", ArrayPointerStruct_Unpack),
+        ("mesh_arr", ArrayPointerStruct_Unpack),
+        ("attribute_arr", ArrayPointerStruct_Unpack),
+        ("material_arr", ArrayPointerStruct_Unpack),
+        ("matrix_arr", ArrayPointerStruct_Unpack),
 
-        ("vertex_buffer_arr", ArrayPointerUnpack),
-        ("vertex_data", SizedPointerUnpack),
+        ("vertex_buffer_arr", ArrayPointerStruct_Unpack),
+        ("vertex_data", SizedPointerStruct_Unpack),
 
-        ("texture_arr", ArrayPointerUnpack),
-        ("shader_arr", ArrayPointerUnpack),
-        ("node_name_arr", ArrayPointerUnpack),
+        ("texture_arr", ArrayPointerStruct_Unpack),
+        ("shader_arr", ArrayPointerStruct_Unpack),
+        ("node_name_arr", ArrayPointerStruct_Unpack),
 
-        ("index_data", ArrayPointerUnpack),
-        ("meshset_data", SizedPointerUnpack),
-        ("mesh_matrix_bytestrings", SizedPointerUnpack),
+        ("index_data", ArrayPointerStruct_Unpack),
+        ("object_drawlist_bytes", SizedPointerStruct_Unpack),
+        ("mesh_matrixlist_bytes", SizedPointerStruct_Unpack),
 
         ("overall_bounds", BoundsData_YK1_Unpack),
 
-        ("unk12", ArrayPointerUnpack),
-        ("unk13", ArrayPointerUnpack),
-        ("unk14", ArrayPointerUnpack),
+        ("unk12", ArrayPointerStruct_Unpack),
+        ("unk13", ArrayPointerStruct_Unpack),
+        ("unk14", ArrayPointerStruct_Unpack),
         ("flags", FixedSizeArrayUnpacker(c_uint32, 6)),
     ],
     base_class_unpackers={
-        GMDHeader: GMDHeaderUnpack
+        GMDHeaderStruct: GMDHeaderStruct_Unpack
     }
 )

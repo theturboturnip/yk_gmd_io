@@ -2,16 +2,16 @@ from dataclasses import dataclass
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64
-from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
 
 
 @dataclass(frozen=True)
-class VertexBufferLayout_Kenzan(VertexBufferLayout):
+class VertexBufferLayoutStruct_Kenzan(VertexBufferLayoutStruct):
     padding: int = 0
 
 
-VertexBufferLayout_Kenzan_Unpack = StructureUnpacker(
-    VertexBufferLayout_Kenzan,
+VertexBufferLayoutStruct_Kenzan_Unpack = StructureUnpacker(
+    VertexBufferLayoutStruct_Kenzan,
     fields=[
         ("index", c_uint32),
         ("vertex_count", c_uint32),

@@ -3,21 +3,21 @@ from typing import List
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterial
-from yk_gmd_blender.yk_gmd.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer
 
 
 @dataclass(frozen=True)
-class Indices:
+class IndicesStruct:
     index_offset: int
     index_count: int
 
     def extract_range(self, data: List[int]) -> List[int]:
         return data[self.index_offset:self.index_offset+self.index_count]
 
-Indices_Unpack = StructureUnpacker(
-    Indices,
+IndicesStruct_Unpack = StructureUnpacker(
+    IndicesStruct,
     fields=[
         ("index_count", c_uint32),
         ("index_offset", c_uint32),
@@ -26,7 +26,7 @@ Indices_Unpack = StructureUnpacker(
 
 
 @dataclass(frozen=True)
-class Mesh:
+class MeshStruct:
     index: int
     attribute_index: int
     vertex_buffer_index: int
@@ -41,6 +41,6 @@ class Mesh:
     matrixlist_offset: int
     matrixlist_length: int
 
-    triangle_list_indices: Indices
-    noreset_strip_indices: Indices
-    reset_strip_indices: Indices
+    triangle_list_indices: IndicesStruct
+    noreset_strip_indices: IndicesStruct
+    reset_strip_indices: IndicesStruct

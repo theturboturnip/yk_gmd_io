@@ -4,45 +4,43 @@ from typing import List, Tuple, Union, Type
 import mathutils
 
 from yk_gmd_blender.structurelib.base import BaseUnpacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import Attribute_Unpack, Attribute
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr, ChecksumStr_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, FilePacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBase
+from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import Node_Unpack, Node
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsData_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack, UNK12_Unpack, UNK14_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import Material_YK1_Unpack, c_uint16
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import Mesh_YK1, Mesh_YK1_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import Object_YK1, Object_YK1_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayout_YK1_Unpack, VertexBufferLayout_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct_Unpack, NodeStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, Unk14Struct
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, VertexBufferLayoutStruct_YK1
 
 
 @dataclass(repr=False)
 class FileData_YK1(FileData_Common):
-    overall_bounds: BoundsData_YK1
+    overall_bounds: BoundsDataStruct_YK1
 
-    node_arr: List[Node]
-    obj_arr: List[Object_YK1]
-    mesh_arr: List[Mesh_YK1]
-    attribute_arr: List[Attribute]
-    material_arr: List[MaterialBase]
+    node_arr: List[NodeStruct]
+    obj_arr: List[ObjectStruct_YK1]
+    mesh_arr: List[MeshStruct_YK1]
+    attribute_arr: List[AttributeStruct]
+    material_arr: List[MaterialStruct_YK1]
     matrix_arr: List[mathutils.Matrix]
-    vertex_buffer_arr: List[VertexBufferLayout_YK1]
+    vertex_buffer_arr: List[VertexBufferLayoutStruct_YK1]
     vertex_data: bytes  # byte data
-    texture_arr: List[ChecksumStr]
-    shader_arr: List[ChecksumStr]
-    node_name_arr: List[ChecksumStr]
+    texture_arr: List[ChecksumStrStruct]
+    shader_arr: List[ChecksumStrStruct]
+    node_name_arr: List[ChecksumStrStruct]
     index_data: List[int]
-    meshset_data: bytes
-    mesh_matrix_bytestrings: bytes
+    object_drawlist_bytes: bytes
+    mesh_matrixlist_bytes: bytes
 
-    unk12: List[List[float]]
-    unk13: List[int]  # Is sequence 00, 7C, 7D, 7E... 92 in Kiwami bob
-    # # 0x7C = 124
-    # # 0x92 = 146 => this is likely a bone address
-    # # 24 elements in total
-    unk14: List[List[int]]
+    unk12: List[Unk12Struct]
+    unk13: List[int]
+    unk14: List[Unk14Struct]
     flags: List[int]
 
     def __str__(self):
@@ -57,23 +55,23 @@ class FileData_YK1(FileData_Common):
     @classmethod
     def header_pointer_fields(cls) -> List[Tuple[str, Union[BaseUnpacker, Type[bytes]]]]:
         return FileData_Common.header_pointer_fields() + [
-            ("node_arr", Node_Unpack),
-            ("obj_arr", Object_YK1_Unpack),
-            ("mesh_arr", Mesh_YK1_Unpack),
-            ("attribute_arr", Attribute_Unpack),
-            ("material_arr", Material_YK1_Unpack),
+            ("node_arr", NodeStruct_Unpack),
+            ("obj_arr", ObjectStruct_YK1_Unpack),
+            ("mesh_arr", MeshStruct_YK1_Unpack),
+            ("attribute_arr", AttributeStruct_Unpack),
+            ("material_arr", MaterialStruct_YK1_Unpack),
             ("matrix_arr", MatrixUnpacker),
-            ("vertex_buffer_arr", VertexBufferLayout_YK1_Unpack),
+            ("vertex_buffer_arr", VertexBufferLayoutStruct_YK1_Unpack),
             ("vertex_data", bytes),
-            ("texture_arr", ChecksumStr_Unpack),
-            ("shader_arr", ChecksumStr_Unpack),
-            ("node_name_arr", ChecksumStr_Unpack),
+            ("texture_arr", ChecksumStrStruct_Unpack),
+            ("shader_arr", ChecksumStrStruct_Unpack),
+            ("node_name_arr", ChecksumStrStruct_Unpack),
             ("index_data", c_uint16),
-            ("meshset_data", bytes),
-            ("mesh_matrix_bytestrings", bytes),
-            ("unk12", UNK12_Unpack),
+            ("object_drawlist_bytes", bytes),
+            ("mesh_matrixlist_bytes", bytes),
+            ("unk12", Unk12Struct_Unpack),
             ("unk13", c_uint16),
-            ("unk14", UNK14_Unpack),
+            ("unk14", Unk14Struct_Unpack),
         ]
 
     @classmethod

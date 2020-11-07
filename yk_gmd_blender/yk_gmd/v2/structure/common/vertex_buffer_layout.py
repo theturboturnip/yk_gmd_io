@@ -4,26 +4,11 @@ from typing import Optional, List, Tuple, Dict
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBufferLayout, VecTypes, GMDVertexBuffer
-
-
-# class ComponentType(Enum):
-#     Fixed = 'B',
-#     Half = 'e',
-#     Full = 'f',
-#
-#
-# @dataclass(frozen=True)
-# class VectorLayout:
-#     type: ComponentType
-#     length: int
-#
-#     def get_format_string(self):
-#         return self.type.value * self.length
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBufferLayout, VecTypes, GMDVertexBuffer
 
 
 @dataclass(frozen=True)
-class VertexBufferLayout:
+class VertexBufferLayoutStruct:
     index: int
 
     vertex_count: int
@@ -107,7 +92,7 @@ class VertexBufferLayout:
                     return VecTypes.VECTOR2
             return 0
 
-    def get_vertex_layout(self) -> GMDVertexBufferLayout:
+    def get_legacy_vertex_layout(self) -> GMDVertexBufferLayout:
         vertex_elems = {}
         vertex_layout_bits = [
             ("pos", 0x07),

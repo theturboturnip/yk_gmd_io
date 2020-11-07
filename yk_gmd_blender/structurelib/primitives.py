@@ -33,23 +33,34 @@ c_float16 = BasePrimitive(struct_fmt="e", python_type=float)
 c_float32 = BasePrimitive(struct_fmt="f", python_type=float)
 
 
-class UnormPrimitive(BoundedPrimitiveUnpacker[float]):
+class RangeConverterPrimitive(BoundedPrimitiveUnpacker[float]):
     base_unpack: BasePrimitive
-    divisor: float
+    from_range: Tuple[float, float]
+    to_range: Tuple[float, float]
 
-    def __init__(self, base_unpack: BasePrimitive, divisor: float):
-        super().__init__(python_type=float, struct_fmt=base_unpack.struct_fmt, range=(0,1))
+    def __init__(self, base_unpack: BasePrimitive, from_range: Tuple[float, float], to_range: Tuple[float, float]):
+        super().__init__(python_type=float, struct_fmt=base_unpack.struct_fmt, range=to_range)
         self.base_unpack = base_unpack
-        self.divisor = divisor
+
+        self.from_range = from_range
+        self.to_range = to_range
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[float, int]:
-        byteval, offset = self.base_unpack.unpack(big_endian, data, offset)
-        return (byteval/self.divisor), offset
+        value, offset = self.base_unpack.unpack(big_endian, data, offset)
+
+        independent_float = (value - self.from_range[0]) / (self.from_range[1] - self.from_range[0])
+        target_range_float = (independent_float * (self.to_range[1] - self.to_range[0])) + self.to_range[0]
+
+        return target_range_float, offset
 
     def pack(self, big_endian: bool, value: float, append_to: bytearray):
-        self.base_unpack.pack(big_endian, self.base_unpack.python_type(value * self.divisor), append_to)
+        self.validate_value(value)
+
+        independent_float = (value - self.to_range[0])/(self.to_range[1] - self.to_range[0])
+        target_range_float = (independent_float * (self.from_range[1] - self.from_range[0])) + self.from_range[0]
+        self.base_unpack.pack(big_endian, self.base_unpack.python_type(target_range_float), append_to)
 
     def sizeof(self):
         return self.base_unpack.sizeof()
 
-c_unorm8 = UnormPrimitive(base_unpack=c_uint8, divisor=255.0)
+c_unorm8 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0,255), to_range=(0,1))

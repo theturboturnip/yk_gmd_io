@@ -7,7 +7,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker, QuatU
 
 
 @dataclass
-class BoundsData_YK1:
+class BoundsDataStruct_YK1:
     """
     This class represents a bounding sphere and bounding box.
     Both the sphere and box are centered on the same point.
@@ -21,12 +21,12 @@ class BoundsData_YK1:
     box_extents: Vector
     box_rotation: Quaternion
 
-    padding: float
+    padding: float = 0.0
 
 
 
 BoundsData_YK1_Unpack = StructureUnpacker(
-    BoundsData_YK1,
+    BoundsDataStruct_YK1,
     fields=[
         ("center", Vec3Unpacker),
         ("sphere_radius", c_float32),

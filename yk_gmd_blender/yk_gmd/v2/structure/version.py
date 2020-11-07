@@ -9,16 +9,19 @@ class GMDVersion(Enum):
     Kenzan = 1 # a.k.a Magical V-Engine?
     # 5?/0/Kiwami era - unknown what this engine was called
     Kiwami1 = 3
-    #Dragon = 4
+    Dragon = 4
 
 @dataclass(frozen=True)
-class FileProperties:
+class VersionProperties:
     major_version: GMDVersion
     version_tuple: Tuple[int, int]
     # Are indices relative to the defined "vertex start" in the file?
     relative_indices_used: bool
     # Is vertex offset used to determine the range of values used by a mesh?
-    vertex_offset_used: bool
+    mesh_vertex_offset_used: bool
+
+    def combined_version(self):
+        return combine_versions(self.version_tuple[0], self.version_tuple[1])
 
     @property
     def version_str(self):
@@ -27,47 +30,50 @@ class FileProperties:
 def get_major_minor_version(version_combined: int) -> Tuple[int, int]:
     return (version_combined >> 16) & 0xFFFF, (version_combined >> 0) & 0xFFFF
 
-def get_version_properties(version_major: int, version_minor: int) -> FileProperties:
+def combine_versions(major_version: int, minor_version: int):
+    return ((major_version & 0xFFFF) << 16) | (minor_version & 0xFFFF)
+
+def get_version_properties(version_major: int, version_minor: int) -> VersionProperties:
     if version_major == 1:
         if version_minor <= 4:
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=True,
-                vertex_offset_used=True
+                mesh_vertex_offset_used=True
             )
         else:
             # ex: haruka_on
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                vertex_offset_used=False
+                mesh_vertex_offset_used=False
             )
     elif version_major == 2:
         # Yakuza 3
         if version_minor == 8:
-            return FileProperties(
+            return VersionProperties(
                 major_version=GMDVersion.Kiwami1,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                vertex_offset_used=True
+                mesh_vertex_offset_used=True
             )
     elif version_major == 3:
         # All 0/Kiwami-era files
-        return FileProperties(
+        return VersionProperties(
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            vertex_offset_used=True
+            mesh_vertex_offset_used=True
         )
     elif version_major == 4:
         # Dragon engine
-        return FileProperties(
-            major_version = GMDVersion.Kiwami1,
+        return VersionProperties(
+            major_version = GMDVersion.Dragon,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            vertex_offset_used=True
+            mesh_vertex_offset_used=True
         )
 
     print(f"Unknown major/minor combination {version_major}.{version_minor}")

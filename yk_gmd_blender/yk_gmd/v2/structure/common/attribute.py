@@ -5,20 +5,20 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_int16, c_uint32, 
 
 from typing import List
 
-from yk_gmd_blender.yk_gmd.abstract.material import GMDMaterialTextureIndex, GMDMaterial
-from yk_gmd_blender.yk_gmd.abstract.vertices import GMDVertexBuffer
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import Mesh
+from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterialTextureIndex, GMDMaterial
+from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct
 
 
 @dataclass(frozen=True)
-class TextureIndex_YK1:
+class TextureIndexStruct:
     tex_index: int
     padding: int = 0
 
 
-TextureIndex_YK1_Unpack = StructureUnpacker(
-    TextureIndex_YK1,
+TextureIndexStruct_Unpack = StructureUnpacker(
+    TextureIndexStruct,
     fields=[
         ("padding", c_uint16),
         ("tex_index", c_int16)
@@ -27,59 +27,60 @@ TextureIndex_YK1_Unpack = StructureUnpacker(
 
 
 @dataclass(frozen=True)
-class Attribute:
+class AttributeStruct:
     index: int
     material_index: int
     shader_index: int
 
     # Which meshes use this material - offsets in the Mesh_YK1 array
-    meshset_start: int
-    meshset_count: int
+    mesh_indices_start: int
+    mesh_indices_count: int
 
-    # Always one of {6,7,8} for kiwami bob
-    unk1: int
-    # Always 0x00_01_00_00
-    unk2: int
+    # The number of texture slots to initialize == the largest index of a set texture
+    texture_init_count: int
     # Observed to be 0x0000, 0x0001, 0x2001, 0x8001
     flags: int
 
-    texture_diffuse: TextureIndex_YK1  # Usually has textures with _di postfix
-    texture_refl_cubemap: TextureIndex_YK1  # Observed to have a cubemap texture for one eye-related material
-    texture_multi: TextureIndex_YK1
+    texture_diffuse: TextureIndexStruct  # Usually has textures with _di postfix
+    texture_refl: TextureIndexStruct  # Observed to have a cubemap texture for one eye-related material
+    texture_multi: TextureIndexStruct
     # Never filled
-    texture_unk1: TextureIndex_YK1
-    texture_unk2: TextureIndex_YK1
-    texture_normal: TextureIndex_YK1  # Usually has textures with _tn postfix
-    texture_rt: TextureIndex_YK1  # Usually has textures with _rt postfix
-    texture_rd: TextureIndex_YK1  # Usually has textures with _rd postfix
+    texture_unk1: TextureIndexStruct
+    texture_ts: TextureIndexStruct # Only present in "rs" shaders
+    texture_normal: TextureIndexStruct  # Usually has textures with _tn postfix
+    texture_rt: TextureIndexStruct  # Usually has textures with _rt postfix
+    texture_rd: TextureIndexStruct  # Usually has textures with _rd postfix
 
     extra_properties: List[float]  # Could be scale (x,y) pairs for the textures, although 0 is present a lot.
 
-    padding: int = 0
+    unk1_always_1: int = 1
+    unk2_always_0: int = 0
+    unk3_always_0: int = 0
 
 
-Attribute_Unpack = StructureUnpacker(
-    Attribute,
+AttributeStruct_Unpack = StructureUnpacker(
+    AttributeStruct,
     fields=[
         ("index", c_uint32),
         ("material_index", c_uint32),
         ("shader_index", c_uint32),
-        ("meshset_start", c_uint32),
-        ("meshset_count", c_uint32),
-        ("unk1", c_uint32),
-        ("unk2", c_uint32),
+        ("mesh_indices_start", c_uint32),
+        ("mesh_indices_count", c_uint32),
+        ("texture_init_count", c_uint32),
 
+        ("unk1_always_1", c_uint16),
+        ("unk2_always_0", c_uint16),
         ("flags", c_uint16),
-        ("padding", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
+        ("unk3_always_0", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
 
-        ("texture_diffuse", TextureIndex_YK1_Unpack),
-        ("texture_refl_cubemap", TextureIndex_YK1_Unpack),
-        ("texture_multi", TextureIndex_YK1_Unpack),
-        ("texture_unk1", TextureIndex_YK1_Unpack),
-        ("texture_unk2", TextureIndex_YK1_Unpack),
-        ("texture_normal", TextureIndex_YK1_Unpack),
-        ("texture_rt", TextureIndex_YK1_Unpack),
-        ("texture_rd", TextureIndex_YK1_Unpack),
+        ("texture_diffuse", TextureIndexStruct_Unpack),
+        ("texture_refl", TextureIndexStruct_Unpack),
+        ("texture_multi", TextureIndexStruct_Unpack),
+        ("texture_unk1", TextureIndexStruct_Unpack),
+        ("texture_ts", TextureIndexStruct_Unpack),
+        ("texture_normal", TextureIndexStruct_Unpack),
+        ("texture_rt", TextureIndexStruct_Unpack),
+        ("texture_rd", TextureIndexStruct_Unpack),
 
         ("extra_properties", FixedSizeArrayUnpacker(c_float32, 16))
     ]

@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, List
 
 from yk_gmd_blender.structurelib.base import BaseUnpacker, FixedSizeArrayUnpacker, StructureUnpacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointer, SizedPointerUnpack
+from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct, SizedPointerStruct_Unpack
 
 T = TypeVar('T')
 
 @dataclass
-class ArrayPointer(Generic[T]):
-    sized_ptr: SizedPointer
+class ArrayPointerStruct(Generic[T]):
+    sized_ptr: SizedPointerStruct
 
     def extract(self, unpack: BaseUnpacker[T], big_endian: bool, data: bytes) -> List[T]:
         return FixedSizeArrayUnpacker(unpack, self.sized_ptr.size).unpack(big_endian, data, self.sized_ptr.ptr)[0]
@@ -23,9 +23,9 @@ class ArrayPointer(Generic[T]):
     def __repr__(self):
         return f"{self.__class__.__name__}(ptr=0x{self.ptr:x}, cnt={self.count})"
 
-ArrayPointerUnpack = StructureUnpacker(
-    ArrayPointer,
+ArrayPointerStruct_Unpack = StructureUnpacker(
+    ArrayPointerStruct,
     fields=[
-        ("sized_ptr", SizedPointerUnpack)
+        ("sized_ptr", SizedPointerStruct_Unpack)
     ]
 )

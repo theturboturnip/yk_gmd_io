@@ -67,9 +67,9 @@ class ValueAdaptor(Generic[TFrom, TTo], BaseUnpacker[TTo]):
     def validate_value(self, value: TTo):
         try:
             self.base_unpacker.validate_value(self.backwards(value))
-        except PackingValidationError as e:
+        except Exception as e:
             print(self.python_type, self.base_unpacker.python_type)
-            raise PackingValidationError(f"{self.python_type.__name__} adaped to {self.base_unpacker.python_type.__name__}: {e}")
+            raise PackingValidationError(f"{self.python_type.__name__} adapted to {self.base_unpacker.python_type.__name__}: {e}")
 
     def sizeof(self):
         return self.base_unpacker.sizeof()
@@ -119,24 +119,26 @@ class BoundedPrimitiveUnpacker(BasePrimitive[T]):
 
 class FixedSizeASCIIUnpacker(BaseUnpacker[str]):
     length: int
+    encoding: str
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, encoding: str = "ascii"):
         super().__init__(str)
         self.length = length
+        self.encoding = encoding
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
         str_data:bytes = data[offset:offset + self.length]
-        return str_data.decode("ascii").rstrip('\x00'), offset + self.length
+        return str_data.decode(self.encoding).rstrip('\x00'), offset + self.length
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
         self.validate_value(value)
-        str_data: bytes = value.encode("ascii")
+        str_data: bytes = value.encode(self.encoding)
         if len(str_data) < self.length:
             str_data += bytes([0] * (self.length - len(str_data)))
         append_to += str_data
 
     def validate_value(self, value: str):
-        encoded = value.encode("ascii")
+        encoded = value.encode(self.encoding)
         if len(encoded) > self.length:
             raise PackingValidationError(f"Encoded string {encoded} is {len(encoded)}, must be <= {self.length}")
 
@@ -176,7 +178,7 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
             # Type checking for whether item is supported by elem_type is done in elem_type
             try:
                 elem_type.validate_value(item)
-            except PackingValidationError as e:
+            except Exception as e:
                 raise PackingValidationError(f"Element {i}: {e}")
         return True
 
@@ -274,6 +276,9 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
             field_unpacker.pack(big_endian, getattr(value, field_name), append_to)
 
     def validate_value(self, value: TDataclass) -> bool:
+        if not isinstance(value, self.python_type):
+            raise PackingValidationError(f"Incorrect value type - expected {self.python_type} got {type(value)}")
+
         for field_name, field_unpacker in self._exported_fields.items():
             try:
                 field_unpacker.validate_value(getattr(value, field_name))

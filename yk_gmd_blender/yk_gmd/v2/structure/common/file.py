@@ -3,18 +3,22 @@ from enum import Enum
 from typing import Type, Union, Tuple, List
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
-from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointer
-from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStr
-from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeader
-from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointer
+from yk_gmd_blender.yk_gmd.v2.structure.common.array_pointer import ArrayPointerStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct
+from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian, check_are_vertices_big_endian
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, FileProperties, \
+from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, VersionProperties, \
     get_combined_version_properties
 
 
 class PackType(Enum):
     Array = 0,
     Bytes = 1
+
+
+class FileUnpackError(Exception):
+    pass
 
 
 @dataclass(repr=False)
@@ -24,7 +28,7 @@ class FileData_Common:
     vertex_endian_check: int
     version_combined: int
 
-    name: ChecksumStr
+    name: ChecksumStrStruct
 
     def file_is_big_endian(self):
         return check_is_file_big_endian(self.file_endian_check)
@@ -32,7 +36,7 @@ class FileData_Common:
     def vertices_are_big_endian(self):
         return check_are_vertices_big_endian(self.vertex_endian_check)
 
-    def parse_version(self) -> FileProperties:
+    def parse_version(self) -> VersionProperties:
         return get_combined_version_properties(self.version_combined)
 
     @classmethod
@@ -65,9 +69,9 @@ class FileData_Common:
 # TODO: Generics?
 # TODO: Refactor to do typechecking for header_pointer_fields, header_fields_to_copy, including missing fields
 class FilePacker(BaseUnpacker[FileData_Common]):
-    header_packer: StructureUnpacker[GMDHeader]
+    header_packer: StructureUnpacker[GMDHeaderStruct]
 
-    def __init__(self, filedata_type: Type[FileData_Common], header_packer: StructureUnpacker[GMDHeader]):
+    def __init__(self, filedata_type: Type[FileData_Common], header_packer: StructureUnpacker[GMDHeaderStruct]):
         super().__init__(filedata_type)
         self.header_packer = header_packer
         # TODO: Check python_type.packing_type() fields to ensure correctness
@@ -88,11 +92,11 @@ class FilePacker(BaseUnpacker[FileData_Common]):
         header_size = self.header_packer.sizeof()
         collective_data = bytearray()
 
-        def pack_data(name: str, packer: Union[Type[bytes], BaseUnpacker], collective_data: bytearray) -> Union[SizedPointer, ArrayPointer]:
+        def pack_data(name: str, packer: Union[Type[bytes], BaseUnpacker], collective_data: bytearray) -> Union[SizedPointerStruct, ArrayPointerStruct]:
             ptr = header_size + len(collective_data)
 
             attr: Union[bytes, list] = getattr(value, name)
-            sized_pointer = SizedPointer(ptr=ptr, size=len(attr))
+            sized_pointer = SizedPointerStruct(ptr=ptr, size=len(attr))
             if packer is bytes:
                 if not isinstance(attr, bytes):
                     raise TypeError(
@@ -108,7 +112,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
                         packer.pack(big_endian, item, collective_data)
                     except PackingValidationError as e:
                         raise PackingValidationError(f"Element {i}: {e}")
-                return ArrayPointer(sized_ptr=sized_pointer)
+                return ArrayPointerStruct(sized_ptr=sized_pointer)
             else:
                 raise TypeError(f"Unexpected packer type {packer}")
 
@@ -146,13 +150,16 @@ class FilePacker(BaseUnpacker[FileData_Common]):
         def unpack_data(name: str, unpacker: Union[Type[bytes], BaseUnpacker]):
             attr = getattr(header, name)
             if unpacker is bytes:
-                if not isinstance(attr, SizedPointer):
+                if not isinstance(attr, SizedPointerStruct):
                     raise TypeError(f"Header field {name} was expected as SizedPointer but was {attr}. Reason: {self.python_type.__name__} specified it to be byte-packed")
                 return attr.extract_bytes(data)
             elif isinstance(unpacker, BaseUnpacker):
-                if not isinstance(attr, ArrayPointer):
+                if not isinstance(attr, ArrayPointerStruct):
                     raise TypeError(f"Header field {name} was expected as ArrayPointer but was {attr}. Reason: {self.python_type.__name__} specified it to be packed by {unpacker}")
-                return attr.extract(unpacker, big_endian, data)
+                try:
+                    return attr.extract(unpacker, big_endian, data)
+                except Exception as e:
+                    raise FileUnpackError(f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
             else:
                 raise TypeError(f"Unexpected unpacker type {unpacker}")
 
