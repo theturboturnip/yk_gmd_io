@@ -3,9 +3,6 @@ from typing import List
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint32
-from yk_gmd_blender.yk_gmd.legacy.abstract.material import GMDMaterial
-from yk_gmd_blender.yk_gmd.legacy.abstract.submesh import GMDSubmesh
-from yk_gmd_blender.yk_gmd.legacy.abstract.vertices import GMDVertexBuffer
 
 
 @dataclass(frozen=True)
