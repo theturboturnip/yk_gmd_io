@@ -394,18 +394,22 @@ class GMDSceneCreator:
             #  It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
             overall_bm = bmesh.new()
             blender_material_list = []
+
+            self.error.info(f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
+
             # then we make a merged GMDMesh object for each attribute set, containing the meshes that use that attribute set.
             for i, attr_set_id in enumerate(gmd_attr_set_ids):
+                meshes_for_attr_set = [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id]
+                attr_set = meshes_for_attr_set[0].attribute_set
+                self.error.info(f"\tattr_set #{attr_set_id} has {len(meshes_for_attr_set)} meshes with {[len(gmd_mesh.vertices_data) for gmd_mesh in meshes_for_attr_set]} verts each.")
                 # merged_gmd_mesh = self.make_merged_gmd_mesh(
                 #     [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id], remove_dupes=fuse_vertices)
 
                 # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
                 if use_materials:
-                    attr_set = [gmd_mesh.attribute_set for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id][0]
-
                     blender_material_list.append(self.make_material(collection, attr_set))
                     new_bmesh = gmd_meshes_to_bmesh(
-                        [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id],
+                        meshes_for_attr_set,
                         vertex_group_indices,
                         attr_idx=i,
                         gmd_to_blender_world=self.gmd_to_blender_world,
@@ -414,7 +418,7 @@ class GMDSceneCreator:
                     )
                 else:
                     new_bmesh = gmd_meshes_to_bmesh(
-                        [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id],
+                        meshes_for_attr_set,
                         vertex_group_indices,
                         attr_idx=0,
                         gmd_to_blender_world=self.gmd_to_blender_world,
@@ -422,10 +426,13 @@ class GMDSceneCreator:
                         error=self.error
                     )
 
+                self.error.info(f"\t\tAdding {len(new_bmesh.verts)} verts and {len(new_bmesh.faces)} faces for accumulated, (fused={fuse_vertices}) mesh of attr_set #{attr_set_id}")
+
                 # Merge it in to the overall bmesh.
                 new_bmesh.to_mesh(temp_mesh)
                 new_bmesh.free()
                 overall_bm.from_mesh(temp_mesh)
+            self.error.info(f"\tOverall mesh vert count: {len(overall_bm.verts)}")
 
             # Turn the overall BMesh into a Blender Mesh (there's a difference) so that it can be attached to an Object.
             overall_mesh = bpy.data.meshes.new(gmd_node.name)

@@ -555,17 +555,21 @@ class GMDSceneGatherer:
         def get_texture(texture_name: str) -> Optional[str]:
             input = yakuza_shader_node.inputs[texture_name]
             if not input.links:
+                self.error.info(f"Material {material.name} texture input {texture_name} is not linked to anything")
                 return None
             if not isinstance(input.links[0].from_node, ShaderNodeTexImage):
                 self.error.fatal(f"Material {material.name} on object {referencing_object.name} has an input {texture_name} which is linked to a {type(input.links[0])} node.\n"
                                  f"All the texture inputs on a Yakuza Shader node should either be linked to an Image Texture node or not linked at all.")
             teximage_node: ShaderNodeTexImage = input.links[0].from_node
             import os
-            image_filepath = os.path.basename(self.remove_blender_duplicate(teximage_node.image.filepath))
-            image_name, ext = os.path.splitext(image_filepath)
+            image_name, ext = os.path.splitext(teximage_node.image.name)
             if ext not in ['', '.dds']:
-                self.error.fatal(f"Input {texture_name} in material {material.name} on object {referencing_object.name} is '{image_filepath}', which is not a DDS file.\n"
+                self.error.fatal(f"Input {texture_name} in material {material.name} on object {referencing_object.name} is '{teximage_node.image.name}', which is not a DDS file.\n"
                                  f"Yakuza cannot handle these. Please change it to be a .dds file.")
+
+            if not image_name:
+                self.error.fatal(f"Material {material.name}.{texture_name} filepath {teximage_node.image.filepath} couldn't be parsed correctly.")
+
             return image_name
 
         gmd_material_origin_version = GMDVersion(yakuza_data.material_origin_type)
@@ -604,6 +608,7 @@ class GMDSceneGatherer:
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )
         self.material_map[material.name] = attribute_set
+        print(f"mat {material.name} -> {attribute_set}")
         return attribute_set
 
 
