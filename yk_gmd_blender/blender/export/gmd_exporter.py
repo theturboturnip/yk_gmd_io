@@ -555,7 +555,6 @@ class GMDSceneGatherer:
         def get_texture(texture_name: str) -> Optional[str]:
             input = yakuza_shader_node.inputs[texture_name]
             if not input.links:
-                self.error.info(f"Material {material.name} texture input {texture_name} is not linked to anything")
                 return None
             if not isinstance(input.links[0].from_node, ShaderNodeTexImage):
                 self.error.fatal(f"Material {material.name} on object {referencing_object.name} has an input {texture_name} which is linked to a {type(input.links[0])} node.\n"
