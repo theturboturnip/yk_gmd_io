@@ -5,7 +5,7 @@ blender_loader = importlib.util.find_spec('bpy')
 bl_info = {
     "name": "Yakuza GMD File Import/Export",
     "author": "Samuel Stark (TheTurboTurnip)",
-    "version": (0, 2, 2),
+    "version": (0, 2, 3),
     "blender": (2, 80, 0),
     "location": "File > Import-Export",
     "description": "Import-Export Yakuza GMD Files (tested with Kenzan, Y3, Y4, Y5, Y0, YK1)",
