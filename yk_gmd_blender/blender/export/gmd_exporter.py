@@ -38,6 +38,8 @@ from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Ke
 from yk_gmd_blender.yk_gmd.v2.structure.version import combine_versions, GMDVersion
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 
+import os
+
 
 class ExportGMD(Operator, ExportHelper):
     """Export scene as glTF 2.0 file"""
@@ -79,7 +81,14 @@ class ExportGMD(Operator, ExportHelper):
         error_reporter = BlenderErrorReporter(self.report, base_error_reporter)
 
         try:
-            version_props, header, file_data = read_gmd_structures(self.filepath, error_reporter)
+            filepath = self.filepath
+            _, ext = os.path.splitext(filepath)
+            if not ext == ".gmd":
+                error_reporter.info(f"[Blender 2.93+ bug?] Filepath had no .gmd extension, adding one manually")
+                filepath = f"{filepath}.gmd"
+
+            error_reporter.info(f"Trying to read from {filepath}")
+            version_props, header, file_data = read_gmd_structures(filepath, error_reporter)
             check_version_writeable(version_props, error_reporter)
 
             original_scene = GMDScene(
@@ -99,7 +108,6 @@ class ExportGMD(Operator, ExportHelper):
 
             scene_gatherer = GMDSceneGatherer(original_scene, try_copy_bones, version_props.major_version, error_reporter)
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
-            # TODO - pull GMDScene out of blender
             scene_gatherer.gather_exported_items(context, self.debug_compare_matrices)
             self.report({"INFO"}, "Finished extracting abstract scene")
 
