@@ -46,7 +46,7 @@ class ExportGMD(Operator, ExportHelper):
     bl_idname = 'export_scene.gmd'
     bl_label = "Export Yakuza GMD (YK1)"
 
-    filename_ext = ''
+    filename_ext = '.gmd'
 
     filter_glob: StringProperty(default='*.gmd', options={'HIDDEN'})
 
@@ -117,7 +117,7 @@ class ExportGMD(Operator, ExportHelper):
             write_abstract_scene_out(version_props,
                                      file_data.file_is_big_endian(), file_data.vertices_are_big_endian(),
                                      gmd_scene,
-                                     self.filepath,
+                                     filepath,
                                      error_reporter)
 
             self.report({"INFO"}, f"Finished exporting {gmd_scene.name}")
