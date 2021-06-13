@@ -39,11 +39,17 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         # Check for bone name overlap
         # Only bones are added to the overall armature, not objects
         # But the bones are referenced by name, so we need to check if there are multiple bones with the same name
-
-        # bones_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-        #                      isinstance(node, GMDBone)]
-        # if len(bones_depth_first) != 0:
-        #     self.error.fatal("Cannot import a file with bones in an unskinned renderer")
+        bones_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
+                             isinstance(node, GMDBone)]
+        bone_names = {bone.name for bone in bones_depth_first}
+        if len(bone_names) != len(bones_depth_first):
+            # Find the duplicate names by listing them all, and removing one occurence of each name
+            # The only names left will be duplicates
+            bone_name_list = [bone.name for bone in bones_depth_first]
+            for name in bone_names:
+                bone_name_list.remove(name)
+            duplicate_names = set(bone_name_list)
+            self.error.fatal(f"Some bones don't have unique names - found duplicates {duplicate_names}")
 
         if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDSkinnedObject)]) != 0:
             self.error.recoverable(f"This import method cannot import skinnned objects. Please use the [Skinned] variant")
@@ -62,9 +68,16 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         root_obj = bpy.data.objects.new(f"{root_name}", None)
         collection.objects.link(root_obj)
 
+        # Still create the vertex group list, so we create the vertex groups, but don't actually deform anything
+        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
+        vertex_group_indices = {
+            name: i
+            for i, name in enumerate(vertex_group_list)
+        }
+
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if isinstance(gmd_node, GMDUnskinnedObject):
-                overall_mesh = self.build_object_mesh(collection, gmd_node)
+                overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
             else:
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)

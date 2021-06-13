@@ -9,7 +9,12 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, BoneWeight4
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
-def gmd_meshes_to_bmesh(gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]], vertex_group_indices: Dict[str, int], attr_idx: int, gmd_to_blender_world: Matrix, fuse_vertices: bool, error: ErrorReporter):
+def gmd_meshes_to_bmesh(
+        gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]],
+        vertex_group_indices: Dict[str, int],
+        attr_idx: int, gmd_to_blender_world: Matrix,
+        fuse_vertices: bool,
+        error: ErrorReporter):
     if len(gmd_meshes) == 0:
         error.fatal("Called make_merged_gmd_mesh with 0 meshes!")
 
@@ -88,7 +93,11 @@ def gmd_meshes_to_bmesh(gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]], 
         # Find unique (position, normal, boneweight) pairs, assign to BMesh vertex indices
         vert_indices = {}
         for i in range(len(merged_vertex_buffer)):
-            vert_info = (merged_vertex_buffer.pos[i].xyz.copy().freeze(), merged_vertex_buffer.normal[i].xyz.copy().freeze(), merged_vertex_buffer.bone_weights[i] if is_skinned else None)
+            vert_info = (
+                merged_vertex_buffer.pos[i].xyz.copy().freeze(),
+                merged_vertex_buffer.normal[i].xyz.copy().freeze() if merged_vertex_buffer.normal else None,
+                merged_vertex_buffer.bone_weights[i] if is_skinned else None
+            )
             if vert_info in vert_indices:
                 merged_idx_to_bmesh_idx[i] = vert_indices[vert_info]
             else:

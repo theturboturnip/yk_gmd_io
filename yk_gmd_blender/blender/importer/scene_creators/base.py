@@ -156,7 +156,7 @@ class BaseGMDSceneCreator(abc.ABC):
 
     def build_object_mesh(self, collection: bpy.types.Collection,
                           gmd_node: Union[GMDSkinnedObject, GMDUnskinnedObject],
-                          vertex_group_indices: Optional[Dict[str, int]] = None) -> bpy.types.Mesh:
+                          vertex_group_indices: Dict[str, int]) -> bpy.types.Mesh:
         temp_mesh = bpy.data.meshes.new(gmd_node.name)
 
         if isinstance(gmd_node, GMDSkinnedObject) and not vertex_group_indices:
