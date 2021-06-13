@@ -179,5 +179,61 @@ class ImportSkinnedGMD(BaseImportGMD):
         return {'CANCELLED'}
 
 
-def menu_func_import(self, context):
+def menu_func_import_skinned(self, context):
     self.layout.operator(ImportSkinnedGMD.bl_idname, text='Yakuza GMD [Skinned] (.gmd)')
+
+
+class ImportUnskinnedGMD(BaseImportGMD):
+    """Loads a GMD file into blender"""
+    bl_idname = "import_scene.gmd_unskinned"
+    bl_label = "Import Yakuza GMD [Unskinned]"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = True  # No animation.
+
+        # When properties are added, use "layout.prop" here to display them
+        layout.prop(self, 'strict')
+        layout.prop(self, 'logging_categories')
+        layout.prop(self, "game_enum")
+        layout.prop(self, 'import_materials')
+        layout.prop(self, 'material_naming')
+        layout.prop(self, 'fuse_vertices')
+
+    def execute(self, context):
+        error = self.create_logger()
+
+        try:
+            self.report({"INFO"}, "Extracting abstract scene...")
+            gmd_version, gmd_header, gmd_contents = read_gmd_structures(self.filepath, error)
+            gmd_config = self.create_gmd_config(gmd_version, error)
+            gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, gmd_contents, error)
+            self.report({"INFO"}, "Finished extracting abstract scene")
+
+            raise NotImplementedError(f"TODO implement UnskinnedSceneCreator lol")
+            scene_creator = None # GMDSkinnedSceneCreator(self.filepath, gmd_scene, gmd_config, error)
+
+            scene_creator.validate_scene()
+
+            gmd_collection = scene_creator.make_collection(context)
+
+            if self.import_hierarchy:
+                self.report({"INFO"}, "Importing bone hierarchy...")
+                gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection, anim_skeleton=self.anim_skeleton)
+
+            if self.import_objects:
+                self.report({"INFO"}, "Importing objects...")
+                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
+
+            self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
+            return {'FINISHED'}
+        except GMDImportExportError as e:
+            print(e)
+            self.report({"ERROR"}, str(e))
+        return {'CANCELLED'}
+
+
+def menu_func_import_unskinned(self, context):
+    self.layout.operator(ImportUnskinnedGMD.bl_idname, text='Yakuza GMD [Unskinned] (.gmd)')
