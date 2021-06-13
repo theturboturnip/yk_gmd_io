@@ -22,6 +22,7 @@ from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh
 from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, GMDGame, MaterialNamingType
 from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
+from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
     set_yakuza_shader_material_from_attributeset
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
@@ -212,20 +213,14 @@ class ImportUnskinnedGMD(BaseImportGMD):
             gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, gmd_contents, error)
             self.report({"INFO"}, "Finished extracting abstract scene")
 
-            raise NotImplementedError(f"TODO implement UnskinnedSceneCreator lol")
-            scene_creator = None # GMDSkinnedSceneCreator(self.filepath, gmd_scene, gmd_config, error)
+            scene_creator = GMDUnskinnedSceneCreator(self.filepath, gmd_scene, gmd_config, error)
 
             scene_creator.validate_scene()
 
             gmd_collection = scene_creator.make_collection(context)
 
-            if self.import_hierarchy:
-                self.report({"INFO"}, "Importing bone hierarchy...")
-                gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection, anim_skeleton=self.anim_skeleton)
-
-            if self.import_objects:
-                self.report({"INFO"}, "Importing objects...")
-                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
+            self.report({"INFO"}, "Importing objects...")
+            scene_creator.make_objects(gmd_collection)
 
             self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
             return {'FINISHED'}

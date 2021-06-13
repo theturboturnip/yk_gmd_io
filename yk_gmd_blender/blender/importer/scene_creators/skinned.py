@@ -68,7 +68,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             check_object(object)
 
         if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDUnskinnedObject)]) != 0:
-            self.error.recoverable(f"This import method is not supposed to import unskinnned objects. You can continue, but we recommend using the [Unskinned] variant")
+            self.error.recoverable(f"This import method cannot import unskinnned objects. Please use the [Unskinned] variant")
 
     def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection, anim_skeleton: bool) -> bpy.types.Object:
         """
@@ -272,12 +272,23 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         gmd_objects = {}
 
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
-            if not isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+            if not isinstance(gmd_node, GMDSkinnedObject):
                 continue
 
             is_skinned = isinstance(gmd_node, GMDSkinnedObject)
 
-            mesh_obj = self.make_mesh_object(collection, gmd_node, vertex_group_indices)
+            overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
+
+            # Create the final object representing this GMDNode
+            mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
+
+            # Set the GMDNode position, rotation, scale
+            mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
+            # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
+            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
+            # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
+            #  .xzy is used to swap the components for now, but there's probably a better way?
+            mesh_obj.scale = gmd_node.scale.xzy
 
             if is_skinned:
                 # Skinned Objects are parented to the armature, with an Armature modifier to deform them.
@@ -287,29 +298,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
                         mesh_obj.vertex_groups.new(name=name)
                     modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
                     modifier.object = armature_object
-            else:
-                # TODO - Move to unskinned importer
-                # Unskinned objects are either parented to a bone, or to another unskinned object.
-                if gmd_node.parent:
-                    if gmd_node.parent.node_type == NodeType.MatrixTransform:
-                        # To parent an object to a specific bone in the armature, use the Child-Of constraint.
-                        child_constraint = mesh_obj.constraints.new("CHILD_OF")
 
-                        # TODO - This may be unnecessary now that the forward vectors are sign-consistent
-                        # Line up the object with the bone it's parented to
-                        parent_yakuza_space = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
-                        mesh_unparented_yakuza_space = (self.gmd_to_blender_world.inverted() @ mesh_obj.matrix_world)
-                        expected_mesh_obj_matrix = self.gmd_to_blender_world @ parent_yakuza_space @ mesh_unparented_yakuza_space
-
-                        # Set the inverse matrix based on this orientation - otherwise things get weird
-                        # Make sure to set the inverse matrix BEFORE changing other stuff, apparently changing it last doesn't work
-                        # https://blender.stackexchange.com/questions/19602/child-of-constraint-set-inverse-with-python
-                        child_constraint.inverse_matrix = (expected_mesh_obj_matrix).inverted()
-                        child_constraint.target = armature_object
-                        child_constraint.subtarget = gmd_node.parent.name
-                    else:
-                        # Parenting an object to another object is easy
-                        mesh_obj.parent = gmd_objects[id(gmd_node.parent)]
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = mesh_obj

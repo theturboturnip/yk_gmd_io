@@ -154,15 +154,13 @@ class BaseGMDSceneCreator(abc.ABC):
         context.collection.children.link(collection)
         return collection
 
-    def make_mesh_object(self, collection: bpy.types.Collection,
-                                    gmd_node: Union[GMDSkinnedObject, GMDUnskinnedObject],
-                                    vertex_group_indices: Optional[Dict[str, int]] = None) -> bpy.types.Object:
+    def build_object_mesh(self, collection: bpy.types.Collection,
+                          gmd_node: Union[GMDSkinnedObject, GMDUnskinnedObject],
+                          vertex_group_indices: Optional[Dict[str, int]] = None) -> bpy.types.Mesh:
         temp_mesh = bpy.data.meshes.new(gmd_node.name)
 
         if isinstance(gmd_node, GMDSkinnedObject) and not vertex_group_indices:
             self.error.fatal(f"Trying to make a skinned object without any vertex groups")
-        elif isinstance(gmd_node, GMDUnskinnedObject) and vertex_group_indices:
-            self.error.fatal(f"Trying to make an unskinned object with vertex groups")
 
         # 1. Make a single BMesh containing all meshes referenced by this object.
         # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
@@ -224,18 +222,7 @@ class BaseGMDSceneCreator(abc.ABC):
             for mat in blender_material_list:
                 overall_mesh.materials.append(mat)
 
-        # Create the final object representing this GMDNode
-        mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
-
-        # Set the GMDNode position, rotation, scale
-        mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
-        # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-        mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
-        # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
-        #  .xzy is used to swap the components for now, but there's probably a better way?
-        mesh_obj.scale = gmd_node.scale.xzy
-
-        return mesh_obj
+        return overall_mesh
 
     def make_material(self, collection: bpy.types.Collection, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
         """
