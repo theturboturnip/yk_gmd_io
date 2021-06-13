@@ -41,10 +41,10 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 import os
 
 
-class ExportGMD(Operator, ExportHelper):
+class ExportSkinnedGMD(Operator, ExportHelper):
     """Export scene as glTF 2.0 file"""
-    bl_idname = 'export_scene.gmd'
-    bl_label = "Export Yakuza GMD (YK1)"
+    bl_idname = 'export_scene.gmd_skinned'
+    bl_label = "Export Yakuza GMD [Skinned]"
 
     filename_ext = '.gmd'
 
@@ -53,6 +53,9 @@ class ExportGMD(Operator, ExportHelper):
     strict: BoolProperty(name="Strict File Export",
                          description="If True, will fail the export even on recoverable errors.",
                          default=True)
+    logging_categories: StringProperty(name="Debug Log Categories",
+                                       description="Space-separated string of debug categories for logging.",
+                                       default="ALL")
     copy_bones_from_file: BoolProperty(name="Copy Bones from Original File",
                                      description="If True, will reuse the bone hierarchy in the original file.\n"
                                                  "If False, will export the bones from scratch.\n"
@@ -73,11 +76,13 @@ class ExportGMD(Operator, ExportHelper):
 
         # When properties are added, use "layout.prop" here to display them
         layout.prop(self, 'strict')
+        layout.prop(self, 'logging_categories')
         layout.prop(self, 'copy_bones_from_file')
         layout.prop(self, 'debug_compare_matrices')
 
     def execute(self, context):
-        base_error_reporter = StrictErrorReporter() if self.strict else LenientErrorReporter()
+        debug_categories = set(self.logging_categories.split(" "))
+        base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(debug_categories)
         error_reporter = BlenderErrorReporter(self.report, base_error_reporter)
 
         try:
@@ -279,22 +284,23 @@ class GMDSceneGatherer:
                 # This is recoverable, because sometimes if you're converting a skinned -> unskinned (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
                 self.error.info(f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
-            child_of_constraints = [c for c in object.constraints if c.type == "CHILD_OF"]
-            if not child_of_constraints:
-                # Object is not parented to the armature, so it's an unskinned root
-                unskinned_object_roots.append((None, object))
-                continue
-            elif len(child_of_constraints) > 1:
-                self.error.fatal(f"Mesh {object.name} has multiple child of constraints!")
-            else:
-                child_of_constraint = cast(ChildOfConstraint, child_of_constraints[0])
-                if child_of_constraint.target != selected_armature:
-                    self.error.fatal(f"Mesh {object.name} is a Child Of a different skeleton! Change this in the Object Constraints tab.")
-                if child_of_constraint.subtarget not in self.bone_name_map:
-                    self.error.fatal(f"Mesh {object.name} is a Child Of the bone '{child_of_constraint.subtarget}' that doesn't exist in the skeleton!")
-
-                # Object is a Child-Of an existing bone
-                unskinned_object_roots.append((self.bone_name_map[child_of_constraint.subtarget], object))
+            self.error.recoverable(f"Mesh {object.name} is not parented, so isn't skinned. This exporter doesn't support unskinned meshes. It may support it in v0.4.")
+            # child_of_constraints = [c for c in object.constraints if c.type == "CHILD_OF"]
+            # if not child_of_constraints:
+            #     # Object is not parented to the armature, so it's an unskinned root
+            #     unskinned_object_roots.append((None, object))
+            #     continue
+            # elif len(child_of_constraints) > 1:
+            #     self.error.fatal(f"Mesh {object.name} has multiple child of constraints!")
+            # else:
+            #     child_of_constraint = cast(ChildOfConstraint, child_of_constraints[0])
+            #     if child_of_constraint.target != selected_armature:
+            #         self.error.fatal(f"Mesh {object.name} is a Child Of a different skeleton! Change this in the Object Constraints tab.")
+            #     if child_of_constraint.subtarget not in self.bone_name_map:
+            #         self.error.fatal(f"Mesh {object.name} is a Child Of the bone '{child_of_constraint.subtarget}' that doesn't exist in the skeleton!")
+            #
+            #     # Object is a Child-Of an existing bone
+            #     unskinned_object_roots.append((self.bone_name_map[child_of_constraint.subtarget], object))
 
         for object in selected_armature.children:
             if object.type != "MESH":
@@ -620,4 +626,4 @@ class GMDSceneGatherer:
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMD.bl_idname, text='Yakuza GMD (.gmd)')
+    self.layout.operator(ExportSkinnedGMD.bl_idname, text='Yakuza GMD (.gmd)')

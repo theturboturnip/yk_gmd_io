@@ -39,26 +39,13 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties, GMDVersion
 
 
-class ImportGMD(Operator, ImportHelper):
-    """Loads a GMD file into blender"""
-    bl_idname = "import_scene.gmd"
-    bl_label = "Import Yakuza GMD"
-
+class BaseImportGMD(Operator, ImportHelper):
     filter_glob: StringProperty(default="*.gmd", options={"HIDDEN"})
 
     strict: BoolProperty(name="Strict File Import",
                          description="If True, will fail the import even on recoverable errors.",
                          default=True)
 
-    import_hierarchy: BoolProperty(name="Import Hierarchy",
-                                   description="If True, will import the full node hierarchy including skeleton bones. "
-                                               "This is required if you want to export the scene later. "
-                                               "Skinned meshes will be imported with bone weights.",
-                                   default=True)
-    import_objects: BoolProperty(name="Import Objects",
-                                 description="If True, will import the full object hierarchy. "
-                                             "This is required if you want to export the scene later.",
-                                 default=True)
     import_materials: BoolProperty(name="Import Materials",
                                    description="If True, will import materials. If False, all objects will not have any materials. "
                                                "This is required if you want to export the scene later.",
@@ -67,45 +54,26 @@ class ImportGMD(Operator, ImportHelper):
                                   description="How materials are named",
                                   items=[
                                       ("COLLECTION_SHADER", "[Collection]_[Shader]", "Collection name and Shader name"),
-                                      ("COLLECTION_TEXTURE", "[Collection]_[Texture]", "Collection name and Diffuse Texture name"),
+                                      ("COLLECTION_TEXTURE", "[Collection]_[Texture]",
+                                       "Collection name and Diffuse Texture name"),
                                       ("TEXTURE", "[Texture]", "Diffuse Texture name"),
                                   ],
                                   default="COLLECTION_TEXTURE")
 
     fuse_vertices: BoolProperty(name="Fuse Vertices",
-                                     description="If True, meshes that are attached to the same object will have duplicate vertices removed.",
-                                     default=True)
-
-    anim_skeleton: BoolProperty(name="Load Animation Skeleton",
-                                     description="If True, will modify skeleton before importing to allow for proper animation imports",
-                                     default=False)
+                                description="If True, meshes that are attached to the same object will have duplicate vertices removed.",
+                                default=True)
 
     game_enum: EnumProperty(name="Game/Engine Version",
                             description="The Game or Engine version you're importing from."
                                         "If the specific game isn't available, you can select the engine type.",
-                            items=GMDGame.blender_props() + [("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
+                            items=GMDGame.blender_props() + [
+                                ("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
                             default="AUTODETECT")
 
     logging_categories: StringProperty(name="Debug Log Categories",
                                        description="Space-separated string of debug categories for logging.",
                                        default="ALL")
-
-    def draw(self, context):
-        layout = self.layout
-
-        layout.use_property_split = True
-        layout.use_property_decorate = True  # No animation.
-
-        # When properties are added, use "layout.prop" here to display them
-        layout.prop(self, 'strict')
-        layout.prop(self, 'import_hierarchy')
-        layout.prop(self, 'import_objects')
-        layout.prop(self, 'import_materials')
-        layout.prop(self, 'material_naming')
-        layout.prop(self, 'fuse_vertices')
-        layout.prop(self, 'anim_skeleton')
-        layout.prop(self, "game_enum")
-        layout.prop(self, 'logging_categories')
 
     def create_logger(self) -> BlenderErrorReporter:
         debug_categories = set(self.logging_categories.split(" "))
@@ -142,6 +110,43 @@ class ImportGMD(Operator, ImportHelper):
             fuse_vertices=self.fuse_vertices
         )
 
+
+class ImportSkinnedGMD(BaseImportGMD):
+    """Loads a GMD file into blender"""
+    bl_idname = "import_scene.gmd_skinned"
+    bl_label = "Import Yakuza GMD [Skinned]"
+
+    import_hierarchy: BoolProperty(name="Import Hierarchy",
+                                   description="If True, will import the full node hierarchy including skeleton bones. "
+                                               "This is required if you want to export the scene later. "
+                                               "Skinned meshes will be imported with bone weights.",
+                                   default=True)
+    import_objects: BoolProperty(name="Import Objects",
+                                 description="If True, will import the full object hierarchy. "
+                                             "This is required if you want to export the scene later.",
+                                 default=True)
+    anim_skeleton: BoolProperty(name="Load Animation Skeleton",
+                                     description="If True, will modify skeleton before importing to allow for proper animation imports",
+                                     default=False)
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = True  # No animation.
+
+        # When properties are added, use "layout.prop" here to display them
+        layout.prop(self, 'strict')
+        layout.prop(self, 'logging_categories')
+        layout.prop(self, "game_enum")
+        layout.prop(self, 'import_materials')
+        layout.prop(self, 'material_naming')
+        layout.prop(self, 'fuse_vertices')
+
+        layout.prop(self, 'import_hierarchy')
+        layout.prop(self, 'import_objects')
+        layout.prop(self, 'anim_skeleton')
+
     def execute(self, context):
         error = self.create_logger()
 
@@ -164,7 +169,7 @@ class ImportGMD(Operator, ImportHelper):
 
             if self.import_objects:
                 self.report({"INFO"}, "Importing objects...")
-                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)#self.import_materials)
+                scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
 
             self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
             return {'FINISHED'}
@@ -175,4 +180,4 @@ class ImportGMD(Operator, ImportHelper):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportGMD.bl_idname, text='Yakuza GMD (.gmd)')
+    self.layout.operator(ImportSkinnedGMD.bl_idname, text='Yakuza GMD [Skinned] (.gmd)')

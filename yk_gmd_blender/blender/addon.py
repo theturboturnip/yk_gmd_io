@@ -31,12 +31,12 @@ import bpy
 from bpy.props import PointerProperty
 
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel
-from .export.gmd_exporter import ExportGMD, menu_func_export
-from .importer.gmd_importer import ImportGMD, menu_func_import
+from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export
+from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import
 
 classes = (
-    ImportGMD,
-    ExportGMD,
+    ImportSkinnedGMD,
+    ExportSkinnedGMD,
     YakuzaPropertyGroup,
     YakuzaPropertyPanel,
 )
