@@ -17,8 +17,6 @@ from typing import *
 
 from yk_gmd_blender.structurelib.base import BoundedPrimitiveUnpacker, BasePrimitive
 
-# TODO: Rename these primitives to not match ctypes
-
 c_uint8 = BoundedPrimitiveUnpacker(struct_fmt="B", python_type=int, range=(0, 255))
 c_uint16 = BoundedPrimitiveUnpacker(struct_fmt="H", python_type=int, range=(0, 65_535))
 c_uint32 = BoundedPrimitiveUnpacker(struct_fmt="I", python_type=int, range=(0, 4_294_967_295))

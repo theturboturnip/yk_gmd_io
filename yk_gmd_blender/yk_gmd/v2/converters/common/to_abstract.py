@@ -124,8 +124,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     vertex_buffer_layout=vertex_layout
                 )
             elif shader_vertex_layout_map[shader_name] != vertex_layout:
-                # TODO: Is this recoverable? It's fine for import, but breaks export
-                self.error.recoverable(f"Shader {shader_name} was found to be mapped to two different vertex layouts")
+                self.error.fatal(f"Shader {shader_name} was found to be mapped to two different vertex layouts")
 
         # Return shaders in the same order as the shader_name_arr
         return [shaders_map[name.text] for name in shader_name_arr]

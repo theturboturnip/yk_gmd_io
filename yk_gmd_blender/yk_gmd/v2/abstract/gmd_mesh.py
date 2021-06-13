@@ -13,7 +13,6 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 class GMDMesh:
     vertices_data: GMDVertexBuffer
 
-    # TODO: Is List[int] any more convenient than array? If not, array is more compact and nicer
     triangle_indices: array.ArrayType
     triangle_strip_noreset_indices: array.ArrayType
     triangle_strip_reset_indices: array.ArrayType
