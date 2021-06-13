@@ -152,32 +152,10 @@ class ImportGMD(Operator, ImportHelper):
             gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, gmd_contents, error)
             self.report({"INFO"}, "Finished extracting abstract scene")
 
-
-            # Check for bone name overlap
-            # Only bones are added to the overall armature, not objects
-            # But the bones are referenced by name, so we need to check if there are multiple bones with the same name
-            bones_depth_first = [node for node in gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
-            bone_names = {bone.name for bone in bones_depth_first}
-            if len(bone_names) != len(bones_depth_first):
-                # Find the duplicate names by listing them all, and removing one occurence of each name
-                # The only names left will be duplicates
-                bone_name_list = [bone.name for bone in bones_depth_first]
-                for name in bone_names:
-                    bone_name_list.remove(name)
-                duplicate_names = set(bone_name_list)
-                error.fatal(f"Some bones don't have unique names - found duplicates {duplicate_names}")
-
-            # Check that objects do not have bones underneath them
-            objects_depth_first = [node for node in gmd_scene.overall_hierarchy.depth_first_iterate() if not isinstance(node, GMDBone)]
-            def check_objects_children(object: GMDNode):
-                for child in object.children:
-                    if isinstance(child, GMDBone):
-                        error.fatal(f"Object {object.name} has child {child.name} which is a GMDBone - The importer expects that objects do not have bones as children")
-                    check_objects_children(child)
-            for object in objects_depth_first:
-                check_objects_children(object)
-
             scene_creator = GMDSkinnedSceneCreator(self.filepath, gmd_scene, gmd_config, error)
+
+            scene_creator.validate_scene()
+
             gmd_collection = scene_creator.make_collection(context)
 
             if self.import_hierarchy:
