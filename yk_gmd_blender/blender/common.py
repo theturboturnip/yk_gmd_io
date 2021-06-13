@@ -1,22 +1,6 @@
 from typing import Tuple, Iterable, Union
 
-from mathutils import Vector
-
-
-# def yk_to_blender_space(vec: Vec3):
-#     return (vec.x, vec.z, vec.y)
-#
-#
-# def blender_to_yk_space(vec: Vector):
-#     return Vec3(vec[0], vec[2], vec[1])
-#
-# def blender_to_yk_space_vec4(vec: Vector, w: float):
-#     return Vec4(vec[0], vec[2], vec[1], w)
-#
-# def blender_to_yk_color(vec: Vector):
-#     return Vec4(vec[0], vec[1], vec[2], vec[3])
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-
 
 def uv_yk_to_blender_space(uv: Tuple[float, float]):
     return (uv[0], 1 - uv[1])
