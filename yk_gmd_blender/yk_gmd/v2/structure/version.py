@@ -18,7 +18,7 @@ class VersionProperties:
     # Are indices relative to the defined "vertex start" in the file?
     relative_indices_used: bool
     # Is vertex offset used to determine the range of values used by a mesh?
-    mesh_vertex_offset_used: bool
+    indices_offset_by_min_index: bool
 
     def combined_version(self):
         return combine_versions(self.version_tuple[0], self.version_tuple[1])
@@ -40,7 +40,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=True,
-                mesh_vertex_offset_used=True
+                indices_offset_by_min_index=True
             )
         else:
             # ex: haruka_on
@@ -48,7 +48,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kenzan,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                mesh_vertex_offset_used=False
+                indices_offset_by_min_index=False
             )
     elif version_major == 2:
         # Yakuza 3
@@ -57,7 +57,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 major_version=GMDVersion.Kiwami1,
                 version_tuple=(version_major, version_minor),
                 relative_indices_used=False,
-                mesh_vertex_offset_used=True
+                indices_offset_by_min_index=True
             )
     elif version_major == 3:
         # All 0/Kiwami-era files
@@ -65,7 +65,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
             major_version = GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            mesh_vertex_offset_used=True
+            indices_offset_by_min_index=True
         )
     elif version_major == 4:
         # Dragon engine
@@ -73,7 +73,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
             major_version = GMDVersion.Dragon,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
-            mesh_vertex_offset_used=True
+            indices_offset_by_min_index=True
         )
 
     print(f"Unknown major/minor combination {version_major}.{version_minor}")

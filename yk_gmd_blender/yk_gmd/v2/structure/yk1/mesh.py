@@ -7,11 +7,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct, IndicesSt
 
 @dataclass(frozen=True)
 class MeshStruct_YK1(MeshStruct):
-    # padding: int = 0
-
-    def check_padding(self):
-        if self.padding_maybe:
-            print(f"Unexpected nonzero mesh padding {self.padding_maybe}")
+    pass
 
 
 MeshStruct_YK1_Unpack = StructureUnpacker(
@@ -32,9 +28,9 @@ MeshStruct_YK1_Unpack = StructureUnpacker(
         ("node_index", c_uint32),
         ("object_index", c_uint32),
 
-        ("padding_maybe", c_int32), # Always 0
+        ("vertex_offset_from_index", c_int32),
 
-        ("vertex_offset", c_uint32)
+        ("min_index", c_uint32)
     ],
     load_validate=lambda m: m.check_padding()
 )

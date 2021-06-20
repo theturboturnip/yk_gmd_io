@@ -30,10 +30,10 @@ class MeshStruct:
     object_index: int
     node_index: int
 
-    vertex_offset: int
+    min_index: int
     vertex_count: int
 
-    padding_maybe: int
+    vertex_offset_from_index: int
 
     # Each vertex in the mesh can be linked to up to 4 matrices.
     # These matrices are linked to bones in the skeleton, and as the bones move the matrices are updated, which updates the vertices

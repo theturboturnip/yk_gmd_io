@@ -262,7 +262,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                   ) \
             -> List[Union[GMDSkinnedMesh, GMDMesh]]:
         file_uses_relative_indices = self.version_props.relative_indices_used
-        file_uses_vertex_offset = self.version_props.mesh_vertex_offset_used
+        file_uses_min_index = self.version_props.indices_offset_by_min_index
 
         # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
 
@@ -299,8 +299,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             if file_uses_relative_indices:
                 index_offset = 0
             else:
-                if file_uses_vertex_offset:
-                    index_offset = mesh_struct.vertex_offset
+                if file_uses_min_index:
+                    index_offset = mesh_struct.min_index
                 else:
                     # Look through the range and find the smallest index, take everything relative to that.
                     index_offset = min(index_buffer[i] for i in range(index_ptr_min, index_ptr_max))
@@ -319,9 +319,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         meshes = []
         for mesh_struct in mesh_arr:
-            # Use a different "vertex offset" here - the
-            overall_mesh_vertex_offset = mesh_struct.vertex_offset + mesh_struct.padding_maybe
-
             triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices)
             triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                    mesh_struct.noreset_strip_indices,
@@ -330,12 +327,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                                                                  mesh_struct.reset_strip_indices, min_index,
                                                                                  max_index)
 
-            # NOTE - not using "padding_maybe" here because min_index is an absolute value, which hasn't been offset
-            if file_uses_vertex_offset and (not file_uses_relative_indices) and mesh_struct.vertex_offset != min_index:
+            if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
                 self.error.fatal(
-                    f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum vertex of {mesh_struct.vertex_offset}")
+                    f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
 
-            vertex_start = overall_mesh_vertex_offset if file_uses_vertex_offset else min_index
+            vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 
             self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
