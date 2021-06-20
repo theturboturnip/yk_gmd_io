@@ -35,22 +35,3 @@ MeshStruct_YK1_Unpack = StructureUnpacker(
     load_validate=lambda m: m.check_padding()
 )
 
-#     ushort m_index; (index)
-#     ushort m_attribute_index; (attribute_index)
-#     ushort m_vb_index; (vertex_buffer_index)
-#     ushort m_vertex_num; (vertex_count)
-
-# (presumably derived from IndicesStruct)
-#     uint m_index_offset;
-#     uint m_index_num:24;
-#     uint m_primitive_type:8;
-
-#     struct t_relative_ptr<pxd::cgs_mesh_matrix_tbl,1> mp_matrix_tbl; (matrixlist_length/offset)
-
-
-#     ushort m_node_index; (node_index)
-#     ushort m_object_index; (object_index)
-
-#     struct t_relative_long_ptr<pxd::cgs_mesh,0> mp_mesh; (padding???)
-
-#     uint m_vertex_offset; (vertex_offset)

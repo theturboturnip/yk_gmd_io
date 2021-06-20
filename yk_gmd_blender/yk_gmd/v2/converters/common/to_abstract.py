@@ -264,7 +264,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         file_uses_relative_indices = self.version_props.relative_indices_used
         file_uses_min_index = self.version_props.indices_offset_by_min_index
 
-        # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
+        # TODO: Check if uses_relative_indices and not(uses_min_index), that should error?
 
         def read_bytestring(start_byte: int, length: int):
             if (not mesh_matrix_bytestrings) or (length == 0):

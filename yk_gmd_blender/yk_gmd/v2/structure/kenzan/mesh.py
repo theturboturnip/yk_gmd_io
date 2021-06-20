@@ -28,7 +28,7 @@ MeshStruct_Kenzan_Unpack = StructureUnpacker(
         ("node_index", c_uint32),
         ("object_index", c_uint32),
 
-        ("vertex_offset", c_uint32),
+        ("min_index", c_uint32),
 
         ("vertex_offset_from_index", c_int32)
     ],
