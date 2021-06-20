@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from yk_gmd_blender.structurelib.base import StructureUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64, c_int32
+from yk_gmd_blender.structurelib.primitives import c_uint32
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import MeshStruct, IndicesStruct_Unpack
 
 
@@ -28,7 +28,7 @@ MeshStruct_YK1_Unpack = StructureUnpacker(
         ("node_index", c_uint32),
         ("object_index", c_uint32),
 
-        ("vertex_offset_from_index", c_int32),
+        ("vertex_offset_from_index", c_uint32),
 
         ("min_index", c_uint32)
     ]
