@@ -31,7 +31,6 @@ MeshStruct_YK1_Unpack = StructureUnpacker(
         ("vertex_offset_from_index", c_int32),
 
         ("min_index", c_uint32)
-    ],
-    load_validate=lambda m: m.check_padding()
+    ]
 )
 

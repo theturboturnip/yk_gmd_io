@@ -31,6 +31,5 @@ MeshStruct_Kenzan_Unpack = StructureUnpacker(
         ("min_index", c_uint32),
 
         ("vertex_offset_from_index", c_int32)
-    ],
-    load_validate=lambda m: m.check_padding()
+    ]
 )
