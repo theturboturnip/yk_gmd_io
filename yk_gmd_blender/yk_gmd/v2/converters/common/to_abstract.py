@@ -262,9 +262,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                   ) \
             -> List[Union[GMDSkinnedMesh, GMDMesh]]:
         file_uses_relative_indices = self.version_props.relative_indices_used
-        file_uses_vertex_offset = self.version_props.mesh_vertex_offset_used
+        file_uses_min_index = self.version_props.indices_offset_by_min_index
 
-        # TODO: Check if uses_relative_indices and not(uses_vertex_offset), that should error
+        # TODO: Check if uses_relative_indices and not(uses_min_index), that should error?
 
         def read_bytestring(start_byte: int, length: int):
             if (not mesh_matrix_bytestrings) or (length == 0):
@@ -290,18 +290,22 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             data, _ = FixedSizeArrayUnpacker(unpack_type, length).unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=offset)
             return data
 
+        # Take a range, look up that range in the index buffer, return normalized indices from 0 to vertex_count
         def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0xFFFF,
                             max_index: int = -1) -> Tuple[array.ArrayType, int, int]:
+            index_ptr_min = indices_range.index_offset
+            index_ptr_max = index_ptr_min + indices_range.index_count
+
             if file_uses_relative_indices:
                 index_offset = 0
             else:
-                if file_uses_vertex_offset:
-                    index_offset = mesh_struct.vertex_offset
+                if file_uses_min_index:
+                    index_offset = mesh_struct.min_index
                 else:
                     # Look through the range and find the smallest index, take everything relative to that.
-                    index_offset = min(index_buffer[i] for i in range(indices_range.index_offset, indices_range.index_offset + indices_range.index_count))
+                    index_offset = min(index_buffer[i] for i in range(index_ptr_min, index_ptr_max))
             indices = array.array("H")
-            for i in range(indices_range.index_offset, indices_range.index_offset + indices_range.index_count):
+            for i in range(index_ptr_min, index_ptr_max):
                 index = index_buffer[i]
                 if index != 0xFFFF:
                     # Update min/max absolute index values
@@ -323,16 +327,23 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                                                                  mesh_struct.reset_strip_indices, min_index,
                                                                                  max_index)
 
-            if file_uses_vertex_offset and (not file_uses_relative_indices) and mesh_struct.vertex_offset != min_index:
+            if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
                 self.error.fatal(
-                    f"Mesh uses a minimum absolute index of {min_index}, but file specifies a vertex offset of {mesh_struct.vertex_offset}")
+                    f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
 
-            vertex_start = mesh_struct.vertex_offset if file_uses_vertex_offset else min_index
+            vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 
-            if (not file_uses_relative_indices) and (vertex_end - vertex_start) < (max_index - min_index):
+            self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
+
+            if vertex_start < 0 or vertex_end < 0 or vertex_end <= vertex_start:
+                self.error.fatal(f"Invalid vertex_start {vertex_start} vertex_end {vertex_end} pair")
+
+            # [min_index, max_index] is an *inclusive* range
+            # [vertex_start, vertex_end) is *exclusive* at the end
+            if (not file_uses_relative_indices) and (vertex_end - vertex_start) != (max_index - min_index + 1):
                 self.error.fatal(
-                    f"Mesh vertex_count is {mesh_struct.vertex_count} but indices show a range of length {max_index - min_index + 1} is used.")
+                    f"Mesh vertex_count is {mesh_struct.vertex_count} and calculated range is {vertex_end - vertex_start} long but indices show a range of length {max_index - min_index + 1} is used.")
 
             relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
             if relevant_bone_indices:

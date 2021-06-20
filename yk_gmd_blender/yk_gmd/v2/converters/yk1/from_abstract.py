@@ -165,6 +165,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
     index_buffer = []
+    # TODO - this isn't vertex_offset anymore, need to consider indices>65535 and start using the vertex_offset_from_indices
     # Dict of GMDMesh id -> (buffer_id, vertex_offset, vertex_count)
     mesh_buffer_stats = {}
     for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(rearranged_data.vertex_layout_groups):
@@ -251,8 +252,10 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             matrixlist_offset=packed_mesh_matrix_strings_index[tuple(matrix_list)] if matrix_list else 0,
             matrixlist_length=len(matrix_list),
 
-            vertex_offset=vertex_offset,
+            # TODO vertex_offset should be renamed, vertex_offset_from_index should be used and not always be 0
+            min_index=vertex_offset,
             vertex_count=vertex_count,
+            vertex_offset_from_index=0,
 
             triangle_list_indices=triangle_indices,
             noreset_strip_indices=triangle_strip_noreset_indices,
