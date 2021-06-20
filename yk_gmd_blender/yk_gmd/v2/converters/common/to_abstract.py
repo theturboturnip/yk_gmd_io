@@ -330,9 +330,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             vertex_start = mesh_struct.vertex_offset if file_uses_vertex_offset else min_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 
-            if (not file_uses_relative_indices) and vertex_end < max_index:
+            if (not file_uses_relative_indices) and (vertex_end - vertex_start) < (max_index - min_index):
                 self.error.fatal(
-                    f"Mesh vertex_count is {mesh_struct.vertex_count} but indices show a range of length {max_index - min_index} is used.")
+                    f"Mesh vertex_count is {mesh_struct.vertex_count} but indices show a range of length {max_index - min_index + 1} is used.")
 
             relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
             if relevant_bone_indices:
