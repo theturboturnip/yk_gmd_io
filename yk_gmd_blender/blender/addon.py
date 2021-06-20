@@ -31,12 +31,14 @@ import bpy
 from bpy.props import PointerProperty
 
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel
-from .export.gmd_exporter import ExportGMD, menu_func_export
-from .importer.gmd_importer import ImportGMD, menu_func_import
+from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export
+from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
+    ImportUnskinnedGMD
 
 classes = (
-    ImportGMD,
-    ExportGMD,
+    ImportSkinnedGMD,
+    ImportUnskinnedGMD,
+    ExportSkinnedGMD,
     YakuzaPropertyGroup,
     YakuzaPropertyPanel,
 )
@@ -47,7 +49,8 @@ def register():
 
     # add to the export / import menu
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
-    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_skinned)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_unskinned)
 
     bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
 
@@ -63,4 +66,5 @@ def unregister():
 
     # remove from the export / import menu
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
-    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_unskinned)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_skinned)

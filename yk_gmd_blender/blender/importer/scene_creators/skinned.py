@@ -7,7 +7,6 @@ from typing import Dict, List, Tuple, Union, cast, TypeVar, Optional
 from mathutils import Matrix, Vector, Quaternion
 
 import bpy
-import bmesh
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_to_matrix, transform_rotation_gmd_to_blender
 
@@ -35,6 +34,41 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
     def __init__(self, filepath: str, gmd_scene: GMDScene, config: GMDSceneCreatorConfig, error: ErrorReporter):
         super().__init__(filepath, gmd_scene, config, error)
+
+    def validate_scene(self):
+        # Check for bone name overlap
+        # Only bones are added to the overall armature, not objects
+        # But the bones are referenced by name, so we need to check if there are multiple bones with the same name
+        bones_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
+                             isinstance(node, GMDBone)]
+        bone_names = {bone.name for bone in bones_depth_first}
+        if len(bone_names) != len(bones_depth_first):
+            # Find the duplicate names by listing them all, and removing one occurence of each name
+            # The only names left will be duplicates
+            bone_name_list = [bone.name for bone in bones_depth_first]
+            for name in bone_names:
+                bone_name_list.remove(name)
+            duplicate_names = set(bone_name_list)
+            self.error.fatal(f"Some bones don't have unique names - found duplicates {duplicate_names}")
+
+        # Check that objects do not have bones underneath them
+        objects_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
+                               not isinstance(node, GMDBone)]
+
+        def check_object(object: GMDNode):
+            if object.parent is not None:
+                self.error.fatal(f"This import method cannot import object hierarchies, try the [Unskinned] variant")
+
+            for child in object.children:
+                if isinstance(child, GMDBone):
+                    self.error.fatal(
+                        f"Object {object.name} has child {child.name} which is a GMDBone - The importer expects that objects do not have bones as children")
+
+        for object in objects_depth_first:
+            check_object(object)
+
+        if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDUnskinnedObject)]) != 0:
+            self.error.recoverable(f"This import method cannot import unskinnned objects. Please use the [Unskinned] variant")
 
     def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection, anim_skeleton: bool) -> bpy.types.Object:
         """
@@ -229,8 +263,6 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         :return: Nothing
         """
 
-        temp_mesh = bpy.data.meshes.new(".temp")
-
         vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
         vertex_group_indices = {
             name: i
@@ -240,77 +272,12 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         gmd_objects = {}
 
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
-            if not isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+            if not isinstance(gmd_node, GMDSkinnedObject):
                 continue
 
             is_skinned = isinstance(gmd_node, GMDSkinnedObject)
 
-            custom_normals = []
-
-            # 1. Make a single BMesh containing all meshes referenced by this object.
-            # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
-            # originally split up for the sake of bone limits, and not merging them would make blender bug up.
-            # To do this, we list all of the unique attribute sets:
-            gmd_attr_set_ids = list({id(mesh.attribute_set) for mesh in gmd_node.mesh_list})
-            # TODO: This method probably wastes a lot of time creating new BMeshes.
-            #  It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
-            overall_bm = bmesh.new()
-            blender_material_list = []
-
-            self.error.info(f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
-
-            # then we make a merged GMDMesh object for each attribute set, containing the meshes that use that attribute set.
-            for i, attr_set_id in enumerate(gmd_attr_set_ids):
-                meshes_for_attr_set = [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id]
-                attr_set = meshes_for_attr_set[0].attribute_set
-                self.error.info(f"\tattr_set #{attr_set_id} has {len(meshes_for_attr_set)} meshes with {[len(gmd_mesh.vertices_data) for gmd_mesh in meshes_for_attr_set]} verts each.")
-                # merged_gmd_mesh = self.make_merged_gmd_mesh(
-                #     [gmd_mesh for gmd_mesh in gmd_node.mesh_list if id(gmd_mesh.attribute_set) == attr_set_id], remove_dupes=fuse_vertices)
-
-                # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
-                if self.config.import_materials:
-                    blender_material_list.append(self.make_material(collection, attr_set))
-                    new_bmesh = gmd_meshes_to_bmesh(
-                        meshes_for_attr_set,
-                        vertex_group_indices,
-                        attr_idx=i,
-                        gmd_to_blender_world=self.gmd_to_blender_world,
-                        fuse_vertices=self.config.fuse_vertices,
-                        error=self.error
-                    )
-                else:
-                    new_bmesh = gmd_meshes_to_bmesh(
-                        meshes_for_attr_set,
-                        vertex_group_indices,
-                        attr_idx=0,
-                        gmd_to_blender_world=self.gmd_to_blender_world,
-                        fuse_vertices=self.config.fuse_vertices,
-                        error=self.error
-                    )
-
-                self.error.info(f"\t\tAdding {len(new_bmesh.verts)} verts and {len(new_bmesh.faces)} faces for accumulated, (fused={self.config.fuse_vertices}) mesh of attr_set #{attr_set_id}")
-
-                # Merge it in to the overall bmesh.
-                new_bmesh.to_mesh(temp_mesh)
-                new_bmesh.free()
-                overall_bm.from_mesh(temp_mesh)
-            self.error.info(f"\tOverall mesh vert count: {len(overall_bm.verts)}")
-
-            # Turn the overall BMesh into a Blender Mesh (there's a difference) so that it can be attached to an Object.
-            overall_mesh = bpy.data.meshes.new(gmd_node.name)
-            overall_bm.to_mesh(overall_mesh)
-            overall_bm.free()
-            if self.config.import_materials:
-                for mat in blender_material_list:
-                    overall_mesh.materials.append(mat)
-            # print(f"total custom normals: {len(custom_normals)}")
-            # print(f"total verts: {len(overall_mesh.vertices)}")
-            # For the normals to work right, you have 1. create and set the "split normals" for each vertex
-            # 2. enable "use_auto_smooth", which tells blender to actually use the custom split normals data.
-            # overall_mesh.create_normals_split()
-            # overall_mesh.normals_split_custom_set_from_vertices(custom_normals)
-            # overall_mesh.auto_smooth_angle = 0
-            # overall_mesh.use_auto_smooth = True
+            overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
 
             # Create the final object representing this GMDNode
             mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
@@ -318,10 +285,9 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             # Set the GMDNode position, rotation, scale
             mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
             # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))#self.gmd_to_blender_world @ gmd_node.rot
+            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
-            #mesh_obj.scale = self.gmd_to_blender_world @ gmd_node.scale.xyz
             mesh_obj.scale = gmd_node.scale.xzy
 
             if is_skinned:
@@ -332,31 +298,8 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
                         mesh_obj.vertex_groups.new(name=name)
                     modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
                     modifier.object = armature_object
-            else:
-                # Unskinned objects are either parented to a bone, or to another unskinned object.
-                if gmd_node.parent:
-                    if gmd_node.parent.node_type == NodeType.MatrixTransform:
-                        # To parent an object to a specific bone in the armature, use the Child-Of constraint.
-                        child_constraint = mesh_obj.constraints.new("CHILD_OF")
 
-                        # TODO - This may be unnecessary now that the forward vectors are sign-consistent
-                        # Line up the object with the bone it's parented to
-                        parent_yakuza_space = self.bone_world_yakuza_space_matrices[gmd_node.parent.name]
-                        mesh_unparented_yakuza_space = (self.gmd_to_blender_world.inverted() @ mesh_obj.matrix_world)
-                        expected_mesh_obj_matrix = self.gmd_to_blender_world @ parent_yakuza_space @ mesh_unparented_yakuza_space
-
-                        # Set the inverse matrix based on this orientation - otherwise things get weird
-                        # Make sure to set the inverse matrix BEFORE changing other stuff, apparently changing it last doesn't work
-                        # https://blender.stackexchange.com/questions/19602/child-of-constraint-set-inverse-with-python
-                        child_constraint.inverse_matrix = (expected_mesh_obj_matrix).inverted()
-                        child_constraint.target = armature_object
-                        child_constraint.subtarget = gmd_node.parent.name
-                    else:
-                        # Parenting an object to another object is easy
-                        mesh_obj.parent = gmd_objects[id(gmd_node.parent)]
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = mesh_obj
             collection.objects.link(mesh_obj)
-
-        bpy.data.meshes.remove(temp_mesh)
