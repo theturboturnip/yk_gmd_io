@@ -83,13 +83,13 @@ def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorRepo
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not readable")
 
 
-def read_abstract_scene_from_filedata_object(version_props: VersionProperties, contents: Union[FileData_Kenzan, FileData_YK1], error_reporter: ErrorReporter) -> GMDScene:
+def read_abstract_scene_from_filedata_object(version_props: VersionProperties, can_have_skinned_vertices: bool, contents: Union[FileData_Kenzan, FileData_YK1], error_reporter: ErrorReporter) -> GMDScene:
     if version_props.major_version == GMDVersion.Kiwami1:
-        return GMDAbstractor_YK1(version_props, cast(FileData_YK1, contents), error_reporter).make_abstract_scene()
+        return GMDAbstractor_YK1(version_props, can_have_skinned_vertices, cast(FileData_YK1, contents), error_reporter).make_abstract_scene()
     elif version_props.major_version == GMDVersion.Dragon:
-        return GMDAbstractor_Dragon(version_props, cast(FileData_Dragon, contents), error_reporter).make_abstract_scene()
+        return GMDAbstractor_Dragon(version_props, can_have_skinned_vertices, cast(FileData_Dragon, contents), error_reporter).make_abstract_scene()
     elif version_props.major_version == GMDVersion.Kenzan:
-        return GMDAbstractor_Kenzan(version_props, cast(FileData_Kenzan, contents),
+        return GMDAbstractor_Kenzan(version_props, can_have_skinned_vertices, cast(FileData_Kenzan, contents),
                                 error_reporter).make_abstract_scene()
     else:
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not abstractable")

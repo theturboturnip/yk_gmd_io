@@ -51,15 +51,17 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     version_props: VersionProperties
     file_is_big_endian: bool
     vertices_are_big_endian: bool
+    can_have_skinned_vertices: bool
 
     error: ErrorReporter
 
     file_data: TFileData
 
-    def __init__(self, version_props: VersionProperties, file_data: TFileData, error_reporter: ErrorReporter):
+    def __init__(self, version_props: VersionProperties, can_have_skinned_vertices: bool, file_data: TFileData, error_reporter: ErrorReporter):
         self.version_props = version_props
         self.file_is_big_endian = file_data.file_is_big_endian()
         self.vertices_are_big_endian = file_data.vertices_are_big_endian()
+        self.can_have_skinned_vertices = can_have_skinned_vertices
         self.error = error_reporter
 
         self.file_data = file_data
@@ -77,7 +79,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, self.error)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, self.can_have_skinned_vertices, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"

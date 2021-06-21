@@ -180,7 +180,7 @@ class ImportSkinnedGMD(BaseImportGMD):
                 self.report({"INFO"}, "Extracting abstract scene...")
                 gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
                 gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, gmd_contents, error)
+                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, True, gmd_contents, error)
                 self.report({"INFO"}, "Finished extracting abstract scene")
 
                 scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
@@ -257,7 +257,7 @@ class ImportUnskinnedGMD(BaseImportGMD):
                 self.report({"INFO"}, "Extracting abstract scene...")
                 gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
                 gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, gmd_contents, error)
+                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, False, gmd_contents, error)
                 self.report({"INFO"}, "Finished extracting abstract scene")
 
                 scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)

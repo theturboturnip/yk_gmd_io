@@ -18,8 +18,9 @@ def gmd_meshes_to_bmesh(
     if len(gmd_meshes) == 0:
         error.fatal("Called make_merged_gmd_mesh with 0 meshes!")
 
-    is_skinned = isinstance(gmd_meshes[0], GMDSkinnedMesh)
-    print(f"make_merged_gmd_mesh called with {gmd_meshes} skinned={is_skinned} fusing={fuse_vertices}")
+    is_skinned = isinstance(gmd_meshes[0], GMDSkinnedMesh) and gmd_meshes[0].vertices_data.layout.can_interpret_as_skinned
+    error.debug("MESH", f"make_merged_gmd_mesh called with {gmd_meshes} skinned={is_skinned} fusing={fuse_vertices}")
+    error.debug("MESH", f"vertex layout: {str(gmd_meshes[0].vertices_data.layout)}")
 
     # Fix up bone mappings if the meshes are skinned
     if is_skinned:
@@ -82,9 +83,9 @@ def gmd_meshes_to_bmesh(
             for bone_weight in merged_vertex_buffer.bone_weights[i]:
                 if bone_weight.weight > 0:
                     if bone_weight.bone >= len(relevant_bones):
-                        print(
+                        error.debug("BONES",
                             f"bone out of bounds - bone {bone_weight.bone} in {[b.name for b in relevant_bones]}")
-                        print(f"mesh len = {len(merged_vertex_buffer)}")
+                        error.debug("BONES", f"mesh len = {len(merged_vertex_buffer)}")
                     vertex_group_index = vertex_group_indices[relevant_bones[bone_weight.bone].name]
                     vert[deform][vertex_group_index] = bone_weight.weight
 
@@ -144,12 +145,12 @@ def gmd_meshes_to_bmesh(
     primary_uv_i = merged_vertex_buffer.layout.get_primary_uv_index()
     uv_layers = []
     for i, uv in enumerate(merged_vertex_buffer.uvs):
-        print(f"Generating layer for UV {i} with storage {merged_vertex_buffer.layout.uv_storages[i]}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.uv_storages[i])}")
+        error.debug("MESH", f"Generating layer for UV {i} with storage {merged_vertex_buffer.layout.uv_storages[i]}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.uv_storages[i])}")
         if i == primary_uv_i:
-            print(f"Making layer as UV layer")
+            error.debug("MESH", f"Making layer as UV layer")
             uv_layers.append(bm.loops.layers.uv.new(f"UV_Primary"))
         elif VecStorage.component_count(merged_vertex_buffer.layout.uv_storages[i]) == 2:
-            print(f"Making layer as UV layer")
+            error.debug("MESH", f"Making layer as UV layer")
             uv_layers.append(bm.loops.layers.uv.new(f"UV{i}"))
         else:
             uv_layers.append(bm.loops.layers.color.new(f"UV{i}"))
