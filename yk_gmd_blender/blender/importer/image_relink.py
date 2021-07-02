@@ -3,6 +3,7 @@ from collections import defaultdict
 import bpy
 import os
 import glob
+import re
 
 class YakuzaImageRelink(bpy.types.Operator):
 
@@ -19,7 +20,12 @@ class YakuzaImageRelink(bpy.types.Operator):
         # But this will be anyway a directory path.
     )
 
-    # TODO - option to allow/prevent pulling from different image formats other than dds
+    texture_formats: bpy.props.StringProperty(
+        name="Texture Formats",
+        description="Allowed texture formats, highest priority first."
+                    "Comma-separated list.",
+        default="png,jpg,jpeg,dds"
+    )
 
     overwrite_linked: bpy.props.BoolProperty(
         name="Overwrite Valid Images",
@@ -38,7 +44,6 @@ class YakuzaImageRelink(bpy.types.Operator):
         # (such as *) are not treated as globs.
         dir_escaped = glob.escape(self.directory)
 
-
         # Gather the set of images we want to remap - multiple Blender images may map to the same yakuza name?
         yk_image_name_to_blender_images = defaultdict(list)
         for img in bpy.data.images:
@@ -48,8 +53,16 @@ class YakuzaImageRelink(bpy.types.Operator):
         # Gather a list of images in the given directory that could be used for a Yakuza image
         yakuza_image_to_filepath = dict()
 
-        # Match DDS then PNG, so PNGs override DDS
-        for valid_ext in ["*.dds", "*.png"]:
+        # Get valid extensions
+        texture_format_list = self.texture_formats.lower().split(",")
+        for format in texture_format_list:
+            if not re.match(r"^[a-z0-9]+$", format):
+                self.report({"ERROR"}, f"Specified texture format '{format}' must be alphanumeric, shouldn't have '.'")
+        # Run least priority search first, to ensure higher priority formats override lower ones.
+        # Thus, reverse the list when creating the globs
+        texture_glob_list = [f"*.{format}" for format in reversed(texture_format_list)]
+
+        for valid_ext in texture_glob_list:
             dir_glob = os.path.join(dir_escaped, valid_ext)
 
             self.report({"INFO"}, f"dir-glob for {valid_ext}: '{dir_glob}'")
@@ -64,7 +77,6 @@ class YakuzaImageRelink(bpy.types.Operator):
                 image_name, image_ext = os.path.splitext(image_basename)
 
                 # If this image maps to a yakuza image name, remember it.
-                # TODO - prioritize images by extension?
                 if image_name in yk_image_name_to_blender_images:
                     yakuza_image_to_filepath[image_name] = image_filepath
 
@@ -78,9 +90,10 @@ class YakuzaImageRelink(bpy.types.Operator):
                     blender_img.source = 'FILE'
                     blender_img.filepath = found_yk_filepath
                     blender_img.reload()
+                    # Increment count
                     relinked_images += 1
 
-        self.report({"INFO"}, f"Found {len(yakuza_image_to_filepath)} texture files, linked them to {relinked_images} Blender images.")
+        self.report({"INFO"}, f"Found {len(yakuza_image_to_filepath)} relevant texture files, linked them to {relinked_images} Blender images.")
 
         return {'FINISHED'}
 
