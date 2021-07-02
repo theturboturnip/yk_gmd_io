@@ -30,6 +30,7 @@
 import bpy
 from bpy.props import PointerProperty
 
+from yk_gmd_blender.blender.importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup
 from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export
 from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
@@ -39,6 +40,7 @@ classes = (
     ImportSkinnedGMD,
     ImportUnskinnedGMD,
     ExportSkinnedGMD,
+    YakuzaImageRelink,
     YakuzaPropertyGroup,
     YakuzaPropertyPanel,
     YakuzaTexturePropertyGroup,
@@ -52,6 +54,7 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import_skinned)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import_unskinned)
+    bpy.types.TOPBAR_MT_file_external_data.append(menu_func_yk_image_relink)
 
     bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
     bpy.types.Image.yakuza_data = PointerProperty(type=YakuzaTexturePropertyGroup)
@@ -68,6 +71,7 @@ def unregister():
     #extension_panel_unregister_functors.clear()
 
     # remove from the export / import menu
+    bpy.types.TOPBAR_MT_file_external_data.remove(menu_func_yk_image_relink)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_unskinned)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_skinned)
