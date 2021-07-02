@@ -129,25 +129,6 @@ def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, fl
     return image
 
 
-def create_single_color_texture(name: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
-    """
-    Create an Image with a given name, which is of a given color.
-    Returns an 128x128 image.
-    :param name: The name of the new image.
-    :param color: The color to fill the image with.
-    :return: A 128x128 Image of the given color, with the given name.
-    """
-    image = bpy.data.images.new(name, 128, 128, alpha=True)
-
-    # Using a GENERATED image means Blender won't try to save it out to a file when you exit
-    image.source = 'GENERATED'
-    image.generated_type = 'BLANK'
-    image.generated_color = color
-    image.generated_width = 128
-    image.generated_height = 128
-    return image
-
-
 def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_name: str, color_if_not_found=(1, 0, 1, 1)) -> ShaderNodeTexImage:
     """
     Given a GMD texture name, find or create the Blender counterpart and add a texture node to the given material tree
@@ -173,13 +154,13 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         # The texture already exists, just use that one
         image_node.image = bpy.data.images[tex_filepath_basename]
     elif tex_name == "dummy_black":
-        image_node.image = create_single_color_texture(tex_filepath_basename, (0, 0, 0, 1))
+        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (0, 0, 0, 1))
     elif tex_name == "dummy_white":
-        image_node.image = create_single_color_texture(tex_filepath_basename, (1, 1, 1, 1))
+        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (1, 1, 1, 1))
     elif tex_name == "dummy_multi":
-        image_node.image = create_single_color_texture(tex_filepath_basename, DEFAULT_MULTI_COLOR)
+        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_MULTI_COLOR)
     elif tex_name == "dummy_nmap":
-        image_node.image = create_single_color_texture(tex_filepath_basename, DEFAULT_NORMAL_COLOR)
+        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_NORMAL_COLOR)
     else:
         # The texture doesn't already exist, and isn't a dummy texture we can create ourselves.
         # Try to find it in the gmd_folder.
@@ -190,6 +171,8 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         else:
             # The texture does exist, load it!
             image = bpy.data.images.load(tex_filepath, check_existing=True)
+            image.yakuza_data.inited = True
+            image.yakuza_data.yk_name = tex_name
             image_node.image = image
 
     return cast(ShaderNodeTexImage, image_node)
