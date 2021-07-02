@@ -28,9 +28,9 @@ class YakuzaImageRelink(bpy.types.Operator):
     )
 
     overwrite_linked: bpy.props.BoolProperty(
-        name="Overwrite Valid Images",
+        name="Overwrite Linked Images",
         description="If True, will try to relink images that are already linked to a file (if a valid file exists).",
-        default=False
+        default=True
     )
 
     def execute(self, context):
