@@ -37,6 +37,7 @@ class YakuzaPropertyGroup(PropertyGroup):
     material_origin_type: IntProperty(name="GMDMaterial origin type")
     material_json: StringProperty(name="GMDMaterial data JSON")
 
+
 class YakuzaPropertyPanel(bpy.types.Panel):
     """
     Panel that displays the YakuzaPropertyGroup attached to the selected material.
@@ -79,6 +80,17 @@ class YakuzaPropertyPanel(bpy.types.Panel):
             self.layout.label(text=f"No Yakuza Data present for this material")
 
 
+# Custom property group for textures imported from GMD files.
+# Allows for "Yakuza relinking": updating the file associated with an image based on the texture name,
+# potentially using a different file format.
+class YakuzaTexturePropertyGroup(PropertyGroup):
+    # Has this PropertyGroup been initialized from a GMD file?
+    inited: BoolProperty(name="Initialized", default=False)
+
+    # Name of the texture from the GMD file
+    yk_name: StringProperty(name="Texture Name (from GMD)")
+
+
 # Inspired by XNALara importer code - https://github.com/johnzero7/XNALaraMesh/blob/eaccfddf39aef8d3cb60a50c05f2585398fe26ca/material_creator.py#L527
 
 YAKUZA_SHADER_NODE_GROUP = "Yakuza Shader"
@@ -90,22 +102,30 @@ DEFAULT_NORMAL_COLOR = (0.5, 0.5, 1, 1)
 DEFAULT_MULTI_COLOR = (0, 0, 1, 1)
 
 
-def create_proxy_texture(name: str, filepath: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
+def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
     """
-    Create an Image with a given name and filepath, which is of a given color.
+    Create an Image with a given name and filename, which is of a given color.
     Returns an 128x128 image.
     :param name: The name of the new image.
-    :param filepath: The filepath to be associated with the new image.
+    :param filename: The filepath to be associated with the new image.
     :param color: The color to fill the image with.
     :return: A 128x128 Image of the given color, with the given filepath and name.
     """
-    # TODO - make blender not try and save this new image when you exit
-    # TODO - Allow images to be relinked with a dds folder
-    image = bpy.data.images.new(name, 128, 128, alpha=True)
-    image.filepath = filepath
-    # TODO - For relinking, likely need a custom "needs-relinking" custom-object-data marker thingy
-    # Can then also use generated images rather than storing the data - see create_single_color_texture.
-    image.pixels[:] = color * 128 * 128
+
+    # Create an image where the Blender name = the file name i.e. the name + extension.
+    image = bpy.data.images.new(filename, 128, 128, alpha=True)
+
+    # Set up the Yakuza Data for this texture to contain the GMD name i.e. the name without an extension.
+    image.yakuza_data.inited = True
+    image.yakuza_data.yk_name = name
+
+    # Using a GENERATED image means Blender won't try to save it out to a file when you exit
+    image.source = 'GENERATED'
+    image.generated_type = 'BLANK'
+    image.generated_color = color
+    image.generated_width = 128
+    image.generated_height = 128
+
     return image
 
 
@@ -166,7 +186,7 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         tex_filepath = os.path.join(gmd_folder, tex_filepath_basename)
         if not os.path.isfile(tex_filepath):
             # The texture doesn't exist.
-            image_node.image = create_proxy_texture(tex_filepath_basename, tex_filepath_basename, color_if_not_found)
+            image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, color_if_not_found)
         else:
             # The texture does exist, load it!
             image = bpy.data.images.load(tex_filepath, check_existing=True)
@@ -190,7 +210,6 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
-    #print(f"import shader {attribute_set.shader.name} flags {attribute_set.shader.vertex_buffer_layout.packing_flags} layout {attribute_set.shader.vertex_buffer_layout}")
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
     material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
     material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32
