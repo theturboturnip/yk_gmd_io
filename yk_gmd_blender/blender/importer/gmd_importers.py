@@ -217,7 +217,7 @@ class ImportSkinnedGMD(BaseImportGMD):
 
 
 def menu_func_import_skinned(self, context):
-    self.layout.operator(ImportSkinnedGMD.bl_idname, text=f"{ImportSkinnedGMD.bl_label} (.gmd)")
+    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza GMD [Characters/Skinned] (.gmd)")
 
 
 class ImportUnskinnedGMD(BaseImportGMD):
@@ -288,4 +288,4 @@ class ImportUnskinnedGMD(BaseImportGMD):
 
 
 def menu_func_import_unskinned(self, context):
-    self.layout.operator(ImportUnskinnedGMD.bl_idname, text=f"{ImportUnskinnedGMD.bl_label} (.gmd)")
+    self.layout.operator(ImportUnskinnedGMD.bl_idname, text="Yakuza GMD [Stages/Weapons/Unskinned] (.gmd)")
