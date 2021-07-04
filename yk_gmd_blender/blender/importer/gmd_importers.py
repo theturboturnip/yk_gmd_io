@@ -43,7 +43,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties, GMDVersion
 
 
-class BaseImportGMD(Operator, ImportHelper):
+class BaseImportGMD:
     filter_glob: StringProperty(default="*.gmd", options={"HIDDEN"})
 
     # Selected files (allows for multi-import)
@@ -126,7 +126,7 @@ class BaseImportGMD(Operator, ImportHelper):
         )
 
 
-class ImportSkinnedGMD(BaseImportGMD):
+class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_skinned"
     bl_label = "Import Yakuza GMD [Characters/Skinned]"
@@ -220,7 +220,7 @@ def menu_func_import_skinned(self, context):
     self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza GMD [Characters/Skinned] (.gmd)")
 
 
-class ImportUnskinnedGMD(BaseImportGMD):
+class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_unskinned"
     bl_label = "Import Yakuza GMD [Stages/Weapons/Unskinned]"
