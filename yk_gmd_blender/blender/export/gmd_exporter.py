@@ -41,10 +41,10 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 import os
 
 
-class ExportGMD(Operator, ExportHelper):
+class ExportSkinnedGMD(Operator, ExportHelper):
     """Export scene as glTF 2.0 file"""
-    bl_idname = 'export_scene.gmd'
-    bl_label = "Export Yakuza GMD (YK1)"
+    bl_idname = 'export_scene.gmd_skinned'
+    bl_label = "Export Yakuza GMD [Skinned]"
 
     filename_ext = '.gmd'
 
@@ -53,6 +53,9 @@ class ExportGMD(Operator, ExportHelper):
     strict: BoolProperty(name="Strict File Export",
                          description="If True, will fail the export even on recoverable errors.",
                          default=True)
+    logging_categories: StringProperty(name="Debug Log Categories",
+                                       description="Space-separated string of debug categories for logging.",
+                                       default="ALL")
     copy_bones_from_file: BoolProperty(name="Copy Bones from Original File",
                                      description="If True, will reuse the bone hierarchy in the original file.\n"
                                                  "If False, will export the bones from scratch.\n"
@@ -73,11 +76,13 @@ class ExportGMD(Operator, ExportHelper):
 
         # When properties are added, use "layout.prop" here to display them
         layout.prop(self, 'strict')
+        layout.prop(self, 'logging_categories')
         layout.prop(self, 'copy_bones_from_file')
         layout.prop(self, 'debug_compare_matrices')
 
     def execute(self, context):
-        base_error_reporter = StrictErrorReporter() if self.strict else LenientErrorReporter()
+        debug_categories = set(self.logging_categories.split(" "))
+        base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(debug_categories)
         error_reporter = BlenderErrorReporter(self.report, base_error_reporter)
 
         try:
@@ -98,7 +103,7 @@ class ExportGMD(Operator, ExportHelper):
             try_copy_bones = self.copy_bones_from_file
             if self.copy_bones_from_file or self.debug_compare_matrices:
                 try:
-                    original_scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
+                    original_scene = read_abstract_scene_from_filedata_object(version_props, True, file_data, error_reporter)
                 except Exception as e:
                     if self.copy_bones_from_file:
                         error_reporter.fatal(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
@@ -183,27 +188,9 @@ class GMDSceneGatherer:
 
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
         selected_armature = context.view_layer.objects.active
-        # armature_objs = [object for object in collection.objects if object.type == "ARMATURE"]
-        # if not armature_objs:
-        #     self.error.fatal(f"No armature objects found in the collection - one must be present")
-        # elif len(armature_objs) == 1:
-        #     selected_armature = armature_objs[0]
-        # else:
-        #     # Mutliple armatures present, if only one of them fits the scene name then select that one
-        #     expected_name = armature_name_for_gmd_file(self.name)
-        #     matching_name_armature_objs = [object for object in armature_objs if self.name_matches_expected(object.name, expected_name)]
-        #     if not matching_name_armature_objs:
-        #         self.error.fatal(f"Multiple armature objects found ({[a.name for a in armature_objs]}), couldn't decide which to use.\n"
-        #                          f"None of their names matched the scene name {self.name}.")
-        #     elif len(matching_name_armature_objs) == 1:
-        #         selected_armature = matching_name_armature_objs[0]
-        #     else:
-        #         self.error.fatal(
-        #             f"Multiple armature objects found ({[a.name for a in armature_objs]}), couldn't decide which to use.\n"
-        #             f"Many of their names ({[a.name for a in matching_name_armature_objs]}) matched the scene name {self.name}.")
 
         if not selected_armature or selected_armature.type != "ARMATURE":
-            self.error.fatal(f"Please select the armature for the file you want to export!")
+            self.error.fatal(f"Please select the armature for the skinned file you want to export!")
 
         if selected_armature.parent:
             self.error.fatal(f"The file armature should not have a parent.")
@@ -261,7 +248,7 @@ class GMDSceneGatherer:
                 continue
 
             if object.parent:
-                print(f"Skipping object {object.name} because parent")
+                self.error.debug("GATHER", f"Skipping object {object.name} because parent")
                 continue
 
             # Unparented objects
@@ -279,29 +266,14 @@ class GMDSceneGatherer:
                 # This is recoverable, because sometimes if you're converting a skinned -> unskinned (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
                 self.error.info(f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
-            child_of_constraints = [c for c in object.constraints if c.type == "CHILD_OF"]
-            if not child_of_constraints:
-                # Object is not parented to the armature, so it's an unskinned root
-                unskinned_object_roots.append((None, object))
-                continue
-            elif len(child_of_constraints) > 1:
-                self.error.fatal(f"Mesh {object.name} has multiple child of constraints!")
-            else:
-                child_of_constraint = cast(ChildOfConstraint, child_of_constraints[0])
-                if child_of_constraint.target != selected_armature:
-                    self.error.fatal(f"Mesh {object.name} is a Child Of a different skeleton! Change this in the Object Constraints tab.")
-                if child_of_constraint.subtarget not in self.bone_name_map:
-                    self.error.fatal(f"Mesh {object.name} is a Child Of the bone '{child_of_constraint.subtarget}' that doesn't exist in the skeleton!")
-
-                # Object is a Child-Of an existing bone
-                unskinned_object_roots.append((self.bone_name_map[child_of_constraint.subtarget], object))
+            self.error.recoverable(f"Mesh {object.name} is not parented, so isn't skinned. This exporter doesn't support unskinned meshes. It may support it in v0.4.")
 
         for object in selected_armature.children:
             if object.type != "MESH":
                 continue
 
             if object.parent != selected_armature:
-                print(f"Skipping object {object.name} because parent not equal to {selected_armature.name}")
+                self.error.debug("GATHER", f"Skipping object {object.name} because parent not equal to {selected_armature.name}")
                 continue
 
             # Objects parented to the armature
@@ -338,18 +310,18 @@ class GMDSceneGatherer:
         for parent, unskinned_object in unskinned_object_roots:
             self.export_unskinned_object(context, selected_collection, unskinned_object, parent)
 
-        print(f"NODE REPORT")
+        self.error.debug("GATHER", f"NODE REPORT")
         for node in depth_first_iterate(self.node_roots):
-            print(f"{node.name} - {node.node_type}")
+            self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
         if debug_compare_matrices:
-            print(f"MATRIX COMPARISONS")
+            self.error.debug("GATHER", f"MATRIX COMPARISONS")
             for node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
-                    print(f"{node.name} vs original scene")
-                    print(f"Old Matrix\n{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
-                    print(f"New Matrix\n{node.matrix}")
-                    print("")
+                    self.error.debug("GATHER", f"{node.name} vs original scene")
+                    self.error.debug("GATHER", f"Old Matrix\n{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
+                    self.error.debug("GATHER", f"New Matrix\n{node.matrix}")
+                    self.error.debug("GATHER", "")
 
         armature_data.pose_position = old_pose_position
 
@@ -456,10 +428,9 @@ class GMDSceneGatherer:
         )
         self.node_roots.append(gmd_object)
 
-        # TODO - add meshes to object
-        # TODO - make sure to apply the object matrix to the mesh vertices - Yakuza expects skinned meshes to be at the identity
+        # Add meshes to object
         if not object.data.vertices:
-            print(f"Object {object.name} has no mesh")
+            self.error.debug("MESH", f"Object {object.name} has no mesh")
         else:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
@@ -479,6 +450,8 @@ class GMDSceneGatherer:
         :param object: TODO
         :return: TODO
         """
+
+        self.error.recoverable(f"Unskinned objects are not officially supported for export.")
 
         # adjusted_pos = self.blender_to_gmd_space_matrix @ object.location.xyz
         #
@@ -509,7 +482,7 @@ class GMDSceneGatherer:
 
         # Add meshes to gmd_object
         if not object.data.vertices:
-            print(f"Object {object.name} has no mesh")
+            self.error.debug("MESH", f"Object {object.name} has no mesh")
         else:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
@@ -533,15 +506,15 @@ class GMDSceneGatherer:
         if (not material.yakuza_data.inited):
             self.error.fatal(f"Material {material.name} on object {referencing_object.name} does not have any Yakuza Properties, and cannot be exported.\n"
                              f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
-        if (not material.use_nodes):
+        if not material.use_nodes:
             self.error.fatal(
                 f"Material {material.name} on object {referencing_object.name} does not use nodes, and cannot be exported.\n"
                 f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
 
         yakuza_shader_nodes = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and node.node_tree.name == YAKUZA_SHADER_NODE_GROUP]
-        print([node.name for node in material.node_tree.nodes])
-        print([node.bl_idname for node in material.node_tree.nodes])
-        print([node.bl_label for node in material.node_tree.nodes])
+        self.error.debug("MATERIAL", str([node.name for node in material.node_tree.nodes]))
+        self.error.debug("MATERIAL", str([node.bl_idname for node in material.node_tree.nodes]))
+        self.error.debug("MATERIAL", str([node.bl_label for node in material.node_tree.nodes]))
         if not yakuza_shader_nodes:
             self.error.fatal(
                 f"Material {material.name} on object {referencing_object.name} does not have a Yakuza Shader node, and cannot be exported.\n"
@@ -554,8 +527,8 @@ class GMDSceneGatherer:
 
         yakuza_data: YakuzaPropertyGroup = material.yakuza_data
         vertex_layout_flags = int(yakuza_data.shader_vertex_layout_flags, base=16)
-        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, self.error)
-        #print(f"material {material.name} shader {yakuza_data.shader_name} flags {vertex_layout_flags} layout {vertex_layout}")
+        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, True, self.error)
+
         shader = GMDShader(
             name=yakuza_data.shader_name,
             vertex_buffer_layout=vertex_layout
@@ -615,9 +588,9 @@ class GMDSceneGatherer:
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )
         self.material_map[material.name] = attribute_set
-        print(f"mat {material.name} -> {attribute_set}")
+        self.error.debug("MATERIAL", f"mat {material.name} -> {attribute_set}")
         return attribute_set
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ExportGMD.bl_idname, text='Yakuza GMD (.gmd)')
+    self.layout.operator(ExportSkinnedGMD.bl_idname, text='Yakuza GMD [Skinned] (.gmd)')

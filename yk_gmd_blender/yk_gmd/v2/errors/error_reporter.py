@@ -1,5 +1,5 @@
 import abc
-from typing import NoReturn
+from typing import NoReturn, Set
 
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 
@@ -14,8 +14,16 @@ class ErrorReporter(abc.ABC):
     def info(self, msg: str):
         raise NotImplementedError()
 
+    def debug(self, category: str, msg: str) -> bool:
+        raise NotImplementedError()
+
 
 class StrictErrorReporter(ErrorReporter):
+    allowed_categories: Set[str]
+
+    def __init__(self, allowed_categories: Set[str]):
+        self.allowed_categories = allowed_categories
+
     def recoverable(self, msg: str):
         raise GMDImportExportError(msg)
 
@@ -23,14 +31,32 @@ class StrictErrorReporter(ErrorReporter):
         raise GMDImportExportError(msg)
 
     def info(self, msg: str):
-        print(msg)
+        print(f"[YKGMD] [INFO ] {msg}")
+
+    def debug(self, category: str, msg: str) -> bool:
+        if category in self.allowed_categories or "ALL" in self.allowed_categories:
+            print(f"[YKGMD] [DEBUG] [{category}] {msg}")
+            return True
+        return False
+
 
 class LenientErrorReporter(ErrorReporter):
+    allowed_categories: Set[str]
+
+    def __init__(self, allowed_categories: Set[str]):
+        self.allowed_categories = allowed_categories
+
     def recoverable(self, msg: str):
-        print(f"GMDImportExportError - {msg}")
+        print(f"[YKGMD] [RECOV] {msg}")
 
     def fatal(self, msg: str) -> NoReturn:
         raise GMDImportExportError(msg)
 
     def info(self, msg: str):
-        print(msg)
+        print(f"[YKGMD] [INFO ] msg")
+
+    def debug(self, category: str, msg: str) -> bool:
+        if category in self.allowed_categories or "ALL" in self.allowed_categories:
+            print(f"[YKGMD] [DEBUG] [{category}] {msg}")
+            return True
+        return False

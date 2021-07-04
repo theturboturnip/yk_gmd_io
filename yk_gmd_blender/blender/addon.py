@@ -30,15 +30,20 @@
 import bpy
 from bpy.props import PointerProperty
 
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel
-from .export.gmd_exporter import ExportGMD, menu_func_export
-from .importer.gmd_importer import ImportGMD, menu_func_import
+from yk_gmd_blender.blender.importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
+from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup
+from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export
+from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
+    ImportUnskinnedGMD
 
 classes = (
-    ImportGMD,
-    ExportGMD,
+    ImportSkinnedGMD,
+    ImportUnskinnedGMD,
+    ExportSkinnedGMD,
+    YakuzaImageRelink,
     YakuzaPropertyGroup,
     YakuzaPropertyPanel,
+    YakuzaTexturePropertyGroup,
 )
 
 def register():
@@ -47,12 +52,16 @@ def register():
 
     # add to the export / import menu
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
-    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_skinned)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_unskinned)
+    bpy.types.TOPBAR_MT_file_external_data.append(menu_func_yk_image_relink)
 
     bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
+    bpy.types.Image.yakuza_data = PointerProperty(type=YakuzaTexturePropertyGroup)
 
 
 def unregister():
+    del bpy.types.Image.yakuza_data
     del bpy.types.Material.yakuza_data
 
     for c in classes:
@@ -62,5 +71,7 @@ def unregister():
     #extension_panel_unregister_functors.clear()
 
     # remove from the export / import menu
+    bpy.types.TOPBAR_MT_file_external_data.remove(menu_func_yk_image_relink)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
-    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_unskinned)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_skinned)

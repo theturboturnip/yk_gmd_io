@@ -3,6 +3,7 @@ from typing import NoReturn, Callable, Set
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
+
 class BlenderErrorReporter(ErrorReporter):
     def __init__(self, report: Callable[[Set, str], None], base: ErrorReporter):
         self.base = base
@@ -21,3 +22,9 @@ class BlenderErrorReporter(ErrorReporter):
     def info(self, msg: str):
         self.base.info(msg)
         self.report({"INFO"}, msg)
+
+    def debug(self, category: str, msg: str) -> bool:
+        if self.base.debug(category, msg):
+            self.report({"DEBUG"}, msg)
+            return True
+        return False

@@ -86,7 +86,10 @@ class BasePrimitive(BaseUnpacker[T]):
         self.be_struct_fmt = f">{struct_fmt}"
         self.le_struct_fmt = f"<{struct_fmt}"
 
-    # TODO: Validate in unpack/pack? If not, standardize and decide why
+    # unpack() -> get the value out of the data.
+    #    a freshly unpacked value should always be valid => don't validate
+    # pack() -> take a value, pack into bytes
+    #    a value may not always be packable (e.g. a string that's too long) so always validate_value() before packing.
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
         return struct.unpack_from(self.be_struct_fmt if big_endian else self.le_struct_fmt, data, offset)[0], offset+self.sizeof()
@@ -192,7 +195,6 @@ def structure_data(**kwargs):
 
 MaybeOptionalBaseUnpacker = Union[Type[T], Type[Optional[T]]]
 
-# TODO: Handle inheritance?
 class StructureUnpacker(BaseUnpacker[TDataclass]):
     _fields: List[Tuple[str, BaseUnpacker]]
     _exported_fields: Dict[str, BaseUnpacker]
