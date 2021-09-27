@@ -5,8 +5,8 @@ import os
 import glob
 import re
 
-class YakuzaImageRelink(bpy.types.Operator):
 
+class YakuzaImageRelink(bpy.types.Operator):
     """Find images with """
     bl_idname = "yk.image_relink"
     bl_label = "Relink Images"
@@ -33,6 +33,13 @@ class YakuzaImageRelink(bpy.types.Operator):
         default=True
     )
 
+    case_sensitive: bpy.props.BoolProperty(
+        name="Case Sensitive",
+        default=False,
+        description="By default, relinking is case-insensitive, so 'c_cm_SZ_avenger.dds' will match 'c_cm_sz_avenger'."
+                    "If this causes issues, set this to True to disable this feature."
+    )
+
     def execute(self, context):
 
         self.report({"INFO"}, f"Selected dir: '{self.directory}'")
@@ -48,7 +55,10 @@ class YakuzaImageRelink(bpy.types.Operator):
         yk_image_name_to_blender_images = defaultdict(list)
         for img in bpy.data.images:
             if img.yakuza_data.inited:
-                yk_image_name_to_blender_images[img.yakuza_data.yk_name].append(img)
+                yk_name = img.yakuza_data.yk_name
+                if not self.case_sensitive:
+                    yk_name = yk_name.lower()
+                yk_image_name_to_blender_images[yk_name].append(img)
 
         # Gather a list of images in the given directory that could be used for a Yakuza image
         yakuza_image_to_filepath = dict()
@@ -75,6 +85,8 @@ class YakuzaImageRelink(bpy.types.Operator):
                 # Just the basename i.e. "fileX.png"
                 image_basename = os.path.basename(image_filepath)
                 image_name, image_ext = os.path.splitext(image_basename)
+                if not self.case_sensitive:
+                    image_name = image_name.lower()
 
                 # If this image maps to a yakuza image name, remember it.
                 if image_name in yk_image_name_to_blender_images:
@@ -93,7 +105,8 @@ class YakuzaImageRelink(bpy.types.Operator):
                     # Increment count
                     relinked_images += 1
 
-        self.report({"INFO"}, f"Found {len(yakuza_image_to_filepath)} relevant texture files, linked them to {relinked_images} Blender images.")
+        self.report({"INFO"},
+                    f"Found {len(yakuza_image_to_filepath)} relevant texture files, linked them to {relinked_images} Blender images.")
 
         return {'FINISHED'}
 

@@ -12,6 +12,8 @@ class TextureIndexStruct:
     padding: int = 0
 
 
+# NOTE - this struct order needs calibration for Kenzan. most files like tex_index, padding,
+# but others like the other way around. Need a way to settle this
 TextureIndexStruct_Unpack = StructureUnpacker(
     TextureIndexStruct,
     fields=[
