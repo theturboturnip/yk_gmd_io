@@ -141,15 +141,23 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         for mesh_struct in mesh_arr:
             shader_name = shader_name_arr[attribute_arr[mesh_struct.attribute_index].shader_index].text
             vertex_layout = abstract_vertex_buffers[mesh_struct.vertex_buffer_index].layout
+            # If we're importing in a skinned context AND the vertex layout has both bones and weight,
+            # we assume the shader is skinned.
+            assume_skinned_from_mesh = vertex_layout.assume_skinned and \
+                                       bool(vertex_layout.bones_storage) and \
+                                       bool(vertex_layout.weights_storage)
 
             if shader_name not in shader_vertex_layout_map:
                 shader_vertex_layout_map[shader_name] = vertex_layout
                 shaders_map[shader_name] = GMDShader(
                     name=shader_name,
-                    vertex_buffer_layout=vertex_layout
+                    vertex_buffer_layout=vertex_layout,
+                    assume_skinned=assume_skinned_from_mesh
                 )
             elif shader_vertex_layout_map[shader_name] != vertex_layout:
                 self.error.fatal(f"Shader {shader_name} was found to be mapped to two different vertex layouts")
+                # assume_skinned_from_mesh = entirely vertex layout dependent, so it must be the same
+                # if the vertex layout is the same
 
         # Return shaders in the same order as the shader_name_arr
         return [shaders_map[name.text] for name in shader_name_arr]

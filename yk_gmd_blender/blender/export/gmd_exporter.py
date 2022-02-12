@@ -428,9 +428,31 @@ class GMDSceneGatherer:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
             attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
-            if any(not attr.shader.vertex_buffer_layout.weights_unpacker for attr in attribute_sets):
-                self.error.fatal(f"Object {object.name} uses a material which requires it to be not-skinned.\n"
-                                 f"Try unparenting it from the skeleton, or changing to a different material.")
+            assumed_unskinned_attr_sets = [
+                attr.shader.name
+                for attr in attribute_sets
+                if not attr.shader.assume_skinned
+            ]
+            # If the material doesn't use weight/bone storage, it's definitely impossible
+
+            impossible_unskinned_attr_sets = [
+                attr.shader.name
+                for attr in attribute_sets
+                if (not attr.shader.vertex_buffer_layout.weights_storage) or
+                   (not attr.shader.vertex_buffer_layout.bones_storage)
+            ]
+            if len(impossible_unskinned_attr_sets) > 0:
+                self.error.fatal(
+                    f"Object {object.name} uses shaders {impossible_unskinned_attr_sets} which require it to be not-skinned.\n"
+                    f"Try unparenting it from the skeleton, or changing to a different material."
+                )
+            if len(assumed_unskinned_attr_sets) > 0:
+                self.error.fatal(
+                    f"Object {object.name} uses shaders {assumed_unskinned_attr_sets} which *may* require it to be not-skinned.\n"
+                    f"Try unparenting it from the skeleton, or changing to a different material.\n"
+                    f"If you're absolutely sure that this material works for skinned meshes,"
+                    f"check the 'Assume Skinned' box in the Yakuza Material Properties."
+                )
             #bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
             gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32, self.error)
             for gmd_mesh in gmd_meshes:
@@ -480,9 +502,11 @@ class GMDSceneGatherer:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
             attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
-            if any(attr.shader.vertex_buffer_layout.weights_unpacker for attr in attribute_sets):
-                self.error.fatal(f"Object {object.name} uses a material which requires it to be skinned.\n"
-                                 f"Try parenting it to the skeleton using Ctrl P > Empty Weights, or changing it to a different material.")
+            if any(attr.shader.assume_skinned for attr in attribute_sets):
+                self.error.fatal(f"Object {object.name} uses a material which *may* require it to be skinned.\n"
+                                 f"Try parenting it to the skeleton using Ctrl P > Empty Weights, or changing to a different material.\n"
+                                 f"If you're absolutely sure that this material works for unskinned meshes,"
+                                 f"uncheck the 'Assume Skinned' box in the Yakuza Material Properties.")
             gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
@@ -524,7 +548,8 @@ class GMDSceneGatherer:
 
         shader = GMDShader(
             name=yakuza_data.shader_name,
-            vertex_buffer_layout=vertex_layout
+            vertex_buffer_layout=vertex_layout,
+            assume_skinned=yakuza_data.assume_skinned
         )
         def get_texture(texture_name: str) -> Optional[str]:
             input = yakuza_shader_node.inputs[texture_name]
