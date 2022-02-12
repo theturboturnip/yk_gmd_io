@@ -54,12 +54,11 @@ class FileImportMode(Enum):
 
 
 class VertexImportMode(Enum):
-    SKINNED = 0
-    UNSKINNED = 1
+    IMPORT_VERTICES = 0
     # In this mode, vertex buffers will not be unpacked.
     # This is helpful in situations where the data is unnecessary,
     # such as imports for the sake of exporting-over
-    NO_VERTICES = 2
+    NO_VERTICES = 1
 
 
 class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
@@ -80,10 +79,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         self.file_import_mode = file_import_mode
         self.vertex_import_mode = vertex_import_mode
         self.error = error_reporter
-
-        if self.vertex_import_mode == VertexImportMode.SKINNED and \
-            self.file_import_mode == FileImportMode.UNSKINNED:
-            self.error.fatal("Unskinned file cannot have Skinned vertices")
 
         self.file_data = file_data
 
