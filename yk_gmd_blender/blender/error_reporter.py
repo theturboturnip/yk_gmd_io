@@ -14,6 +14,11 @@ class BlenderErrorReporter(ErrorReporter):
         # If this runs, the base ErrorReporter decided that this is indeed recoverable
         self.report({"WARNING"}, msg)
 
+    def fatal_exception(self, ex: Exception) -> NoReturn:
+        self.base.fatal_exception(ex)
+        # If this runs, then base.fatal_exception screwed up and didn't throw anything
+        raise GMDImportExportError(ex)
+
     def fatal(self, msg: str) -> NoReturn:
         self.base.fatal(msg)
         # If this runs, then base.fatal screwed up and didn't throw anything
