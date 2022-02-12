@@ -6,20 +6,28 @@ from typing import List, Dict, Tuple
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
+from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
+from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
 
 
 def batch_process_files(args, f: Callable):
-    error_reporter = LenientErrorReporter()
+    error_reporter = LenientErrorReporter(allowed_categories=set())
     for gmd_path in glob.iglob(str(args.glob_folder / "**" / "*.gmd"), recursive=True):
         print(f"Parsing {gmd_path}")
-        version_props, header, file_data = read_gmd_structures(gmd_path, error_reporter)
-        #scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
-        f(file_data, None)#, scene)
+        try:
+            version_props, header, file_data = read_gmd_structures(gmd_path, error_reporter)
+            scene = read_abstract_scene_from_filedata_object(version_props, FileImportMode.UNSKINNED, VertexImportMode.NO_VERTICES, file_data, error_reporter)
+        except GMDImportExportError as ex:
+            print(ex)
+            continue
+        f(file_data, scene)
 
 
 def print_flags(args):
@@ -117,11 +125,32 @@ def print_meshes(args):
         print(f"\t{[hex(x) for x in flag_vals]}")
 
 
+def check_vertex_layouts(args):
+    # mesh_files: Dict[str, List[Tuple[str, MeshStruct_YK1]]] = {}
+    relevant_files = []
+    # vertex_buffer_layouts = set()
+
+    def process_meshes(file_data: FileData_YK1, scene: GMDScene):
+        for node in scene.overall_hierarchy.depth_first_iterate():
+            if node.node_type == NodeType.UnskinnedMesh and isinstance(node, GMDUnskinnedObject):
+                for mesh in node.mesh_list:
+                    vbl = mesh.attribute_set.shader.vertex_buffer_layout
+                    if bool(vbl.bones_storage) or bool(vbl.weights_storage):
+                        relevant_files.append(file_data.name)
+                        print(file_data.name)
+    batch_process_files(args, process_meshes)
+
+    # for vbl in vertex_buffer_layouts:
+    #     if
+    print(relevant_files)
+
 #"D:\Games\SteamLibrary\steamapps\common\Yakuza Kiwami\media\data\stage"
+#"D:\Games\SteamLibrary\steamapps\common\Yakuza Kiwami 2\data\stage_lexus2\st_o_grand.par.unpack\stage\file_common\common\"
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("glob_folder", type=Path)
+    parser.add_argument("--skinned", action="store_true")
 
     args = parser.parse_args()
 
-    print_meshes(args)
+    check_vertex_layouts(args)

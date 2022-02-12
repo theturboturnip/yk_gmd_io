@@ -135,6 +135,18 @@ def gmd_meshes_to_bmesh(
     if merged_vertex_buffer.col1:
         col1_layer = bm.loops.layers.color.new("Color1")
 
+    # Weight Data
+    weight_data_layer = None
+    if merged_vertex_buffer.weight_data and not is_skinned:
+        error.debug("MESH", f"Generating layer for Weight Data with storage {merged_vertex_buffer.layout.weights_storage}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.weights_storage)}")
+        weight_data_layer = bm.loops.layers.color.new("Weight_Data")
+
+    # Bone Data
+    bone_data_layer = None
+    if merged_vertex_buffer.bone_data and not is_skinned:
+        error.debug("MESH", f"Generating layer for Bone Data with storage {merged_vertex_buffer.layout.bones_storage}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.bones_storage)}")
+        bone_data_layer = bm.loops.layers.color.new("Bone_Data")
+
     # Normal W data
     tangent_w_layer = None
     if merged_vertex_buffer.layout.tangent_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
@@ -205,6 +217,17 @@ def gmd_meshes_to_bmesh(
                 for (v_i, loop) in zip(tri_idxs, face.loops):
                     color = gmd_mesh.vertices_data.col1[v_i]
                     loop[col1_layer] = (color.x, color.y, color.z, color.w)
+
+            if weight_data_layer:
+                for (v_i, loop) in zip(tri_idxs, face.loops):
+                    weight = gmd_mesh.vertices_data.weight_data[v_i]
+                    loop[weight_data_layer] = (weight.x, weight.y, weight.z, weight.w)
+
+            if bone_data_layer:
+                for (v_i, loop) in zip(tri_idxs, face.loops):
+                    # Divide by 255 to scale to 0..1
+                    bones = gmd_mesh.vertices_data.bone_data[v_i] / 255
+                    loop[bone_data_layer] = (bones.x, bones.y, bones.z, bones.w)
 
             if tangent_w_layer:
                 for (v_i, loop) in zip(tri_idxs, face.loops):
