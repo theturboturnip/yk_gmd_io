@@ -43,7 +43,9 @@ class StrictErrorReporter(ErrorReporter):
 class LenientErrorReporter(ErrorReporter):
     allowed_categories: Set[str]
 
-    def __init__(self, allowed_categories: Set[str]):
+    def __init__(self, allowed_categories: Set[str] = None):
+        if allowed_categories is None:
+            allowed_categories = {"ALL"}
         self.allowed_categories = allowed_categories
 
     def recoverable(self, msg: str):
