@@ -20,7 +20,7 @@ def gmd_meshes_to_bmesh(
         error.fatal("Called gmd_meshes_to_bmesh with meshes marked as empty! This can only happen if using "
                     "VertexImportMode.NO_VERTICES, which shouldn't be the case here.")
 
-    is_skinned = isinstance(gmd_meshes[0], GMDSkinnedMesh) and gmd_meshes[0].vertices_data.layout.can_interpret_as_skinned
+    is_skinned = isinstance(gmd_meshes[0], GMDSkinnedMesh) and gmd_meshes[0].vertices_data.layout.assume_skinned
     error.debug("MESH", f"make_merged_gmd_mesh called with {gmd_meshes} skinned={is_skinned} fusing={fuse_vertices}")
     error.debug("MESH", f"vertex layout: {str(gmd_meshes[0].vertices_data.layout)}")
 

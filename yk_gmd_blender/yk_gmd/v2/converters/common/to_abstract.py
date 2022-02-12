@@ -96,13 +96,13 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                           profile: bool = False) \
             -> List[GMDVertexBuffer]:
-        can_have_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
+        assume_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
 
         abstract_vertex_buffers = []
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, can_have_skinned_vertex_buffers, self.error)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
