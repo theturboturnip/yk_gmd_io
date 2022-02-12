@@ -4,6 +4,7 @@ from pathlib import Path
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
     pack_abstract_scene, pack_file_data
@@ -65,7 +66,10 @@ if __name__ == '__main__':
 
     print("loading " + str(args.file_to_poke))
     version_props, header, file_data = read_gmd_structures(args.file_to_poke, error_reporter)
-    scene = read_abstract_scene_from_filedata_object(version_props, args.skinned, file_data, error_reporter)
+    scene = read_abstract_scene_from_filedata_object(version_props,
+                                                     FileImportMode.SKINNED if args.skinned else FileImportMode.UNSKINNED,
+                                                     VertexImportMode.NO_VERTICES,
+                                                     file_data, error_reporter)
     print(scene)
 
     if args.skinned:

@@ -23,6 +23,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBuf
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import check_version_writeable, write_abstract_scene_out, \
@@ -95,7 +96,7 @@ class ExportSkinnedGMD(Operator, ExportHelper):
             try_copy_bones = self.copy_bones_from_file
             if self.copy_bones_from_file or self.debug_compare_matrices:
                 try:
-                    original_scene = read_abstract_scene_from_filedata_object(version_props, True, file_data, error_reporter)
+                    original_scene = read_abstract_scene_from_filedata_object(version_props, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, file_data, error_reporter)
                 except Exception as e:
                     if self.copy_bones_from_file:
                         error_reporter.fatal(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
