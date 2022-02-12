@@ -3,13 +3,13 @@ import collections
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Callable, Set, Union, Optional, Generic, TypeVar
 
-import bpy
 from bmesh.types import BMVert
 from mathutils import Vector, Matrix
 
+import bpy
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, \
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, BoneWeight4, \
     BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
@@ -193,7 +193,7 @@ class VertexFetcher:
             uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.uv_layers))])
         )
 
-    def extract_vertex(self, vertex_buffer: GMDVertexBuffer, i: int, per_loop_data: PerLoopVertexData):
+    def extract_vertex(self, vertex_buffer: GMDVertexBuffer_Generic, i: int, per_loop_data: PerLoopVertexData):
         if vertex_buffer.layout != self.vertex_layout:
             self.error.fatal(f"VertexFetcher told to fetch vertex for a buffer with a different layout")
 
@@ -218,7 +218,7 @@ class SubmeshBuilder:
     Contains at most 65535 vertices.
     """
 
-    vertices: GMDVertexBuffer
+    vertices: GMDVertexBuffer_Generic
     triangles: List[Tuple[int, int, int]]
     blender_vid_to_this_vid: Dict[Tuple[int, 'PerLoopData'], int]
     # This could use a Set with hashing, but Vectors aren't hashable by default and there's at most like 5 per list
@@ -226,7 +226,7 @@ class SubmeshBuilder:
     material_index: int
 
     def __init__(self, layout: GMDVertexBufferLayout, material_index: int):
-        self.vertices = GMDVertexBuffer.build_empty(layout, 0)
+        self.vertices = GMDVertexBuffer_Generic.build_empty(layout, 0)
         self.triangles = []
         self.blender_vid_to_this_vid = {}
         self.per_loop_data_for_blender_vid = collections.defaultdict(list)
@@ -276,7 +276,7 @@ class SubmeshBuilder:
 
     # Calls the function to add the vertex to the buffer and returns the index of the generated vertex.
     # This is anonymous, it will not be considered for per-loop duplication and will not be added to any vertex ID counts
-    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer_Generic], None]) -> int:
         idx = len(self.vertices)
         if idx > 65535:
             raise RuntimeError("Trying to create >65535 anonymous vertices")
@@ -375,7 +375,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         self.relevant_gmd_bones = relevant_gmd_bones
 
     # Override: when a vertex is added, adds it to weighted_bone_verts for all bones it references
-    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer_Generic], None]) -> int:
         idx = super().add_anonymous_vertex(generate_vertex)
         self.update_bone_vtx_lists(self.vertices.bone_weights[idx], idx)
         return idx

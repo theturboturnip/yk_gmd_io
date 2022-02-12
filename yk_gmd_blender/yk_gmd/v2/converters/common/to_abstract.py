@@ -12,7 +12,7 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -90,7 +90,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                           vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
 
                                           profile: bool = False) \
-            -> List[GMDVertexBuffer]:
+            -> List[GMDVertexBuffer_Generic]:
         assume_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
 
         abstract_vertex_buffers = []
@@ -105,7 +105,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
                 # Create an empty vertex buffer
-                abstract_vertex_buffer = GMDVertexBuffer.build_empty(abstract_layout, 0)
+                abstract_vertex_buffer = GMDVertexBuffer_Generic.build_empty(abstract_layout, 0)
             else:
                 # Actually unpack vertices
                 unpack_start = time.time()
@@ -131,7 +131,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
     def build_shaders_from_structs(self,
 
-                                   abstract_vertex_buffers: List[GMDVertexBuffer],
+                                   abstract_vertex_buffers: List[GMDVertexBuffer_Generic],
 
                                    mesh_arr: List[MeshStruct], attribute_arr: List[AttributeStruct],
                                    shader_name_arr: List[ChecksumStrStruct]) \
@@ -279,7 +279,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def build_meshes_from_structs(self,
 
                                   abstract_attributes: List[GMDAttributeSet],
-                                  abstract_vertex_buffers: List[GMDVertexBuffer],
+                                  abstract_vertex_buffers: List[GMDVertexBuffer_Generic],
                                   abstract_nodes_ordered: List[GMDNode],
 
                                   mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
@@ -384,6 +384,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                 self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
 
+            vertex_buffer = abstract_vertex_buffers[mesh_struct.vertex_buffer_index]
+            vertex_slice = slice(vertex_start, vertex_end)
+
             relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
             if relevant_bone_indices:
                 relevant_bones = [abstract_nodes_ordered[bone_idx] for bone_idx in relevant_bone_indices]
@@ -399,7 +402,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     relevant_bones=cast(List[GMDBone], relevant_bones),
 
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
+                    vertices_data=vertex_buffer.extract_as_skinned(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
@@ -411,7 +414,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 meshes.append(GMDMesh(
                     empty=(self.vertex_import_mode == VertexImportMode.NO_VERTICES),
 
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
+                    vertices_data=vertex_buffer.extract_as_generic(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
