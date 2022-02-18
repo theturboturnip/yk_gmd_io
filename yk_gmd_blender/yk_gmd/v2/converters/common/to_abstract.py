@@ -333,6 +333,10 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 self.error.fatal(
                     f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
 
+            # Define the range of vertices that are referenced by the indices.
+            # This is shifted up by the vertex_offset_from_index field.
+            # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
+            # it can shift its indices down by a set amount to prevent exceeding the limit.
             vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 
