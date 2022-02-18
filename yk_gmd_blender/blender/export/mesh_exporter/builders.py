@@ -103,6 +103,7 @@ class VertexFetcher:
         #     normal.w = (self.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
         # else:
         normal.w = 0
+        normal.normalize()
         return normal
 
     def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
