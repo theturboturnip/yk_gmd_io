@@ -72,23 +72,23 @@ if __name__ == '__main__':
                                                      file_data, error_reporter)
     print(scene)
 
-    if args.skinned:
-        for node in scene.overall_hierarchy.depth_first_iterate():
-            if node.node_type != NodeType.MatrixTransform:
-                continue
-            node: GMDBone = node
-            print(f" ---- BONE {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
-            print("pos", node.pos)
-            print("rot", node.rot)
-            print("scale", node.scale)
+    # if args.skinned:
+    for node in scene.overall_hierarchy.depth_first_iterate():
+        node: GMDBone = node
+        print(f" ---- BONE {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
+        print("pos", node.pos)
+        print("rot", node.rot)
+        print("scale", node.scale)
+        if node.node_type == NodeType.MatrixTransform:
             print("world pos", node.bone_pos)
             print("bone axis", node.bone_axis)
-            parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
+        parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
 
-            # pos = node.bone_pos.to_3d()
-            pos = node.pos.to_3d()
+        # pos = node.bone_pos.to_3d()
+        pos = node.pos.to_3d()
 
-            # inv(parent matrix) * local position = bone_postion (world position)
+        # inv(parent matrix) * local position = bone_postion (world position)
+        if node.node_type == NodeType.MatrixTransform:
             expected_world = parent_mat.inverted_safe() @ node.pos.to_3d()
             gmd_world = node.bone_pos.to_3d()
             print("world pos comparison", expected_world, gmd_world)
@@ -96,32 +96,52 @@ if __name__ == '__main__':
                 print("mismatching world pos")
                 break
 
+        # if not node.parent:
+        #     bone_axis = Vector((0,0,0,0))
+        # else:
+        #     # TODO
 
-            inv_t = Matrix.Translation(-pos)
-            t = Matrix.Translation(pos)
-            inv_r = node.rot.inverted().to_matrix().to_4x4()
-            r = node.rot.to_matrix().to_4x4()
-            inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
-            overall_mat = (parent_mat @ inv_s @ inv_r @ inv_t)
-            # print(inv_t)
-            # print(inv_r)
-            print("mat real", node.matrix)
-            print("mat calc",overall_mat)
-            if sum([x*x for v in (overall_mat - node.matrix) for x in v]) > 0.1:
-                print("DIFFERENCE")
-                break
-    else:
-        for node in scene.overall_hierarchy.depth_first_iterate():
-            print(f" ---- OBJECT {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
-            print(node.pos)
-            print(node.rot)
-            print(node.scale)
-            print(node.matrix)
-            inv_t = Matrix.Translation(-node.pos)
-            inv_r = node.rot.inverted().to_matrix().to_4x4()
-            inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
-            parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
-            print(inv_s @ inv_r @ inv_t @ parent_mat)
+        # parent_chain = []
+        # p = node.parent
+        # while p is not None:
+        #     parent_chain.append(p)
+        #     p = p.parent
+        # # Traverse parents downwards
+        # expected_world_rot = Quaternion()
+        # for p in reversed(parent_chain):
+        #     expected_world_rot = expected_world_rot @ p.rot
+        # expected_world_rot = expected_world_rot @ node.rot
+        # gmd_world_rot = Quaternion((node.bone_axis.w, node.bone_axis.x, node.bone_axis.y, node.bone_axis.z))
+        # print("world rot comparison", expected_world_rot, gmd_world_rot)
+        # if (expected_world_rot - gmd_world_rot).magnitude > 0.01:
+        #     print("mismatching world rot")
+        #     break
+
+        inv_t = Matrix.Translation(-pos)
+        t = Matrix.Translation(pos)
+        inv_r = node.rot.inverted().to_matrix().to_4x4()
+        r = node.rot.to_matrix().to_4x4()
+        inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
+        overall_mat = (parent_mat @ inv_s @ inv_r @ inv_t)
+        # print(inv_t)
+        # print(inv_r)
+        print("mat real", node.matrix)
+        print("mat calc",overall_mat)
+        if sum([x*x for v in (overall_mat - node.matrix) for x in v]) > 0.1:
+            print("DIFFERENCE")
+            break
+    # else:
+    #     for node in scene.overall_hierarchy.depth_first_iterate():
+    #         print(f" ---- OBJECT {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
+    #         print(node.pos)
+    #         print(node.rot)
+    #         print(node.scale)
+    #         print(node.matrix)
+    #         inv_t = Matrix.Translation(-node.pos)
+    #         inv_r = node.rot.inverted().to_matrix().to_4x4()
+    #         inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
+    #         parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
+    #         print(inv_s @ inv_r @ inv_t @ parent_mat)
 
 
     # unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
