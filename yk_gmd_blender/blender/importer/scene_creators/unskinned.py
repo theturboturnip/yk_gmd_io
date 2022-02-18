@@ -69,6 +69,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
             else:
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)
+                node_obj.empty_display_size = 0.1
 
             if gmd_node.parent:
                 # Parenting an object to another object is easy
