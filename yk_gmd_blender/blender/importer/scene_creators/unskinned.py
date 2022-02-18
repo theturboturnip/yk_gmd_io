@@ -36,21 +36,9 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         super().__init__(filepath, gmd_scene, config, error)
 
     def validate_scene(self):
-        # Check for bone name overlap
-        # Only bones are added to the overall armature, not objects
-        # But the bones are referenced by name, so we need to check if there are multiple bones with the same name
-        bones_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                             isinstance(node, GMDBone)]
-        bone_names = {bone.name for bone in bones_depth_first}
-        if len(bone_names) != len(bones_depth_first):
-            # Find the duplicate names by listing them all, and removing one occurence of each name
-            # The only names left will be duplicates
-            bone_name_list = [bone.name for bone in bones_depth_first]
-            for name in bone_names:
-                bone_name_list.remove(name)
-            duplicate_names = set(bone_name_list)
-            self.error.fatal(f"Some bones don't have unique names - found duplicates {duplicate_names}")
-
+        # Skinned Importer checks for duplicate "bone" names (technically node names).
+        # Skeletons can't have duplicate bones, but objects can.
+        # We remove the Blender-enforced duplicate suffix e.g. "object.001" on export, so nothing will break if we import duplicates
         if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDSkinnedObject)]) != 0:
             self.error.recoverable(f"This import method cannot import skinnned objects. Please use the [Skinned] variant")
 
