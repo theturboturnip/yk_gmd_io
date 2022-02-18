@@ -47,6 +47,7 @@ def invert_transformation_matrix(mat: Matrix) -> Matrix:
     p_inv = p.inverted()
     v = mat.col[3][0:2]
 
+    # This should be 3x3 @ 3x1
     neg_p_inv_v = -(p_inv @ Vector(v))
 
     m_inv = p_inv.to_4x4()
