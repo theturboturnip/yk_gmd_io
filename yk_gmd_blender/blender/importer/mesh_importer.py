@@ -90,6 +90,16 @@ def gmd_meshes_to_bmesh(
 
     # Set up the indexing table inside the bmesh so lookups work
     if fuse_vertices:
+        # 1. Identify potential fusions (new index) -> (old indices that fuse)
+        # 2. Make mapping of (old index) -> (triangles containing old index)
+        # 3. Create revised fusion mapping
+        #       for each original fusion (olds, new)
+        #           prevent any two vertices A,B from fusing
+        #           if all triangles including A and all triangles including B are identical post-original-fusion
+        #           e.g. if all other fusions went through, and fusing A+B would make *all* involved tris degenerate
+        #           TODO should this be if *any* triangles including A and *any* triangles including B are identical?
+        #               e.g. if *any* triangle is made degenerate?
+
         # Find unique (position, normal, boneweight) pairs, assign to BMesh vertex indices
         vert_indices = {}
         for i in range(len(merged_vertex_buffer)):
