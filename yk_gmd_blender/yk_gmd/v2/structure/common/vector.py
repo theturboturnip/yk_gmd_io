@@ -1,4 +1,5 @@
 import mathutils
+
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32, List
 

@@ -1,21 +1,17 @@
-import time
-from collections import Iterator
-from typing import List, Iterable, Tuple, Dict
+from typing import Iterable
 
 from mathutils import Quaternion, Vector
-from yk_gmd_blender.structurelib.base import PackingValidationError
 
+from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.converters.common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct, TextureIndexStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeType

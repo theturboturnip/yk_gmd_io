@@ -2,11 +2,11 @@ import abc
 import os
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Dict, Tuple, List, Optional, Union
+from typing import Dict, Tuple, List, Union
 
-import bpy
 import bmesh
-from mathutils import Vector, Matrix, Quaternion
+import bpy
+from mathutils import Vector, Matrix
 
 from yk_gmd_blender.blender.common import root_name_for_gmd_file
 from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh

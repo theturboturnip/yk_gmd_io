@@ -1,5 +1,3 @@
-from typing import List
-
 import mathutils
 
 from yk_gmd_blender.structurelib.base import ValueAdaptor, FixedSizeArrayUnpacker

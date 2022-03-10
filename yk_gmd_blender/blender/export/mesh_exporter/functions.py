@@ -1,12 +1,10 @@
-import array
-import collections
 import re
-from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, overload, Union, cast, Optional
+from typing import List, Dict, Union
+
 #
 import bmesh
 import bpy
-from bmesh.types import BMLayerItem, BMVert, BMLoop
+from mathutils import Vector, Matrix
 
 from yk_gmd_blender.blender.export.mesh_exporter.builders import SubmeshBuilder, SkinnedSubmeshBuilder, \
     SkinnedSubmeshBuilderSubset, VertexFetcher
@@ -15,7 +13,6 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
-from mathutils import Vector, Matrix
 
 def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
                            vertex_group_mapping: Dict[int, GMDBone], error: ErrorReporter) -> Union[

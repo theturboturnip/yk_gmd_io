@@ -1,31 +1,23 @@
-import array
-import collections
-import os
-import re
-from typing import Dict, List, Tuple, Union, cast, TypeVar, Optional
-
-from mathutils import Matrix, Vector, Quaternion
+from mathutils import Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import armature_name_for_gmd_file, root_name_for_gmd_file
-from yk_gmd_blender.blender.coordinate_converter import transform_to_matrix, transform_rotation_gmd_to_blender
+from yk_gmd_blender.blender.common import root_name_for_gmd_file
 
-from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
-from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, \
-    set_yakuza_shader_material_from_attributeset
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter, ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+import bpy
+from mathutils import Quaternion
+
+from yk_gmd_blender.blender.common import root_name_for_gmd_file
+from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+
 
 class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
     """

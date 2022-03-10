@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from mathutils import Vector
+
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker

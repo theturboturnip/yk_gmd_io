@@ -1,20 +1,17 @@
 import array
 import collections
-from typing import List, Tuple, Dict, Callable, Set, overload, Union, cast, Optional
-import array
-import collections
-import re
 from dataclasses import dataclass
+from typing import List, Tuple, Dict, Callable, Set, Union, Optional
+
+import bpy
+from bmesh.types import BMVert
+from mathutils import Vector, Matrix
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, \
+    BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, BoneWeight, VecStorage
-
-from mathutils import Vector, Matrix
-import bpy
-from bmesh.types import BMLayerItem, BMVert, BMLoop
-
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 

@@ -1,9 +1,9 @@
+import glob
+import os
+import re
 from collections import defaultdict
 
 import bpy
-import os
-import glob
-import re
 
 
 class YakuzaImageRelink(bpy.types.Operator):

@@ -7,16 +7,17 @@ from yk_gmd_blender.structurelib.base import BaseUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, FilePacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.material_base import MaterialBaseStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct_Unpack, NodeStruct
-from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, Unk14Struct
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, \
+    Unk14Struct
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.bbox import BoundsDataStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.header import GMDHeader_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, VertexBufferLayoutStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, \
+    VertexBufferLayoutStruct_YK1
 
 
 @dataclass(repr=False)

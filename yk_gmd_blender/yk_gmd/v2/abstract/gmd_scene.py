@@ -1,10 +1,7 @@
 from dataclasses import dataclass
-from queue import LifoQueue
-from typing import Dict, List, Generic, TypeVar, Optional, Generator
+from typing import Dict, List, Generic, TypeVar, Generator
 
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 
 TNode = TypeVar('TNode', bound=GMDNode)
 

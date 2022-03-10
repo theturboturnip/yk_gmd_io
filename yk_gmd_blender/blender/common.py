@@ -2,6 +2,7 @@ from typing import Tuple, Iterable, Union
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 
+
 def uv_yk_to_blender_space(uv: Tuple[float, float]):
     return (uv[0], 1 - uv[1])
 
