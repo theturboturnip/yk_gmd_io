@@ -1,7 +1,7 @@
 import array
 import collections
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, Union, Optional
+from typing import List, Tuple, Dict, Callable, Set, Union, Optional, Generic, TypeVar
 
 import bpy
 from bmesh.types import BMVert
@@ -215,6 +215,7 @@ class VertexFetcher:
 class SubmeshBuilder:
     """
     Class used to accumulate vertices and faces while generating split meshes.
+    Contains at most 65535 vertices.
     """
 
     vertices: GMDVertexBuffer
@@ -231,30 +232,64 @@ class SubmeshBuilder:
         self.per_loop_data_for_blender_vid = collections.defaultdict(list)
         self.material_index = material_index
 
-    def add_vertex(self, blender_vid: int, vertex_fetcher: 'VertexFetcher', blender_loop_tri: 'bpy.types.MeshLoopTriangle', tri_index: int) -> int:
-        per_loop_data = vertex_fetcher.get_per_loop_data(blender_loop_tri, tri_index)
-        # Make sure to use a key based on the per_loop_data here, because otherwise if two vertices with equal blender_vid and unequal per_loop_data are reused, only one will get returned
-        overall_blender_idx = (blender_vid, per_loop_data)
-        if overall_blender_idx not in self.blender_vid_to_this_vid:
-            idx = self.add_anonymous_vertex(lambda verts: vertex_fetcher.extract_vertex(verts, blender_vid, per_loop_data))
-            self.blender_vid_to_this_vid[overall_blender_idx] = idx
-            self.per_loop_data_for_blender_vid[blender_vid].append(per_loop_data)
-            return idx
+    # Try to add the three vertices needed for a triangle, and add a triangle with those indices
+    # If can't add all of them (e.g. pushes indices over 65535), returns False, doesn't add any vertices, doesn't add a new triangle
+    # Otherwise adds all required vertices and new triangles
+    def add_triangle_vertices(self, blender_vids: Tuple[int,int,int], vertex_fetcher: 'VertexFetcher', blender_loop_tri: 'bpy.types.MeshLoopTriangle') -> bool:
+        # Find the overall blender indices of each vertex
+        # (including the per-loop-data, because vertices can differ between different 'loops' in Blender)
+        overall_idxs = [
+            (blender_vids[tri_index], vertex_fetcher.get_per_loop_data(blender_loop_tri, tri_index))
+            for tri_index in range(3)
+        ]
 
-        return self.blender_vid_to_this_vid[overall_blender_idx]
+        # Check if we have enough spare vertices
+        # If we have less than (65535 - 3) vertices, we don't need to check - we definitely have enough space
+        if len(self.vertices) > (65535 - 3):
+            # Otherwise, check beforehand how many we actually need to add
+            new_idxs = [idx for idx in overall_idxs if idx not in self.blender_vid_to_this_vid]
+            # If, by adding these vertices, we go overboard: return False, don't do anything
+            if len(self.vertices) + len(new_idxs) > 65535:
+                return False
+
+        # We now guarantee we can add all vertices without going over
+        def add_if_not_present(overall_blender_idx):
+            blender_vid, per_loop_data = overall_blender_idx
+
+            if overall_blender_idx not in self.blender_vid_to_this_vid:
+                idx = self.add_anonymous_vertex(
+                    lambda verts: vertex_fetcher.extract_vertex(verts, blender_vid, per_loop_data))
+                self.blender_vid_to_this_vid[overall_blender_idx] = idx
+                self.per_loop_data_for_blender_vid[blender_vid].append(per_loop_data)
+                return idx
+            return self.blender_vid_to_this_vid[overall_blender_idx]
+
+        final_indices = (
+            add_if_not_present(overall_idxs[0]),
+            add_if_not_present(overall_idxs[1]),
+            add_if_not_present(overall_idxs[2]),
+        )
+
+        self.add_triangle(final_indices)
+
+        return True
 
     # Calls the function to add the vertex to the buffer and returns the index of the generated vertex.
     # This is anonymous, it will not be considered for per-loop duplication and will not be added to any vertex ID counts
     def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
         idx = len(self.vertices)
+        if idx > 65535:
+            raise RuntimeError("Trying to create >65535 anonymous vertices")
         generate_vertex(self.vertices)
         return idx
 
+    # Add a triangle (tuple of three vertex IDs, corresponding to vertices in self.vertices)
     def add_triangle(self, t: Tuple[int, int, int]):
         triangle_index = len(self.triangles)
         self.triangles.append(t)
         return triangle_index
 
+    # Build the triangle strip from self.triangles
     def build_triangles(self) -> Tuple[array.ArrayType, array.ArrayType, array.ArrayType]:
         triangle_list = array.array("H")
         triangle_strip_noreset = array.array("H")
@@ -267,14 +302,16 @@ class SubmeshBuilder:
 
             # If we can continue the strip, do so
             if not triangle_strip_noreset:
-                # Add the triangle as normal
+                # Starting the strip
                 triangle_strip_noreset.append(t0)
                 triangle_strip_noreset.append(t1)
                 triangle_strip_noreset.append(t2)
             elif (triangle_strip_noreset[-2] == t0 and
                   triangle_strip_noreset[-1] == t1):
+                # Continue the strip
                 triangle_strip_noreset.append(t2)
             else:
+                # End previous strip, start new strip
                 # Two extra verts to create a degenerate triangle, signalling the end of the strip
                 triangle_strip_noreset.append(triangle_strip_noreset[-1])
                 triangle_strip_noreset.append(t0)
@@ -285,14 +322,16 @@ class SubmeshBuilder:
 
             # If we can continue the strip, do so
             if not triangle_strip_reset:
-                # Add the triangle as normal
+                # Starting the strip
                 triangle_strip_reset.append(t0)
                 triangle_strip_reset.append(t1)
                 triangle_strip_reset.append(t2)
             elif (triangle_strip_reset[-2] == t0 and
                   triangle_strip_reset[-1] == t1):
+                # Continue the strip
                 triangle_strip_reset.append(t2)
             else:
+                # End previous strip, start new strip
                 # Reset index signalling the end of the strip
                 triangle_strip_reset.append(0xFFFF)
                 # Add the triangle as normal
@@ -302,6 +341,7 @@ class SubmeshBuilder:
 
         return triangle_list, triangle_strip_noreset, triangle_strip_reset
 
+    # Build the vertex buffer + triangle strips from self.vertices and self.triangles
     def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet]):
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
 
@@ -333,20 +373,23 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         self.weighted_bone_faces = collections.defaultdict(list)
         self.relevant_gmd_bones = relevant_gmd_bones
 
+    # Override: when a vertex is added, adds it to weighted_bone_verts for all bones it references
     def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
         idx = super().add_anonymous_vertex(generate_vertex)
         self.update_bone_vtx_lists(self.vertices.bone_weights[idx], idx)
         return idx
 
-    def update_bone_vtx_lists(self, new_vtx_weights: BoneWeight4, new_vtx_idx):
-        for weight in new_vtx_weights:
-            if weight.weight != 0:
-                self.weighted_bone_verts[weight.bone].append(new_vtx_idx)
-
+    # Override: when a triangle is added, adds it to weighted_bone_faces for all bones it references
     def add_triangle(self, t: Tuple[int, int, int]):
         triangle_index = super().add_triangle(t)
         for bone in self.triangle_referenced_bones(triangle_index):
             self.weighted_bone_faces[bone].append(triangle_index)
+
+    # TODO should be moved into add_anonymous_vertex, but I think it gets changed in v0.4 so won't do it now
+    def update_bone_vtx_lists(self, new_vtx_weights: BoneWeight4, new_vtx_idx):
+        for weight in new_vtx_weights:
+            if weight.weight != 0:
+                self.weighted_bone_verts[weight.bone].append(new_vtx_idx)
 
     def total_referenced_bones(self):
         return set(bone_id for bone_id, vs in self.weighted_bone_verts.items() if len(vs) > 0)
@@ -355,8 +398,14 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         return {weight.bone for vtx_idx in self.triangles[tri_idx] for weight in self.vertices.bone_weights[vtx_idx] if
                 weight.weight > 0}
 
+    # This submesh builder was created with a set of relevant_bones
+    # Remove references to any bones that are unused, and strip those bones out
     def reduce_to_used_bones(self):
         referenced_bone_indices = list(self.total_referenced_bones())
+        # If the lengths are equal, the set of relevant bones hasn't changed and we don't need to remap
+        if len(referenced_bone_indices) == len(self.relevant_gmd_bones):
+            return
+
         new_relevant_bones = []
         bone_index_mapping = {}
         for new_bone_idx, old_bone_idx in enumerate(referenced_bone_indices):
@@ -390,7 +439,6 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         for triangle_index in range(len(self.triangles)):
             for bone in self.triangle_referenced_bones(triangle_index):
                 self.weighted_bone_faces[bone].append(triangle_index)
-
 
     def build_to_gmd(self, gmd_attribute_sets: List[GMDAttributeSet]) -> GMDSkinnedMesh:
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
@@ -453,3 +501,59 @@ class SkinnedSubmeshBuilderSubset:
                 vertex_remap[self.base.triangles[tri_idx][2]],
             ))
         return sm
+
+
+TSubmeshBuilder = TypeVar('TSubmeshBuilder', SubmeshBuilder, SkinnedSubmeshBuilder)
+class MeshBuilder(Generic[TSubmeshBuilder]):
+    """
+    Class that holds a mapping of (attribute set index -> current builder for that index),
+    and any filled-up builders (builders can only store 65536 vertices).
+
+    It's a MeshBuilder because it holds all the SubmeshBuilders for a mesh!
+    """
+    mesh_name: str
+    factory: Callable[[int], TSubmeshBuilder]
+    error: ErrorReporter
+
+    current_builders: Dict[int, TSubmeshBuilder]
+    filled_builders: List[TSubmeshBuilder]
+
+    def __init__(self, mesh_name: str, factory: Callable[[int], TSubmeshBuilder], error: ErrorReporter):
+        self.mesh_name = mesh_name
+        self.factory = factory
+        self.error = error
+        self.current_builders = {}
+        self.filled_builders = []
+
+    # Wrapper function for self.current_builders[i].add_triangle_vertices()
+    # If that function returns False, that builder is removed from current_builders and pushed to filled_builders
+    def add_triangle_vertices(self,
+                              attr_set_i: int,
+                              blender_vids: Tuple[int,int,int],
+                              vertex_fetcher: 'VertexFetcher',
+                              blender_loop_tri: 'bpy.types.MeshLoopTriangle'):
+        # If we haven't added this builder yet, do so
+        if attr_set_i not in self.current_builders:
+            self.create_builder_for(attr_set_i)
+        # Now, a builder definitely exists.
+        # Try adding the new triangle to the builder
+        if not self.current_builders[attr_set_i].add_triangle_vertices(blender_vids, vertex_fetcher, blender_loop_tri):
+            self.error.debug("MESH", f"Mesh {self.mesh_name} filled out the SubmeshBuilder for material idx {attr_set_i}, creating a new submesh...")
+            # Couldn't add more triangles to the current builder
+            # => move the old builder into self.filled_builders, and make a new builder
+            self.filled_builders.append(self.current_builders[attr_set_i])
+            del self.current_builders[attr_set_i]
+            self.create_builder_for(attr_set_i)
+            # This new builder must not run out of space, if it does then hard crash
+            if not self.current_builders[attr_set_i].add_triangle_vertices(blender_vids, vertex_fetcher,
+                                                                           blender_loop_tri):
+                self.error.fatal(f"Brand new {type(self.current_builders[attr_set_i]).__name__} couldn't add new triangle")
+
+    # Internal function for creating a new builder in self.current_builders
+    def create_builder_for(self, attr_set_i: int):
+        assert attr_set_i not in self.current_builders
+        self.current_builders[attr_set_i] = self.factory(attr_set_i)
+
+    # List of references to non-empty submesh builders
+    def get_nonempty_submesh_builders(self):
+        return self.filled_builders + [b for b in self.current_builders.values() if len(b.vertices)]
