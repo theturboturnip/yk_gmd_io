@@ -1,4 +1,4 @@
-import abc
+from dataclasses import dataclass
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -6,8 +6,7 @@ from yk_gmd_blender.structurelib.base import *
 from yk_gmd_blender.structurelib.primitives import *
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, \
-    get_combined_version_properties, VersionProperties
+from yk_gmd_blender.yk_gmd.v2.structure.version import get_combined_version_properties, VersionProperties
 
 
 def extract_base_header(data: bytes) -> Tuple['GMDHeaderStruct', bool]:

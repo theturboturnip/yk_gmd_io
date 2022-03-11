@@ -62,7 +62,7 @@ if __name__ == '__main__':
     error_reporter = LenientErrorReporter()
 
     version_props, header, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
-    scene = read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
+    scene = read_abstract_scene_from_filedata_object(version_props, False, file_data, error_reporter)
 
     # for skinned_obj in scene.skinned_objects.depth_first_iterate():
     #     for mesh in skinned_obj.mesh_list:
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     #print(version_props == new_version_props)
     #print(version_props)
     #print(new_version_props)
-    new_scene = read_abstract_scene_from_filedata_object(new_version_props, True, new_file_data, error_reporter)
+    new_scene = read_abstract_scene_from_filedata_object(new_version_props, False, new_file_data, error_reporter)
 
     if args.output_dir:
         with open(args.output_dir / args.file_to_poke, "wb") as out_file:

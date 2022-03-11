@@ -8,7 +8,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.header import GMDHeaderStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointerStruct
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_is_file_big_endian, check_are_vertices_big_endian
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, get_version_properties, VersionProperties, \
+from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties, \
     get_combined_version_properties
 
 

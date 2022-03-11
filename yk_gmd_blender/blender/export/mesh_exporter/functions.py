@@ -1,32 +1,30 @@
-import array
-import collections
 import re
-from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, overload, Union, cast, Optional
-#
+from typing import List, Dict, Union
+
 import bmesh
 import bpy
-from bmesh.types import BMLayerItem, BMVert, BMLoop
+from mathutils import Vector, Matrix
 
 from yk_gmd_blender.blender.export.mesh_exporter.builders import SubmeshBuilder, SkinnedSubmeshBuilder, \
-    SkinnedSubmeshBuilderSubset, VertexFetcher
+    SkinnedSubmeshBuilderSubset, VertexFetcher, MeshBuilder
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
-from mathutils import Vector, Matrix
 
 def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
-                           vertex_group_mapping: Dict[int, GMDBone], error: ErrorReporter) -> Union[
-    List[SubmeshBuilder], List[SkinnedSubmeshBuilder]]:
+                           vertex_group_mapping: Dict[int, GMDBone], error: ErrorReporter) -> Union[List[SubmeshBuilder], List[SkinnedSubmeshBuilder]]:
+
+    # First, find all the basic layers we may need
     col0_layer = mesh.vertex_colors["Color0"] if "Color0" in mesh.vertex_colors else None
     col1_layer = mesh.vertex_colors["Color1"] if "Color1" in mesh.vertex_colors else None
     tangent_w_layer = mesh.vertex_colors["TangentW"] if "TangentW" in mesh.vertex_colors else None
 
+    # Find all the UV layers by name
+    # UV layers can be exported to actual UVs (if they're two-component) or to vertex colors (if they're three or four-component)
     uv_primary = "UV_Primary"
     uv_numbered_regex = re.compile(r'UV(\d+)')
-
     primary_uv_layer = mesh.uv_layers[uv_primary] if uv_primary in mesh.uv_layers else mesh.uv_layers.active
     numbered_uv_layers = {}
     if mesh.uv_layers:
@@ -46,24 +44,28 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
                     error.recoverable(f"Found multiple possible layers for UV{uv_i}, will take latest one")
                 numbered_uv_layers[uv_i] = layer
 
+    # Create the mesh builder (either Skinned or not)
+    # If we're skinned, find the mapping of Blender vertex group indices to GMD vertex group indices
     if skinned:
-        #deform_layer = bm.verts.layers.deform.active
-
         relevant_gmd_bones = []
         vertex_group_bone_index_map = {}
         for i, (vertex_group_idx, bone) in enumerate(vertex_group_mapping.items()):
             relevant_gmd_bones.append(bone)
             vertex_group_bone_index_map[vertex_group_idx] = i
 
-        submesh_builders = [SkinnedSubmeshBuilder(attribute_set.shader.vertex_buffer_layout, i, relevant_gmd_bones)
-                            for i, attribute_set in enumerate(attribute_sets)]
+        mesh_builder: MeshBuilder[SkinnedSubmeshBuilder] = \
+            MeshBuilder(mesh_name,
+                        lambda i: SkinnedSubmeshBuilder(attribute_sets[i].shader.vertex_buffer_layout, i, relevant_gmd_bones),
+                        error)
     else:
-        #deform_layer = None
         vertex_group_bone_index_map = {}
-        submesh_builders = [SubmeshBuilder(attribute_set.shader.vertex_buffer_layout, i)
-                            for i, attribute_set in enumerate(attribute_sets)]
+        mesh_builder: MeshBuilder[SubmeshBuilder] = \
+            MeshBuilder(mesh_name,
+                        lambda i: SubmeshBuilder(attribute_sets[i].shader.vertex_buffer_layout, i),
+                        error)
 
     # TODO Put these somewhere else
+    # Get the correction matrix for transforming directions and positions from Blender-space into GMD-space
     transformation_direction = Matrix((
         Vector((-1, 0, 0, 0)),
         Vector((0, 0, 1, 0)),
@@ -72,6 +74,7 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
     ))
     transformation_position = transformation_direction @ object_blender_transformation
 
+    # Create a set of vertex fetchers for each attribute set
     vertex_fetchers = []
     for attribute_set in attribute_sets:
         vertex_fetcher = VertexFetcher(mesh_name,
@@ -80,8 +83,6 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
                                        transformation_direction=transformation_direction,
                                        vertex_group_bone_index_map=vertex_group_bone_index_map,
                                        mesh=mesh,
-
-                                       #deform_layer=deform_layer,
                                        col0_layer=col0_layer,
                                        col1_layer=col1_layer,
                                        tangent_w_layer=tangent_w_layer,
@@ -90,29 +91,22 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
                                        error=error)
         vertex_fetchers.append(vertex_fetcher)
 
+    # foreach triangle, add triangle to respective submesh builder
     for tri_loops in mesh.loop_triangles:
         if not (0 <= tri_loops.material_index < len(attribute_sets)):
             error.recoverable(
-                f"Mesh {mesh_name} has a face with out-of-bounds material index {tri_loops.vertices[i].face.material_index}. It will be skipped!")
+                f"Mesh {mesh_name} has a face with out-of-bounds material index {tri_loops.material_index}. It will be skipped!")
             continue
 
-        builder = submesh_builders[tri_loops.material_index]
         vertex_fetcher = vertex_fetchers[tri_loops.material_index]
-
-        def parse_loop_elem(i):
-            return builder.add_vertex(tri_loops.vertices[i],
-                                      vertex_fetcher,
-                                      tri_loops,
-                                      i)
-
-        triangle = (
-            parse_loop_elem(0),
-            parse_loop_elem(1),
-            parse_loop_elem(2),
+        blender_vids = (
+            tri_loops.vertices[0],
+            tri_loops.vertices[1],
+            tri_loops.vertices[2],
         )
-        builder.add_triangle(triangle)
+        mesh_builder.add_triangle_vertices(tri_loops.material_index, blender_vids, vertex_fetcher, tri_loops)
 
-    return [builder for builder in submesh_builders if len(builder.vertices)]
+    return mesh_builder.get_nonempty_submesh_builders()
 
 
 def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilder, bone_limit: int, object_name: str, error: ErrorReporter) -> List[SkinnedSubmeshBuilder]:
@@ -130,7 +124,6 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 
     def bonesplit(x: SkinnedSubmeshBuilderSubset):
         bones = set()
-        #print(x.referenced_triangles)
         for tri in x.referenced_triangles:
             tri_bones = x.base.triangle_referenced_bones(tri)
             if len(tri_bones) + len(bones) < bone_limit:
@@ -153,7 +146,7 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
     # Start by selecting 32 bones.
     #   bones = {}
     #   for tri in submesh:
-    #       tri_bones = tri.referenced_bones() (at max 24)
+    #       tri_bones = tri.referenced_bones() (at max 12)
     #       if len(tri_bones) + len(bones) > 32
     #           break
     #       bones += tri_bones
@@ -175,23 +168,23 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 
     # these can then be merged back together!!!!
     # TODO: Check if it's even worth it
-    print(
-        f"Mesh had >{bone_limit} bone references ({len(skinned_submesh_builder.relevant_gmd_bones)}) and was split into {len(split_meshes)} chunks")
+    report = f"A submesh on {object_name} had >{bone_limit} bone references ({len(skinned_submesh_builder.relevant_gmd_bones)}) and was split into {len(split_meshes)} chunks"
 
     split_submeshes = []
     for split_mesh in split_meshes:
-        print("\nSplitSubmeshSubset")
-        print(f"ref-verts: {len(split_mesh.referenced_verts)} ref-tris: {len(split_mesh.referenced_triangles)}")
+        report += ("\nSplitSubmeshSubset")
+        report += (f"ref-verts: {len(split_mesh.referenced_verts)} ref-tris: {len(split_mesh.referenced_triangles)}")
         split_submesh_builder = split_mesh.convert_to_submesh_builder()
-        print("SplitSubmesh pre-reduce")
-        print(f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}")
-        print("SplitSubmesh post-reduce")
+        report += ("SplitSubmesh pre-reduce")
+        report += (f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}")
+        report += ("SplitSubmesh post-reduce")
         split_submesh_builder.reduce_to_used_bones()
-        print(
+        report += (
             f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}")
-        print(split_submesh_builder.total_referenced_bones())
+        report += (split_submesh_builder.total_referenced_bones())
         split_submeshes.append(split_submesh_builder)
-        print()
+
+    error.debug("MESH", report)
 
     return split_submeshes
 
@@ -236,12 +229,11 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
 
 
     gmd_skinned_meshes = []
-    print(f"Exporting skinned meshes for {object.name}")
+    error.debug("MESH", f"Exporting skinned meshes for {object.name}")
     for builder in submesh_builders:
         if not isinstance(builder, SkinnedSubmeshBuilder):
             error.fatal(f"split_mesh_by_material gave a {type(builder).__name__} when a SkinnedSubmeshBuilder was expected")
         for split_builder in split_submesh_builder_by_bones(builder, bone_limit, object.name, error):
-            print(f"Adding skinned mesh of vert count {len(split_builder.vertices)}")
             gmd_skinned_meshes.append(split_builder.build_to_gmd(materials))
 
     return gmd_skinned_meshes

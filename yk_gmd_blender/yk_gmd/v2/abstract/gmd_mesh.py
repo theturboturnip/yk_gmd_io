@@ -1,8 +1,6 @@
 import array
 from dataclasses import dataclass
-from typing import List, Tuple
-
-from mathutils import Vector
+from typing import List
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer

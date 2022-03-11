@@ -1,11 +1,10 @@
 from typing import Union, List, Dict, cast, Tuple, Set
 
-from mathutils import Vector, Matrix
-
 import bmesh
+from mathutils import Matrix
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, BoneWeight4, VecStorage
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 

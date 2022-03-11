@@ -1,6 +1,6 @@
 import struct
 from dataclasses import dataclass
-from typing import Any, Union, Tuple, Type, Optional, TypeVar, Generic, List, get_type_hints, Dict, cast, Callable
+from typing import Union, Tuple, Type, Optional, TypeVar, Generic, List, get_type_hints, Dict, Callable
 
 __all__ = [
     "BaseUnpacker",

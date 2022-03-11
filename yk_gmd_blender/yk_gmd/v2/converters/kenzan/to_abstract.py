@@ -3,7 +3,6 @@ import time
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import HierarchyData, GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import GMDAbstractor_Common
-from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan
 
 

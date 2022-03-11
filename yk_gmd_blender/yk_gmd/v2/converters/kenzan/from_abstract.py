@@ -1,16 +1,13 @@
-import time
-from collections import Iterator
-from typing import List, Iterable, Tuple, Dict
+from typing import Iterable
 
 from mathutils import Quaternion, Vector
-from yk_gmd_blender.structurelib.base import PackingValidationError
 
+from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.converters.common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
@@ -20,12 +17,12 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrSt
 from yk_gmd_blender.yk_gmd.v2.structure.common.mesh import IndicesStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct, NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct
-from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.mesh import MeshStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties
 
 
 def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_Kenzan:
@@ -106,7 +103,6 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     # Set >255 bones flag
     bones_count = len([x for x, stackop in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
     int16_bone_indices = bones_count > 255
-    print(bones_count, int16_bone_indices)
 
     if int16_bone_indices:
         error.recoverable(f"This file has >255 bones. Pre-dragon engine titles have not been tested with this value.\n"
@@ -166,8 +162,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
     index_buffer = []
-    # TODO - this isn't vertex_offset anymore, need to consider indices>65535 and start using the vertex_offset_from_indices
-    # Dict of GMDMesh id -> (buffer_id, vertex_offset, vertex_count)
+    # Dict of GMDMesh id -> (buffer_id, vertex_offset_from_index, min_index, vertex_count)
     mesh_buffer_stats = {}
     for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(
             rearranged_data.vertex_layout_groups):
@@ -185,21 +180,38 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             vertex_data_length=buffer_vertex_count * gmd_buffer_layout.bytes_per_vertex(),
         ))
 
-        vertex_buffer_length = 0
+        # vertex_offset = (vertex_offset_from_index: u32, min_index: u16)
+        vertex_offset_from_index = 0
+        min_index = 0
 
         for gmd_mesh in meshes_for_buffer:
             object_index = rearranged_data.mesh_id_to_object_index[id(gmd_mesh)]
             node = rearranged_data.ordered_objects[object_index]
 
-            vertex_offset = vertex_buffer_length
             vertex_count = len(gmd_mesh.vertices_data)
+            # We need to store from (min_index, min_index + vertex_count) in a u16
+            # If min_index + vertex_count > 65535, we can't store it in a u16
+            # (we ensure min_index always fits in u16)
+            # => add the current base_index to the vertex_offset_from_index, set new base_index to 0
+            # We *could* probably just set min_index = 0 each time, but that's not how RGG does it
+            if min_index + vertex_count > 65535:
+                vertex_offset_from_index += min_index
+                min_index = 0
+
+            if vertex_count > 65535:
+                error.fatal(f"Encountered a mesh with more than 65k vertices, needs to be split before it arrives")
+            elif vertex_offset_from_index > 4294967295:
+                error.fatal(f"Encountered a vertex_offset_from_index greater than 32bit, needs")
+
             try:
                 gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
             except PackingValidationError as e:
                 error.fatal(f"Error while packing a mesh for {node.name}: {e}")
-            vertex_buffer_length += vertex_count
 
-            mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset, vertex_count)
+            error.debug("MESH_EXPORT", f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, min_index: {min_index}, vertex_count: {vertex_count})")
+            mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset_from_index, min_index, vertex_count)
+
+            min_index += vertex_count
 
         pass
 
@@ -208,7 +220,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
         object_index = rearranged_data.mesh_id_to_object_index[id(gmd_mesh)]
         node = rearranged_data.ordered_objects[object_index]
         node_index = rearranged_data.node_id_to_node_index[id(node)]
-        (buffer_idx, vertex_offset, vertex_count) = mesh_buffer_stats[id(gmd_mesh)]
+        (buffer_idx, vertex_offset_from_index, min_index, vertex_count) = mesh_buffer_stats[id(gmd_mesh)]
 
         if isinstance(gmd_mesh, GMDSkinnedMesh):
             matrix_list = rearranged_data.mesh_id_to_matrixlist[id(gmd_mesh)]
@@ -218,7 +230,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
         if version_properties.relative_indices_used:
             pack_index = lambda x: x
         else:
-            pack_index = lambda x: 0xFFFF if x == 0xFFFF else (x + vertex_offset)
+            pack_index = lambda x: 0xFFFF if x == 0xFFFF else (x + min_index)
 
         # Set up the pointer for the next set of indices
         triangle_indices = IndicesStruct(
@@ -254,10 +266,9 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             matrixlist_offset=packed_mesh_matrix_strings_index[tuple(matrix_list)] if matrix_list else 0,
             matrixlist_length=len(matrix_list),
 
-            # TODO vertex_offset should be renamed, vertex_offset_from_index should be used and not always be 0
-            min_index=vertex_offset,
+            min_index=min_index,
             vertex_count=vertex_count,
-            vertex_offset_from_index=0,
+            vertex_offset_from_index=vertex_offset_from_index,
 
             triangle_list_indices=triangle_indices,
             noreset_strip_indices=triangle_strip_noreset_indices,
@@ -268,7 +279,6 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     # This isn't going to have duplicates -> don't bother with the packing
     drawlist_bytearray = bytearray()
     touched_meshes = set()
-    print(rearranged_data.ordered_objects)
     for i, obj in enumerate(rearranged_data.ordered_objects):
 
         mesh_bounds = combine_bounds([bounds_of(gmd_mesh) for gmd_mesh in obj.mesh_list])
@@ -283,7 +293,6 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             c_uint16.pack(file_big_endian, rearranged_data.mesh_id_to_index[id(mesh)], drawlist_bytearray)
             touched_meshes.add(id(mesh))
 
-        print(f"object struct {i}")
         obj_arr.append(ObjectStruct_Kenzan(
             index=i,
             node_index_1=node_index,

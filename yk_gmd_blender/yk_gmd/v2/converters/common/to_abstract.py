@@ -2,7 +2,7 @@
 import abc
 import array
 import time
-from typing import List, Tuple, cast, Iterable, Optional, Union, TypeVar, Generic
+from typing import List, Tuple, cast, Union, TypeVar, Generic
 
 from mathutils import Matrix
 
@@ -11,7 +11,7 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -333,6 +333,10 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 self.error.fatal(
                     f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
 
+            # Define the range of vertices that are referenced by the indices.
+            # This is shifted up by the vertex_offset_from_index field.
+            # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
+            # it can shift its indices down by a set amount to prevent exceeding the limit.
             vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
             vertex_end = vertex_start + mesh_struct.vertex_count
 

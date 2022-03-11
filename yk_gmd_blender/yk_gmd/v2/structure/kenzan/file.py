@@ -6,17 +6,19 @@ import mathutils
 from yk_gmd_blender.structurelib.base import BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
-from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
-from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct, Unk14Struct_Unpack, Unk12Struct_Unpack
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.common.checksum_str import ChecksumStrStruct_Unpack, ChecksumStrStruct
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common, FilePacker
+from yk_gmd_blender.yk_gmd.v2.structure.common.matrix import MatrixUnpacker
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeStruct_Unpack, NodeStruct
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.mesh import MeshStruct_Kenzan_Unpack, MeshStruct_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan_Unpack, ObjectStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.common.unks import Unk12Struct, Unk14Struct, Unk14Struct_Unpack, \
+    Unk12Struct_Unpack
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.bbox import BoundsDataStruct_Kenzan
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.header import GMDHeader_Kenzan_Unpack
 from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan_Unpack, MaterialStruct_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan_Unpack, VertexBufferLayoutStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.mesh import MeshStruct_Kenzan_Unpack, MeshStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.object import ObjectStruct_Kenzan_Unpack, ObjectStruct_Kenzan
+from yk_gmd_blender.yk_gmd.v2.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan_Unpack, \
+    VertexBufferLayoutStruct_Kenzan
 
 
 @dataclass(repr=False)
