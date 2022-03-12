@@ -1,0 +1,7 @@
+[project]
+name="bpy-stubs"
+version="3.0.0"
+
+[build-system]
+requires = ["setuptools >= 40.6.0", "wheel"]
+build-backend = "setuptools.build_meta"
