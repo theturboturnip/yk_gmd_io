@@ -2,9 +2,9 @@ import re
 from typing import List, Dict, Union
 
 import bmesh
-import bpy
 from mathutils import Vector, Matrix
 
+import bpy
 from yk_gmd_blender.blender.export.mesh_exporter.builders import SubmeshBuilder, SkinnedSubmeshBuilder, \
     SkinnedSubmeshBuilderSubset, VertexFetcher, MeshBuilder
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet

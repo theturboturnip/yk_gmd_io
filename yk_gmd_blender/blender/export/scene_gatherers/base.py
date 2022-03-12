@@ -2,16 +2,15 @@ import abc
 import json
 import re
 from dataclasses import dataclass
-from typing import List, Union, Dict, Optional, cast, Tuple
+from typing import List, Dict, Optional, cast, Tuple
 
-import bpy
-from bpy.types import Operator, ChildOfConstraint, ShaderNodeGroup, ShaderNodeTexImage
-from bpy_extras.io_utils import ExportHelper
+from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
 
+import bpy
 from yk_gmd_blender.blender.common import GMDGame
-from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd, \
-    transform_position_gmd_to_blender, invert_transformation_matrix
+from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, \
+    transform_position_gmd_to_blender
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
     split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP

@@ -1,44 +1,20 @@
-import json
-import os
-import re
-from typing import List, Dict, Optional, cast, Tuple
-
-import bpy
 from bpy.props import (StringProperty,
                        BoolProperty,
                        EnumProperty)
-from bpy.types import Operator, ShaderNodeGroup, ShaderNodeTexImage
+from bpy.types import Operator, ShaderNodeGroup
 from bpy_extras.io_utils import ExportHelper
-from mathutils import Matrix, Vector, Quaternion
 
-from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
-    split_skinned_blender_mesh_object
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file, GMDGame
-from yk_gmd_blender.blender.coordinate_converter import transform_matrix_blender_to_gmd, transform_blender_to_gmd, \
-    transform_position_gmd_to_blender, invert_transformation_matrix
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
-    split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData, depth_first_iterate
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter, ErrorReporter
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import check_version_writeable, write_abstract_scene_out, \
     read_gmd_structures, read_abstract_scene_from_filedata_object
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.version import combine_versions, GMDVersion, VersionProperties
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
+from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProperties
 
 import os
 
