@@ -168,20 +168,19 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
 
     # these can then be merged back together!!!!
     # TODO: Check if it's even worth it
-    report = f"A submesh on {object_name} had >{bone_limit} bone references ({len(skinned_submesh_builder.relevant_gmd_bones)}) and was split into {len(split_meshes)} chunks"
+    report = f"A submesh on {object_name} had >{bone_limit} bone references ({len(skinned_submesh_builder.relevant_gmd_bones)}) and was split into {len(split_meshes)} chunks\n"
 
     split_submeshes = []
     for split_mesh in split_meshes:
-        report += ("\nSplitSubmeshSubset")
-        report += (f"ref-verts: {len(split_mesh.referenced_verts)} ref-tris: {len(split_mesh.referenced_triangles)}")
+        report += "\nSplitSubmeshSubset\n"
+        report += f"ref-verts: {len(split_mesh.referenced_verts)} ref-tris: {len(split_mesh.referenced_triangles)}\n"
         split_submesh_builder = split_mesh.convert_to_submesh_builder()
-        report += ("SplitSubmesh pre-reduce")
-        report += (f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}")
-        report += ("SplitSubmesh post-reduce")
+        report += "SplitSubmesh pre-reduce\n"
+        report += f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}\n"
+        report += "SplitSubmesh post-reduce\n"
         split_submesh_builder.reduce_to_used_bones()
-        report += (
-            f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}")
-        report += (split_submesh_builder.total_referenced_bones())
+        report += f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}\n"
+        report += f"{split_submesh_builder.total_referenced_bones()}\n"
         split_submeshes.append(split_submesh_builder)
 
     error.debug("MESH", report)
@@ -195,7 +194,7 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object):
     mesh = object.evaluated_get(dg).data
 
     # TODO: Creating a new mesh just to triangulate sucks for perf I'd expect
-    tempmesh = bmesh.new()
+    tempmesh = bmesh.new() # type: ignore
     tempmesh.from_mesh(mesh)
 
     bmesh.ops.triangulate(tempmesh, faces=tempmesh.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
