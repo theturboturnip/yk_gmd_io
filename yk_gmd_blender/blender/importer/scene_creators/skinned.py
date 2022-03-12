@@ -1,9 +1,9 @@
 import re
 from typing import Dict, Optional
 
-import bpy
 from mathutils import Matrix, Vector, Quaternion
 
+import bpy
 from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig

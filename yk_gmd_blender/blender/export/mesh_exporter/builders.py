@@ -346,6 +346,7 @@ class SubmeshBuilder:
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
 
         return GMDMesh(
+            empty=False,
             attribute_set=gmd_attribute_sets[self.material_index],
             vertices_data=self.vertices,
             triangle_indices=triangle_list,
@@ -444,6 +445,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self.build_triangles()
 
         return GMDSkinnedMesh(
+            empty=False,
             attribute_set=gmd_attribute_sets[self.material_index],
             vertices_data=self.vertices,
             triangle_indices=triangle_list,

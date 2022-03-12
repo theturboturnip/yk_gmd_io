@@ -2,6 +2,7 @@
 import abc
 import array
 import time
+from enum import Enum
 from typing import List, Tuple, cast, Union, TypeVar, Generic
 
 from mathutils import Matrix
@@ -47,22 +48,42 @@ class ParentStack:
 TFileData = TypeVar('TFileData', bound=FileData_Common)
 
 
+class FileImportMode(Enum):
+    SKINNED = 0
+    UNSKINNED = 1
+
+
+class VertexImportMode(Enum):
+    SKINNED = 0
+    UNSKINNED = 1
+    # In this mode, vertex buffers will not be unpacked.
+    # This is helpful in situations where the data is unnecessary,
+    # such as imports for the sake of exporting-over
+    NO_VERTICES = 2
+
+
 class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     version_props: VersionProperties
     file_is_big_endian: bool
     vertices_are_big_endian: bool
-    can_have_skinned_vertices: bool
+    file_import_mode: FileImportMode
+    vertex_import_mode: VertexImportMode
 
     error: ErrorReporter
 
     file_data: TFileData
 
-    def __init__(self, version_props: VersionProperties, can_have_skinned_vertices: bool, file_data: TFileData, error_reporter: ErrorReporter):
+    def __init__(self, version_props: VersionProperties, file_import_mode: FileImportMode, vertex_import_mode: VertexImportMode, file_data: TFileData, error_reporter: ErrorReporter):
         self.version_props = version_props
         self.file_is_big_endian = file_data.file_is_big_endian()
         self.vertices_are_big_endian = file_data.vertices_are_big_endian()
-        self.can_have_skinned_vertices = can_have_skinned_vertices
+        self.file_import_mode = file_import_mode
+        self.vertex_import_mode = vertex_import_mode
         self.error = error_reporter
+
+        if self.vertex_import_mode == VertexImportMode.SKINNED and \
+            self.file_import_mode == FileImportMode.UNSKINNED:
+            self.error.fatal("Unskinned file cannot have Skinned vertices")
 
         self.file_data = file_data
 
@@ -75,31 +96,38 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                           profile: bool = False) \
             -> List[GMDVertexBuffer]:
+        can_have_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
+
         abstract_vertex_buffers = []
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, self.can_have_skinned_vertices, self.error)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, can_have_skinned_vertex_buffers, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
                     f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
 
-            unpack_start = time.time()
+            if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
+                # Create an empty vertex buffer
+                abstract_vertex_buffer = GMDVertexBuffer.build_empty(abstract_layout, 0)
+            else:
+                # Actually unpack vertices
+                unpack_start = time.time()
 
-            abstract_vertex_buffer, vertex_bytes_offset = \
-                abstract_layout.unpack_from(self.vertices_are_big_endian, layout_struct.vertex_count,
-                                            vertex_bytes, vertex_bytes_offset)
+                abstract_vertex_buffer, vertex_bytes_offset = \
+                    abstract_layout.unpack_from(self.vertices_are_big_endian, layout_struct.vertex_count,
+                                                vertex_bytes, vertex_bytes_offset)
 
-            unpack_finish = time.time()
+                unpack_finish = time.time()
 
-            unpack_delta = unpack_finish - unpack_start
-            if profile:
-                # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
-                # This profiling is here incase we want to optimize vertex unpacking
-                print(f"Time to build layout: {unpack_start - layout_build_start}")
-                print(
-                    f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
+                unpack_delta = unpack_finish - unpack_start
+                if profile:
+                    # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
+                    # This profiling is here incase we want to optimize vertex unpacking
+                    print(f"Time to build layout: {unpack_start - layout_build_start}")
+                    print(
+                        f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
@@ -321,35 +349,45 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         meshes = []
         for mesh_struct in mesh_arr:
-            triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices)
-            triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
-                                                                                   mesh_struct.noreset_strip_indices,
-                                                                                   min_index, max_index)
-            triangle_strip_reset_indices, min_index, max_index = process_indices(mesh_struct,
-                                                                                 mesh_struct.reset_strip_indices, min_index,
-                                                                                 max_index)
+            if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
+                triangle_indices = array.array("H")
+                triangle_strip_noreset_indices = array.array("H")
+                triangle_strip_reset_indices = array.array("H")
 
-            if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
-                self.error.fatal(
-                    f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
+                vertex_start = 0
+                vertex_end = 0
+                self.error.debug("MESH_PROPS", "index props: none, because importing with NO_VERTICES")
+            else:
+                # Actually import data
+                triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices)
+                triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
+                                                                                       mesh_struct.noreset_strip_indices,
+                                                                                       min_index, max_index)
+                triangle_strip_reset_indices, min_index, max_index = process_indices(mesh_struct,
+                                                                                     mesh_struct.reset_strip_indices, min_index,
+                                                                                     max_index)
 
-            # Define the range of vertices that are referenced by the indices.
-            # This is shifted up by the vertex_offset_from_index field.
-            # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
-            # it can shift its indices down by a set amount to prevent exceeding the limit.
-            vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
-            vertex_end = vertex_start + mesh_struct.vertex_count
+                if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
+                    self.error.fatal(
+                        f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
 
-            self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
+                # Define the range of vertices that are referenced by the indices.
+                # This is shifted up by the vertex_offset_from_index field.
+                # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
+                # it can shift its indices down by a set amount to prevent exceeding the limit.
+                vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
+                vertex_end = vertex_start + mesh_struct.vertex_count
 
-            if vertex_start < 0 or vertex_end < 0 or vertex_end <= vertex_start:
-                self.error.fatal(f"Invalid vertex_start {vertex_start} vertex_end {vertex_end} pair")
+                if vertex_start < 0 or vertex_end < 0 or vertex_end <= vertex_start:
+                    self.error.fatal(f"Invalid vertex_start {vertex_start} vertex_end {vertex_end} pair")
 
-            # [min_index, max_index] is an *inclusive* range
-            # [vertex_start, vertex_end) is *exclusive* at the end
-            if (not file_uses_relative_indices) and (vertex_end - vertex_start) != (max_index - min_index + 1):
-                self.error.fatal(
-                    f"Mesh vertex_count is {mesh_struct.vertex_count} and calculated range is {vertex_end - vertex_start} long but indices show a range of length {max_index - min_index + 1} is used.")
+                # [min_index, max_index] is an *inclusive* range
+                # [vertex_start, vertex_end) is *exclusive* at the end
+                if (not file_uses_relative_indices) and (vertex_end - vertex_start) != (max_index - min_index + 1):
+                    self.error.fatal(
+                        f"Mesh vertex_count is {mesh_struct.vertex_count} and calculated range is {vertex_end - vertex_start} long but indices show a range of length {max_index - min_index + 1} is used.")
+
+                self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
 
             relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
             if relevant_bone_indices:
@@ -358,7 +396,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     self.error.fatal(
                         f"Skinned mesh references some non-bone nodes {[node.name for node in relevant_bones if not isinstance(node, GMDBone)]}")
 
+                if self.file_import_mode == FileImportMode.UNSKINNED:
+                    self.error.fatal("Found mesh with a matrixlist in an unskinned file - can't import this yet")
+
                 meshes.append(GMDSkinnedMesh(
+                    empty=(self.vertex_import_mode == VertexImportMode.NO_VERTICES),
+
                     relevant_bones=cast(List[GMDBone], relevant_bones),
 
                     vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
@@ -371,6 +414,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 ))
             else:
                 meshes.append(GMDMesh(
+                    empty=(self.vertex_import_mode == VertexImportMode.NO_VERTICES),
+
                     vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
 
                     triangle_indices=triangle_indices,

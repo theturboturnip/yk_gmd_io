@@ -14,6 +14,7 @@ from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, GMDGame, MaterialNamingType
 from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
 from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene_from_filedata_object, \
@@ -158,7 +159,7 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
                 self.report({"INFO"}, "Extracting abstract scene...")
                 gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
                 gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, True, gmd_contents, error)
+                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.SKINNED, gmd_contents, error)
                 self.report({"INFO"}, "Finished extracting abstract scene")
 
                 scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
@@ -235,7 +236,7 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
                 self.report({"INFO"}, "Extracting abstract scene...")
                 gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
                 gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, False, gmd_contents, error)
+                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.UNSKINNED, VertexImportMode.UNSKINNED, gmd_contents, error)
                 self.report({"INFO"}, "Finished extracting abstract scene")
 
                 scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)

@@ -3,6 +3,7 @@ from typing import Union, Tuple, cast
 
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.converters.dragon.from_abstract import pack_abstract_contents_Dragon
 from yk_gmd_blender.yk_gmd.v2.converters.dragon.to_abstract import GMDAbstractor_Dragon
 from yk_gmd_blender.yk_gmd.v2.converters.kenzan.from_abstract import pack_abstract_contents_Kenzan
@@ -83,23 +84,16 @@ def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorRepo
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not readable")
 
 
-def read_abstract_scene_from_filedata_object(version_props: VersionProperties, can_have_skinned_vertices: bool, contents: Union[FileData_Kenzan, FileData_YK1], error_reporter: ErrorReporter) -> GMDScene:
+def read_abstract_scene_from_filedata_object(version_props: VersionProperties, file_import_mode: FileImportMode, vertex_import_mode: VertexImportMode,  contents: Union[FileData_Kenzan, FileData_YK1], error_reporter: ErrorReporter) -> GMDScene:
     if version_props.major_version == GMDVersion.Kiwami1:
-        return GMDAbstractor_YK1(version_props, can_have_skinned_vertices, cast(FileData_YK1, contents), error_reporter).make_abstract_scene()
+        return GMDAbstractor_YK1(version_props, file_import_mode, vertex_import_mode, cast(FileData_YK1, contents), error_reporter).make_abstract_scene()
     elif version_props.major_version == GMDVersion.Dragon:
-        return GMDAbstractor_Dragon(version_props, can_have_skinned_vertices, cast(FileData_Dragon, contents), error_reporter).make_abstract_scene()
+        return GMDAbstractor_Dragon(version_props, file_import_mode, vertex_import_mode, cast(FileData_Dragon, contents), error_reporter).make_abstract_scene()
     elif version_props.major_version == GMDVersion.Kenzan:
-        return GMDAbstractor_Kenzan(version_props, can_have_skinned_vertices, cast(FileData_Kenzan, contents),
+        return GMDAbstractor_Kenzan(version_props, file_import_mode, vertex_import_mode, cast(FileData_Kenzan, contents),
                                 error_reporter).make_abstract_scene()
     else:
         raise InvalidGMDFormatError(f"File format version {version_props.version_str} is not abstractable")
-
-
-def read_abstract_scene(data: Union[Path, str, bytes], error_reporter: ErrorReporter) -> GMDScene:
-    data = _get_file_data(data, error_reporter)
-
-    version_props, header, file_data = read_gmd_structures(data, error_reporter)
-    return read_abstract_scene_from_filedata_object(version_props, file_data, error_reporter)
 
 
 def check_version_writeable(version_props: VersionProperties, error_reporter: ErrorReporter):
