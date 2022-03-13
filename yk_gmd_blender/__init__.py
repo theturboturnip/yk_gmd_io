@@ -1,6 +1,3 @@
-import importlib.util
-blender_loader = importlib.util.find_spec('bpy')
-
 # Include the bl_info at the top level always
 bl_info = {
     "name": "Yakuza GMD File Import/Export",
@@ -14,5 +11,9 @@ bl_info = {
     "category": "Import-Export",
 }
 
-if blender_loader:
+# Check if we're in Blender by seeing if bpy.app.version exists.
+# We can't just check for the presence of bpy, because the type library
+import bpy.app
+if getattr(bpy.app, "version", None) is not None:
+    # If we're in Blender, add the rest of the addon
     from .blender.addon import *
