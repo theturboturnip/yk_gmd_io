@@ -120,7 +120,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 if profile:
                     # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
                     # This profiling is here incase we want to optimize vertex unpacking
-                    print(f"Time to build layout: {unpack_start - layout_build_start}")
+                    self.error.debug("TIME", f"Time to build layout: {unpack_start - layout_build_start}")
                     print(
                         f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
 

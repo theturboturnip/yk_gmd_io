@@ -479,7 +479,7 @@ class GMDVertexBufferLayout:
                 error.recoverable(
                     f"Incomplete vertex format parse - bits {expected_touched_bits.difference(touched_packing_bits)} were not touched")
 
-        print(f"packing-flags: {vertex_packing_flags:x}")
+        error.debug("BYTES", f"packing-flags: {vertex_packing_flags:x}")
 
         return GMDVertexBufferLayout.make_vertex_buffer_layout(
             assume_skinned=assume_skinned,
