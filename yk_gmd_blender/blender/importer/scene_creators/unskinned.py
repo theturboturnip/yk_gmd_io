@@ -75,8 +75,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
             node_obj.yakuza_hierarchy_node_data.imported_matrix = \
                 list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
-
-            node_obj.yakuza_hierarchy_node_data.flags = json.dumps(gmd_node.flags)
+            node_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj
