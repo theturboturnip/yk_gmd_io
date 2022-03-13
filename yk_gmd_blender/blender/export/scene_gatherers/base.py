@@ -83,7 +83,7 @@ class BaseGMDSceneGatherer(abc.ABC):
             overall_hierarchy=HierarchyData(self.node_roots)
         )
 
-    def detect_export_collection(self, context: bpy.types.Context) -> bpy.types.Collection:
+    def detect_export_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Object, bpy.types.Collection]:
         # Decide on an export root
         # Require a collection to be selected I guess?
         # Issue a warning if the name is different?
@@ -110,7 +110,7 @@ class BaseGMDSceneGatherer(abc.ABC):
             self.error.recoverable(
                 f"Collection {selected_collection.name} has children collections, which will be ignored.")
 
-        return selected_collection
+        return selected_object, selected_collection
 
     def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material, referencing_object: bpy.types.Object) -> GMDAttributeSet:
         if material.name in self.material_map:
@@ -229,10 +229,10 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         self.bone_matrix_origin = bone_matrix_origin
         self.bone_name_map = {}
 
-    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Armature, bpy.types.Collection]:
+    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Object, bpy.types.Collection]:
         # Check we're selecting a correct armature
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
-        selected_armature = context.view_layer.objects.active
+        selected_armature, selected_collection = super().detect_export_collection(context)
 
         if not selected_armature or selected_armature.type != "ARMATURE":
             self.error.fatal(f"Please select the armature for the skinned file you want to export!")
@@ -246,7 +246,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         self.error.info(f"Selected armature {selected_armature.name}")
 
-        return selected_armature, super().detect_export_collection(context)
+        return selected_armature, selected_collection
 
     def gather_exported_items(self, context: bpy.types.Context):
         selected_armature, selected_collection = self.detect_export_armature_collection(context)
@@ -266,7 +266,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
 
-        # Go through all objects at the top level of the collection
+        # Go through all objects at the top level of the collection and check them for errors
         for object in selected_collection.objects:
             if object.type != "MESH":
                 continue
@@ -292,8 +292,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                     f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
             self.error.recoverable(
-                f"Mesh {object.name} is not parented, so isn't skinned. This exporter doesn't support unskinned meshes. It may support it in v0.4.")
+                f"Mesh {object.name} is not parented, so isn't skinned. This exporter doesn't support unskinned meshes.")
 
+        # Go through the objects we're actually going to export
         for object in selected_armature.children:
             if object.type != "MESH":
                 continue
@@ -525,11 +526,17 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         self.try_copy_hierarchy = try_copy_hierarchy
 
     def gather_exported_items(self, context: bpy.types.Context):
-        selected_collection = self.detect_export_collection(context)
+        scene_root, selected_collection = self.detect_export_collection(context)
 
-        # Stores a list of (parent node, blender object).
-
-        roots: List[bpy.types.Object] = []
+        if remove_blender_duplicate(scene_root.name) != remove_blender_duplicate(selected_collection.name):
+            self.error.fatal(f"Please select the root object of the collection, "
+                             f"which should have the same name as the collection. "
+                             f"Right now, the selected object '{scene_root.name}' doesn't have the same name "
+                             f"as the collection '{selected_collection.name}'")
+        if scene_root.parent is not None:
+            self.error.fatal(f"Please select the root object of the collection, "
+                             f"which should have the same name as the collection. "
+                             f"Right now, the selected object has a parent and is not at the root of the collection")
 
         # Go through all objects at the top level of the collection
         for object in selected_collection.objects:
@@ -552,9 +559,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 self.error.info(
                     f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
-            roots.append(object)
-
-        for unskinned_object in roots:
+        # Export each child of the scene root
+        for unskinned_object in scene_root.children:
             self.export_unskinned_object(context, selected_collection, unskinned_object, None)
 
         self.error.debug("GATHER", f"NODE REPORT")
