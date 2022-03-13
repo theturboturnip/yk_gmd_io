@@ -90,9 +90,12 @@ class BaseGMDSceneGatherer(abc.ABC):
 
         selected_object = context.view_layer.objects.active
 
+        if not selected_object:
+            self.error.fatal("No object selected - please select the root object to export")
+
         # This is the list of all collections an object could be in, including nested ones.
         # i.e. the full chain Collection > scene_name_collection > object
-        possible_collections: Tuple[bpy.types.Collection, ...] = context.view_layer.objects.active.users_collection
+        possible_collections: Tuple[bpy.types.Collection, ...] = selected_object.users_collection
         # The selected collection is the one that has the armature as a root object
         selected_collection = None
         for collection in possible_collections:
