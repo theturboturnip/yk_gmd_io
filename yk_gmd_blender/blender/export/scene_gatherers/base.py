@@ -31,6 +31,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 @dataclass(frozen=True)
 class GMDSceneGathererConfig:
     game: GMDGame
+    debug_compare_matrices: bool
 
 
 def name_matches_expected(name, expected):
@@ -56,13 +57,13 @@ class BaseGMDSceneGatherer(abc.ABC):
     """
     config: GMDSceneGathererConfig
     name: str
-    original_scene: GMDScene
+    original_scene: Optional[GMDScene]
     error: ErrorReporter
 
     node_roots: List[GMDNode]
     material_map: Dict[str, GMDAttributeSet]
 
-    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, error: ErrorReporter):
+    def __init__(self, filepath: str, original_scene: Optional[GMDScene], config: GMDSceneGathererConfig, error: ErrorReporter):
         self.config = config
         self.filepath = filepath
         self.name = original_scene.name
@@ -71,6 +72,9 @@ class BaseGMDSceneGatherer(abc.ABC):
 
         self.node_roots = []
         self.material_map = {}
+
+        if self.config.debug_compare_matrices:
+            assert original_scene is not None
 
     def build(self) -> GMDScene:
         return GMDScene(
@@ -200,6 +204,8 @@ class BaseGMDSceneGatherer(abc.ABC):
         self.error.debug("MATERIAL", f"mat {material.name} -> {attribute_set}")
         return attribute_set
 
+    def gather_exported_items(self, context: bpy.types.Context):
+        raise NotImplementedError()
 
 class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
     try_copy_bones: bool
@@ -222,7 +228,6 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if selected_armature.parent:
             self.error.fatal(f"The file armature should not have a parent.")
 
-        # TODO - decide how to handle armatures that are not at the identity
         if selected_armature.matrix_world != Matrix.Identity(4):
             self.error.fatal(
                 f"Selected armature {selected_armature.name} should be at the origin (0, 0, 0), and must not be rotated or scaled!")
@@ -231,7 +236,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         return super().detect_export_collection(context)
 
-    def gather_exported_items(self, context: bpy.types.Context, debug_compare_matrices: bool):
+    def gather_exported_items(self, context: bpy.types.Context):
         selected_armature, selected_collection = self.detect_export_collection(context)
 
         armature_data = cast(bpy.types.Armature, selected_armature.data)
@@ -319,7 +324,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         for node in depth_first_iterate(self.node_roots):
             self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
-        if debug_compare_matrices:
+        if self.config.debug_compare_matrices:
             self.error.debug("GATHER", f"MATRIX COMPARISONS")
             for node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
@@ -335,7 +340,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
     def load_bones_from_blender(self, armature_data: bpy.types.Armature):
         def add_bone(blender_bone: bpy.types.Bone, parent_gmd_bone: Optional[GMDBone] = None):
-            # Generating bone matrices is more difficult, because when we set the head/tail in the import process the blender matrix changes from the GMD version
+            # Generating bone matrices is more difficult, because when we set the head/tail in the import process
+            # the blender matrix changes from the GMD version
             # matrix_local is relative to the armature, not the parent
 
             # This is experimental - some bones have quaternions
@@ -370,6 +376,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             add_bone(root_bone, None)
 
     def copy_bones_from_original(self, armature_data: bpy.types.Armature):
+        assert self.original_scene is not None
         original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
 
         def check_bone_sets_match(parent_name: str, blender_bones: List[bpy.types.Bone], gmd_bones: List[GMDBone]):
@@ -475,13 +482,13 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
     try_copy_hierarchy: bool
 
-    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, error: ErrorReporter,
+    def __init__(self, filepath: str, original_scene: Optional[GMDScene], config: GMDSceneGathererConfig, error: ErrorReporter,
                  try_copy_hierarchy: bool):
         super().__init__(filepath, original_scene, config, error)
 
         self.try_copy_hierarchy = try_copy_hierarchy
 
-    def gather_exported_items(self, context: bpy.types.Context, debug_compare_matrices: bool):
+    def gather_exported_items(self, context: bpy.types.Context):
         selected_object, selected_collection = self.detect_export_collection(context)
 
         # Stores a list of (parent node, blender object).
@@ -518,7 +525,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         for node in depth_first_iterate(self.node_roots):
             self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
-        if debug_compare_matrices:
+        if self.config.debug_compare_matrices:
+            assert self.original_scene is not None
             self.error.debug("GATHER", f"MATRIX COMPARISONS")
             for node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:

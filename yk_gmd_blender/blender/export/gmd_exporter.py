@@ -4,7 +4,8 @@ from bpy.props import (StringProperty,
 from bpy.types import Operator, ShaderNodeGroup
 from bpy_extras.io_utils import ExportHelper
 
-from yk_gmd_blender.blender.common import armature_name_for_gmd_file, GMDGame
+from blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer
+from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
@@ -73,6 +74,7 @@ class BaseExportGMD(Operator, ExportHelper):
             fuse_vertices=self.fuse_vertices
         )
 
+
 class ExportSkinnedGMD(BaseExportGMD):
     """Export scene as glTF 2.0 file"""
     bl_idname = 'export_scene.gmd_skinned'
@@ -133,10 +135,9 @@ class ExportSkinnedGMD(BaseExportGMD):
                         error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
                     try_copy_bones = False
 
-            scene_gatherer = GMDSceneGatherer(original_scene, try_copy_bones, gmd_version.major_version, error)
+            scene_gatherer = SkinnedGMDSceneGatherer(original_scene, try_copy_bones, gmd_version.major_version, error)
 
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
-            scene_gatherer.validate_scene()
 
             scene_gatherer.gather_exported_items(context, self.debug_compare_matrices)
             self.report({"INFO"}, "Finished extracting abstract scene")

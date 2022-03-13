@@ -1,10 +1,9 @@
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from mathutils import Matrix, Vector, Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -12,6 +11,13 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+
+
+def armature_name_for_gmd_file(gmd_file: Union[GMDScene, str]):
+    if isinstance(gmd_file, GMDScene):
+        return f"{gmd_file.name}_armature"
+    else:
+        return f"{gmd_file}_armature"
 
 
 class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
