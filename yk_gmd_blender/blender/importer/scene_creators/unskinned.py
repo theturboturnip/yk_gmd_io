@@ -1,3 +1,5 @@
+import json
+
 from mathutils import Quaternion
 
 import bpy
@@ -67,6 +69,12 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
+
+            # Set custom GMD data
+            node_obj.yakuza_hierarchy_node_data.inited = True
+            node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            node_obj.yakuza_hierarchy_node_data.imported_matrix = gmd_node.matrix
+            node_obj.yakuza_hierarchy_node_data.flags = json.dumps(gmd_node.flags)
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj

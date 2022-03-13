@@ -12,7 +12,7 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer_Generic
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -236,11 +236,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
-                    bone_pos=node_struct.bone_pos,
-                    bone_axis=node_struct.bone_axis,
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
                     matrix=matrix_arr[node_struct.matrix_index],
 
-                    parent=parent_stack.peek() if parent_stack else None
+                    parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             elif node_struct.node_type == NodeType.SkinnedMesh:
                 if 0 <= node_struct.matrix_index < len(matrix_arr):
@@ -254,7 +255,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
+
                     parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -270,9 +275,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
-                    parent=parent_stack.peek() if parent_stack else None,
-
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
                     matrix=matrix,
+
+                    parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             else:
                 self.error.fatal(f"Unknown node type enum value {node_struct.node_type} for {name}")

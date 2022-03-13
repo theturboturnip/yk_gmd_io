@@ -5,6 +5,8 @@ from bpy.props import PointerProperty
 
 from yk_gmd_blender.blender.importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup
+from .common import YakuzaHierarchyNodeData, OBJECT_PT_yakuza_hierarchy_node_data_panel, \
+    BONE_PT_yakuza_hierarchy_node_data_panel
 from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export
 from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
     ImportUnskinnedGMD
@@ -17,6 +19,9 @@ classes = (
     YakuzaPropertyGroup,
     YakuzaPropertyPanel,
     YakuzaTexturePropertyGroup,
+    YakuzaHierarchyNodeData,
+    OBJECT_PT_yakuza_hierarchy_node_data_panel,
+    BONE_PT_yakuza_hierarchy_node_data_panel
 )
 
 def register():
@@ -31,9 +36,13 @@ def register():
 
     bpy.types.Material.yakuza_data = PointerProperty(type=YakuzaPropertyGroup)
     bpy.types.Image.yakuza_data = PointerProperty(type=YakuzaTexturePropertyGroup)
+    bpy.types.Object.yakuza_hierarchy_node_data = PointerProperty(type=YakuzaHierarchyNodeData)
+    bpy.types.Bone.yakuza_hierarchy_node_data = PointerProperty(type=YakuzaHierarchyNodeData)
 
 
 def unregister():
+    del bpy.types.Bone.yakuza_hierarchy_node_data
+    del bpy.types.Object.yakuza_hierarchy_node_data
     del bpy.types.Image.yakuza_data
     del bpy.types.Material.yakuza_data
 

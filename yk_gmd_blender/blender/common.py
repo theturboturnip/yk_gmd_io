@@ -1,6 +1,10 @@
 from enum import IntEnum
 from typing import Tuple, List, Dict
 
+import bpy
+from bpy.props import BoolProperty, FloatVectorProperty, StringProperty
+from bpy.types import PropertyGroup, Panel
+
 
 class GMDGame(IntEnum):
     """
@@ -72,3 +76,82 @@ class GMDGame(IntEnum):
             "JUDGMENT": GMDGame.Judgment,
             "YAKUZA7": GMDGame.Yakuza7,
         }
+
+
+class YakuzaHierarchyNodeData(PropertyGroup):
+    # Has this PropertyGroup been initialized from a GMD file?
+    # Used to hide data for normal Blender materials
+    inited: BoolProperty(name="Initialized", default=False)
+    # The original imported node matrix
+    imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0]*16,size=16, subtype="MATRIX")
+
+    # The animation axis for the node imported from the GMD
+    anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0]*4, size=4, subtype="QUATERNION")
+    # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
+    flags_json: StringProperty(name="Imported Node Flags (JSON)",default="[0,0,0,0]")
+
+
+class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
+    bl_label = "Yakuza Hierarchy-Node Data"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'object'
+    bl_category = "Tool"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        ob = context.object
+
+        if not ob:
+            return
+
+        layout.prop(ob.yakuza_hierarchy_node_data, "anim_axis")
+        layout.prop(ob.yakuza_hierarchy_node_data, "flags_json")
+
+        if ob.yakuza_hierarchy_node_data.inited:
+            def matrix_prop(dat, prop_name, length: int, text=""):
+                layout.label(text=text)
+                box = layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
+                for i in range(length//4):
+                    for j in range(i*4, (i+1)*4):
+                        box.prop(dat, prop_name, index=j, text="")
+
+            matrix_prop(ob.yakuza_hierarchy_node_data, "imported_matrix", 16)
+        else:
+            layout.label(text=f"No original matrix, this object wasn't imported from a GMD")
+
+
+class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
+    bl_label = "Yakuza Hierarchy-Node Data (Bone)"
+
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'bone'
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        bone = context.bone
+        if not bone:
+            bone = context.edit_bone
+
+        if not bone:
+            return
+
+        layout.prop(bone.yakuza_hierarchy_node_data, "anim_axis")
+        layout.prop(bone.yakuza_hierarchy_node_data, "flags_json")
+
+        if bone.yakuza_hierarchy_node_data.inited:
+            def matrix_prop(dat, prop_name, length: int, text=""):
+                layout.label(text=text)
+                box = layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
+                for i in range(length//4):
+                    for j in range(i*4, (i+1)*4):
+                        box.prop(dat, prop_name, index=j, text="")
+
+            matrix_prop(bone.yakuza_hierarchy_node_data, "imported_matrix", 16)
+        else:
+            layout.label(text=f"No original matrix, this bone wasn't imported from a GMD")

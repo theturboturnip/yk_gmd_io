@@ -80,24 +80,24 @@ if __name__ == '__main__':
         print("rot", node.rot)
         print("scale", node.scale)
         if node.node_type == NodeType.MatrixTransform:
-            print("world pos", node.bone_pos)
-            print("bone axis", node.bone_axis)
+            print("world pos", node.world_pos)
+            print("bone axis", node.anim_axis)
         parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
 
-        # pos = node.bone_pos.to_3d()
+        # pos = node.world_pos.to_3d()
         pos = node.pos.to_3d()
 
         # inv(parent matrix) * local position = bone_postion (world position)
         if node.node_type == NodeType.MatrixTransform:
             expected_world = parent_mat.inverted_safe() @ node.pos.to_3d()
-            gmd_world = node.bone_pos.to_3d()
+            gmd_world = node.world_pos.to_3d()
             print("world pos comparison", expected_world, gmd_world)
             if (expected_world - gmd_world).magnitude > 0.1:
                 print("mismatching world pos")
                 break
 
         # if not node.parent:
-        #     bone_axis = Vector((0,0,0,0))
+        #     anim_axis = Vector((0,0,0,0))
         # else:
         #     # TODO
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
         # for p in reversed(parent_chain):
         #     expected_world_rot = expected_world_rot @ p.rot
         # expected_world_rot = expected_world_rot @ node.rot
-        # gmd_world_rot = Quaternion((node.bone_axis.w, node.bone_axis.x, node.bone_axis.y, node.bone_axis.z))
+        # gmd_world_rot = Quaternion((node.anim_axis.w, node.anim_axis.x, node.anim_axis.y, node.anim_axis.z))
         # print("world rot comparison", expected_world_rot, gmd_world_rot)
         # if (expected_world_rot - gmd_world_rot).magnitude > 0.01:
         #     print("mismatching world rot")

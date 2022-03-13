@@ -2,6 +2,7 @@ import abc
 import json
 import re
 from dataclasses import dataclass
+from enum import Enum
 from typing import List, Dict, Optional, cast, Tuple
 
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
@@ -57,13 +58,13 @@ class BaseGMDSceneGatherer(abc.ABC):
     """
     config: GMDSceneGathererConfig
     name: str
-    original_scene: Optional[GMDScene]
+    original_scene: GMDScene
     error: ErrorReporter
 
     node_roots: List[GMDNode]
     material_map: Dict[str, GMDAttributeSet]
 
-    def __init__(self, filepath: str, original_scene: Optional[GMDScene], config: GMDSceneGathererConfig, error: ErrorReporter):
+    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, error: ErrorReporter):
         self.config = config
         self.filepath = filepath
         self.name = original_scene.name
@@ -82,7 +83,7 @@ class BaseGMDSceneGatherer(abc.ABC):
             overall_hierarchy=HierarchyData(self.node_roots)
         )
 
-    def detect_export_collection(self, context: bpy.types.Context):
+    def detect_export_collection(self, context: bpy.types.Context) -> bpy.types.Collection:
         # Decide on an export root
         # Require a collection to be selected I guess?
         # Issue a warning if the name is different?
@@ -207,17 +208,28 @@ class BaseGMDSceneGatherer(abc.ABC):
     def gather_exported_items(self, context: bpy.types.Context):
         raise NotImplementedError()
 
+
+class SkinnedBoneMatrixOrigin(Enum):
+    # Calculate bone matrices directly
+    Calculate = 0
+    # Take the bone matrices from the file we're exporting over
+    FromTargetFile = 1
+    # Take the bone matrices from the per-bone Yakuza Hierarchy Node Data
+    # (the entire skeleton must have been imported from another GMD!)
+    FromCurrentSkeleton = 2
+    
+
 class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
-    try_copy_bones: bool
+    bone_matrix_origin: SkinnedBoneMatrixOrigin
     bone_name_map: Dict[str, GMDBone]
 
-    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, error: ErrorReporter, try_copy_bones: bool):
+    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, bone_matrix_origin: SkinnedBoneMatrixOrigin, error: ErrorReporter):
         super().__init__(filepath, original_scene, config, error)
 
-        self.try_copy_bones = try_copy_bones
+        self.bone_matrix_origin = bone_matrix_origin
         self.bone_name_map = {}
 
-    def detect_export_collection(self, context: bpy.types.Context):
+    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Armature, bpy.types.Collection]:
         # Check we're selecting a correct armature
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
         selected_armature = context.view_layer.objects.active
@@ -234,20 +246,22 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         self.error.info(f"Selected armature {selected_armature.name}")
 
-        return super().detect_export_collection(context)
+        return selected_armature, super().detect_export_collection(context)
 
     def gather_exported_items(self, context: bpy.types.Context):
-        selected_armature, selected_collection = self.detect_export_collection(context)
+        selected_armature, selected_collection = self.detect_export_armature_collection(context)
 
         armature_data = cast(bpy.types.Armature, selected_armature.data)
         old_pose_position = armature_data.pose_position
         if old_pose_position != "REST":
             armature_data.pose_position = "REST"
 
-        if self.try_copy_bones:
-            self.copy_bones_from_original(armature_data)
+        if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
+            self.copy_bones_from_target(armature_data)
+        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromCurrentSkeleton:
+            self.load_bones_from_blender(armature_data, True)
         else:
-            self.load_bones_from_blender(armature_data)
+            self.load_bones_from_blender(armature_data, False)
 
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
@@ -338,16 +352,30 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         pass
 
-    def load_bones_from_blender(self, armature_data: bpy.types.Armature):
+    def load_bones_from_blender(self, armature_data: bpy.types.Armature, use_previously_imported_matrix: bool):
         def add_bone(blender_bone: bpy.types.Bone, parent_gmd_bone: Optional[GMDBone] = None):
             # Generating bone matrices is more difficult, because when we set the head/tail in the import process
             # the blender matrix changes from the GMD version
             # matrix_local is relative to the armature, not the parent
 
-            # This is experimental - some bones have quaternions
-            bone_matrix = Matrix.Translation(transform_position_gmd_to_blender(blender_bone.head_local))
-            bone_matrix.resize_4x4()
+            if use_previously_imported_matrix:
+                if not blender_bone.yakuza_hierarchy_node_data.inited:
+                    self.error.fatal(f"Blender bone {blender_bone.name} was not imported from a GMD, so I can't reuse an imported matrix."
+                                     f"Try rerunning with Bone Matrices = Calculated")
+                bone_matrix = blender_bone.yakuza_hierarchy_node_data.imported_matrix
+                self.error.info(str(bone_matrix))
+            else:
+                # Calculate from scratch
+                # TODO - calculate this better
+                bone_matrix = Matrix.Translation(transform_position_gmd_to_blender(blender_bone.head_local))
+                bone_matrix.resize_4x4()
+            
             gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(*blender_bone.matrix_local.decompose())
+            # TODO - try to extract this mathematically instead of copying the one from the last import
+            anim_axis = blender_bone.yakuza_hierarchy_node_data.anim_axis
+            flags = json.loads(blender_bone.yakuza_hierarchy_node_data.flags_json)
+            if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
+                self.error.fatal(f"bone {blender_bone.name} has invalid flags - must be a list of 4 integers")
             bone = GMDBone(
                 name=remove_blender_duplicate(blender_bone.name),
                 node_type=NodeType.MatrixTransform,
@@ -357,8 +385,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 rot=Quaternion(), # TODO - Is there a better way to handle this? Does the game react to this at all?
                 scale=Vector((1,1,1)),
 
-                bone_pos=Vector((gmd_bone_pos.x, gmd_bone_pos.y, gmd_bone_pos.z, 1)),
-                bone_axis=gmd_bone_axis, # TODO - Kiwmai1 format might be using this for flags? in which case including it could crash
+                world_pos=Vector((gmd_bone_pos.x, gmd_bone_pos.y, gmd_bone_pos.z, 1)),
+                anim_axis=anim_axis,
+                flags=flags,
                 matrix=bone_matrix.inverted()
             )
 
@@ -375,8 +404,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 continue
             add_bone(root_bone, None)
 
-    def copy_bones_from_original(self, armature_data: bpy.types.Armature):
-        assert self.original_scene is not None
+    def copy_bones_from_target(self, armature_data: bpy.types.Armature):
         original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
 
         def check_bone_sets_match(parent_name: str, blender_bones: List[bpy.types.Bone], gmd_bones: List[GMDBone]):
@@ -406,8 +434,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 rot=original_file_gmd_bone.rot,
                 scale=original_file_gmd_bone.scale,
 
-                bone_pos=original_file_gmd_bone.bone_pos,
-                bone_axis=original_file_gmd_bone.bone_axis,
+                world_pos=original_file_gmd_bone.world_pos,
+                anim_axis=original_file_gmd_bone.anim_axis,
+                flags=original_file_gmd_bone.flags,
 
                 matrix=original_file_gmd_bone.matrix
             )
@@ -430,6 +459,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         :return: TODO
         """
 
+        flags = json.loads(object.yakuza_hierarchy_node_data.flags_json)
+        if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
+            self.error.fatal(f"bone {object.name} has invalid flags - must be a list of 4 integers")
         gmd_object = GMDSkinnedObject(
             name=remove_blender_duplicate(object.name),
             node_type=NodeType.SkinnedMesh,
@@ -438,6 +470,10 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             rot=Quaternion(),
             scale=Vector((1,1,1)),
             parent=None,
+
+            world_pos=Vector((0,0,0,1)),
+            anim_axis=object.yakuza_hierarchy_node_data.anim_axis,
+            flags=flags
         )
         self.node_roots.append(gmd_object)
 
@@ -482,7 +518,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
     try_copy_hierarchy: bool
 
-    def __init__(self, filepath: str, original_scene: Optional[GMDScene], config: GMDSceneGathererConfig, error: ErrorReporter,
+    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, error: ErrorReporter,
                  try_copy_hierarchy: bool):
         super().__init__(filepath, original_scene, config, error)
 
@@ -526,7 +562,6 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
         if self.config.debug_compare_matrices:
-            assert self.original_scene is not None
             self.error.debug("GATHER", f"MATRIX COMPARISONS")
             for node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
@@ -553,11 +588,12 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         adjusted_matrix = (inv_s @ inv_r @ inv_t @ parent_mat)
 
         world_pos = parent_mat.inverted_safe() @ adjusted_pos.to_3d()
+        anim_axis = object.yakuza_hierarchy_node_data.anim_axis
+        flags = json.loads(object.yakuza_hierarchy_node_data.flags_json)
+        if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
+            self.error.fatal(f"bone {object.name} has invalid flags - must be a list of 4 integers")
 
-        anim_axis
-
-        if object.type == "EMPTY":
-
+        # if object.type == "EMPTY":
 
         gmd_object = GMDUnskinnedObject(
             name=remove_blender_duplicate(object.name),
@@ -567,6 +603,10 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             rot=adjusted_rot,
             scale=adjusted_scale,
             parent=parent,
+
+            world_pos=world_pos,
+            anim_axis=anim_axis,
+            flags=flags,
 
             matrix=adjusted_matrix
         )

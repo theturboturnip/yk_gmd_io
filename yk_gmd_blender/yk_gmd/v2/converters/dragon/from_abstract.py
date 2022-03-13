@@ -126,14 +126,9 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         else:
             matrix_index = -1
 
-        if isinstance(gmd_node, GMDBone):
-            bone_pos = gmd_node.bone_pos
-            bone_axis = gmd_node.bone_axis
-        else:
-            # TODO - UnskinnedObjects should also export a bone_pos equal to their world-space position
-            bone_pos = Vector((gmd_node.pos.x, gmd_node.pos.y, gmd_node.pos.z, 1))
-            bone_axis = Quaternion((0, 0, 0, 0))
-            pass
+        world_pos = gmd_node.world_pos
+        anim_axis = gmd_node.anim_axis
+        flags = gmd_node.flags
 
         node_arr.append(NodeStruct(
             index=i,
@@ -149,10 +144,9 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             rot=gmd_node.rot,
             scale=vec3_to_vec4(gmd_node.scale),
 
-            bone_pos=vec3_to_vec4(bone_pos, 1),
-            bone_axis=bone_axis,
-            # TODO: GMD Node Flags
-            flags=[0, 0, 0, 0],
+            world_pos=vec3_to_vec4(world_pos, 1),
+            anim_axis=anim_axis,
+            flags=flags,
         ))
 
     vertex_buffer_arr = []

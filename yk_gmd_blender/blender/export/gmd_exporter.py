@@ -4,7 +4,8 @@ from bpy.props import (StringProperty,
 from bpy.types import Operator, ShaderNodeGroup
 from bpy_extras.io_utils import ExportHelper
 
-from blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer
+from yk_gmd_blender.blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer, GMDSceneGathererConfig, \
+    SkinnedBoneMatrixOrigin
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
@@ -39,12 +40,17 @@ class BaseExportGMD(Operator, ExportHelper):
                                        description="Space-separated string of debug categories for logging.",
                                        default="ALL")
 
+    debug_compare_matrices: BoolProperty(name="[DEBUG] Compare Matrices",
+                                         description="If True, will print out a comparison of the scene matrices (for bones and unskinned objects)\n"
+                                                     "between the original file and the new file.",
+                                         default=False)
+
     def create_logger(self) -> BlenderErrorReporter:
         debug_categories = set(self.logging_categories.split(" "))
         base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(debug_categories)
         return BlenderErrorReporter(self.report, base_error_reporter)
 
-    def create_gmd_config(self, gmd_version: VersionProperties, error: BlenderErrorReporter) -> GMDSceneCreatorConfig:
+    def create_gmd_config(self, gmd_version: VersionProperties, error: BlenderErrorReporter) -> GMDSceneGathererConfig:
         engine_from_version = {
             GMDVersion.Kenzan: GMDGame.Engine_MagicalV,
             GMDVersion.Kiwami1: GMDGame.Engine_Kiwami,
@@ -57,21 +63,12 @@ class BaseExportGMD(Operator, ExportHelper):
             game = GMDGame.mapping_from_blender_props()[self.game_enum]
             if game & engine_enum == 0:
                 # the specified game doesn't use the same engine as expected
-                error.fatal(f"Expected a file from {GMDGame(game).name} but file uses engine {GMDGame(engine_enum).name}. Try using Autodetect, or change the engine version to be correct.")
+                error.fatal(f"Expected a file from {GMDGame(game).name} but file uses engine {GMDGame(engine_enum).name}. "
+                            f"Try using Autodetect, or change the engine version to be correct.")
 
-        material_naming_from_enum ={
-            "COLLECTION_SHADER": MaterialNamingType.Collection_Shader,
-            "COLLECTION_TEXTURE": MaterialNamingType.Collection_DiffuseTexture,
-            "TEXTURE": MaterialNamingType.DiffuseTexture,
-        }
-
-        return GMDSceneCreatorConfig(
+        return GMDSceneGathererConfig(
             game=game,
-
-            import_materials=self.import_materials,
-            material_naming_convention=material_naming_from_enum[self.material_naming],
-
-            fuse_vertices=self.fuse_vertices
+            debug_compare_matrices=self.debug_compare_matrices
         )
 
 
@@ -80,15 +77,17 @@ class ExportSkinnedGMD(BaseExportGMD):
     bl_idname = 'export_scene.gmd_skinned'
     bl_label = "Export Yakuza GMD [Skinned]"
 
-    copy_bones_from_file: BoolProperty(name="Copy Bones from Original File",
-                                       description="If True, will reuse the bone hierarchy in the original file.\n"
-                                                   "If False, will export the bones from scratch.\n"
-                                                   "WARNING: This is experimental - don't set it to False unless you know what you're doing.",
-                                       default=True)
-    debug_compare_matrices: BoolProperty(name="[DEBUG] Compare Matrices",
-                                         description="If True, will print out a comparison of the scene matrices (for bones and unskinned objects)\n"
-                                                     "between the original file and the new file.",
-                                         default=False)
+    bone_matrix_origin: EnumProperty(name="Bone Matrices",
+                            description="How the addon should calculate a bone's animation matrices.",
+                            items=[
+                                ("CALCULATE", "Calculated", "Calculate animation matrices from current bone orientations."),
+                                ("FROM_TARGET_FILE", "Keep Target Skeleton", "Keep the skeleton in the target file."
+                                                                             "The current skeleton must match the skeleton in the file you're exporting over."),
+                                ("FROM_CURRENT_SKELETON", "Keep Imported Skeleton", "Keep the values originally imported for this skeleton."
+                                                                                    "The current skeleton must have been imported from a GMD file.")
+                            ],
+                            default="FROM_CURRENT_SKELETON")
+
     # TODO - dry run feature
     #  when set, instead of exporting it will open a window with a report on what would be exported
 
@@ -103,7 +102,7 @@ class ExportSkinnedGMD(BaseExportGMD):
         layout.prop(self, 'logging_categories')
         layout.prop(self, "game_enum")
 
-        layout.prop(self, 'copy_bones_from_file')
+        layout.prop(self, 'bone_matrix_origin')
         layout.prop(self, 'debug_compare_matrices')
 
     def execute(self, context):
@@ -118,28 +117,33 @@ class ExportSkinnedGMD(BaseExportGMD):
 
             error.info(f"Reading original file properties {filepath}")
             gmd_version, gmd_header, gmd_contents = read_gmd_structures(filepath, error)
+            gmd_config = self.create_gmd_config(gmd_version, error)
             check_version_writeable(gmd_version, error)
 
             original_scene = GMDScene(
                 name=gmd_contents.name.text,
                 overall_hierarchy=HierarchyData([])
             )
-            try_copy_bones = self.copy_bones_from_file
-            if self.copy_bones_from_file or self.debug_compare_matrices:
+            bone_matrix_origin = {
+                "CALCULATE": SkinnedBoneMatrixOrigin.Calculate,
+                "FROM_TARGET_FILE": SkinnedBoneMatrixOrigin.FromTargetFile,
+                "FROM_CURRENT_SKELETON": SkinnedBoneMatrixOrigin.FromCurrentSkeleton,
+            }[self.bone_matrix_origin]
+
+            if bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile or self.debug_compare_matrices:
                 try:
                     original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
                 except Exception as e:
-                    if self.copy_bones_from_file:
+                    if bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
                         error.fatal(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
                     else:
                         error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
-                    try_copy_bones = False
 
-            scene_gatherer = SkinnedGMDSceneGatherer(original_scene, try_copy_bones, gmd_version.major_version, error)
+            scene_gatherer = SkinnedGMDSceneGatherer(filepath, original_scene, gmd_config, bone_matrix_origin, error)
 
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
 
-            scene_gatherer.gather_exported_items(context, self.debug_compare_matrices)
+            scene_gatherer.gather_exported_items(context)
             self.report({"INFO"}, "Finished extracting abstract scene")
 
             gmd_scene = scene_gatherer.build()

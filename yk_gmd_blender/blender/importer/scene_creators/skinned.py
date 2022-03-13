@@ -1,4 +1,5 @@
 import re
+import json
 from typing import Dict, Optional, Union
 
 from mathutils import Matrix, Vector, Quaternion
@@ -139,7 +140,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0,0,0))
             self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix_unrotated
 
-            tail_delta = gmd_node.bone_pos.xyz + gmd_node.bone_axis.xyz
+            tail_delta = gmd_node.world_pos.xyz + gmd_node.anim_axis.xyz
             # This is unused now because we can just use the gmd bone axis
             """
             # Take a page out of XNA Importer's book for bone tails - make roots just stick towards the camera
@@ -201,15 +202,15 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            if tail_delta.xyz == (0, 0, 0) or gmd_node.bone_axis.w < 0.00001:
+            if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
                tail_delta = Vector((0, 0, 0.5))
             if not anim_skeleton:
-                bone.head = self.gmd_to_blender_world @ gmd_node.bone_pos.xyz
+                bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
                 bone.tail = self.gmd_to_blender_world @ tail_delta
-                if gmd_node.bone_axis.w < 0.00001:
+                if gmd_node.anim_axis.w < 0.00001:
                     bone.length = 0.0001
                 else:
-                    bone.length = gmd_node.bone_axis.w
+                    bone.length = gmd_node.anim_axis.w
             else:
                 bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,0))
                 bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,1))
@@ -240,6 +241,21 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         # having color differentiation may make it easier to navigate
 
         bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Set extra GMD data - we have to do this in object mode, because the extra data is on Bone not EditBone
+        # (I think this is right, because EditBone only exists in Edit mode?)
+        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+            if not isinstance(gmd_node, GMDBone):
+                continue
+
+            # We find the bone we just created by name - we check elsewhere that the GMD doesn't have duplicate bone
+            # names in skinned imports
+            bone = armature.bones[gmd_node.name]
+            bone.yakuza_hierarchy_node_data.inited = True
+            bone.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            bone.yakuza_hierarchy_node_data.imported_matrix = \
+                list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
+            bone.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
 
         return armature_obj
 

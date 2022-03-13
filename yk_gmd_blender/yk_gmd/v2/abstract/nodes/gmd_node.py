@@ -17,18 +17,35 @@ class GMDNode:
     rot: Quaternion
     scale: Vector
 
+    world_pos: Vector
+    # Should be 0,0,0,0 or a valid quaternion
+    anim_axis: Vector
+
+    flags: List[int]
+
     matrix: Optional[Matrix]
 
     parent: Optional['GMDNode']
     children: List['GMDNode']
 
-    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector, matrix: Optional[Matrix], parent: Optional['GMDNode']):
+    def __init__(self, name: str, node_type: NodeType,
+                 pos: Vector, rot: Quaternion, scale: Vector,
+                 world_pos: Vector, anim_axis: Vector,
+                 matrix: Optional[Matrix], parent: Optional['GMDNode'],
+                 flags: List[int]):
         self.name = name
         self.node_type = node_type
 
         self.pos = pos
         self.rot = rot
         self.scale = scale
+
+        self.world_pos = world_pos
+        self.anim_axis = anim_axis
+
+        self.flags = flags
+        if len(self.flags) != 4:
+            raise TypeError(f"GMDNode passed flags list {flags} which doesn't have 4 elements")
 
         if matrix:
             self.matrix = matrix.copy()

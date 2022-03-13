@@ -37,8 +37,8 @@ class NodeStruct:
     rot: Quaternion
     scale: Vector
 
-    bone_pos: Vector
-    bone_axis: Vector
+    world_pos: Vector
+    anim_axis: Vector
     flags: List[int]
 
 
@@ -66,8 +66,8 @@ NodeStruct_Unpack = StructureUnpacker(
         ("rot", QuatUnpacker),
         ("scale", Vec4Unpacker),
 
-        ("bone_pos", Vec4Unpacker),
-        ("bone_axis", Vec4Unpacker),
+        ("world_pos", Vec4Unpacker),
+        ("anim_axis", Vec4Unpacker),
         ("flags", FixedSizeArrayUnpacker(c_uint32, 4)),
     ]
 )
