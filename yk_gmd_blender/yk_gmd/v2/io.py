@@ -55,10 +55,12 @@ def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorRepo
     data = _get_file_data(data, error_reporter)
     big_endian, base_header = _extract_base_header(data)
 
+    header: GMDHeaderStruct
+
     version_props = base_header.get_version_properties()
     if version_props.major_version == GMDVersion.Kiwami1:
         try:
-            header = GMDHeader_YK1_Unpack.unpack(big_endian, data=data, offset=0)
+            header, _ = GMDHeader_YK1_Unpack.unpack(big_endian, data=data, offset=0)
             contents, _ = FilePacker_YK1.unpack(big_endian, data=data, offset=0)
 
             return version_props, header, contents
@@ -66,7 +68,7 @@ def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorRepo
             error_reporter.fatal(str(e))
     elif version_props.major_version == GMDVersion.Kenzan:
         try:
-            header = GMDHeader_Kenzan_Unpack.unpack(big_endian, data=data, offset=0)
+            header, _ = GMDHeader_Kenzan_Unpack.unpack(big_endian, data=data, offset=0)
             contents, _ = FilePacker_Kenzan.unpack(big_endian, data=data, offset=0)
 
             return version_props, header, contents
@@ -74,7 +76,7 @@ def read_gmd_structures(data: Union[Path, str, bytes], error_reporter: ErrorRepo
             error_reporter.fatal(str(e))
     elif version_props.major_version == GMDVersion.Dragon:
         try:
-            header = GMDHeader_Dragon_Unpack.unpack(big_endian, data=data, offset=0)
+            header, _ = GMDHeader_Dragon_Unpack.unpack(big_endian, data=data, offset=0)
             contents, _ = FilePacker_Dragon.unpack(big_endian, data=data, offset=0)
 
             return version_props, header, contents
