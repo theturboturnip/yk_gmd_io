@@ -33,7 +33,7 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
             if match:
                 uv_i = int(match.group(1))
                 if uv_i in numbered_uv_layers:
-                    error.recoverable(f"Found multiple possible layers for UV{uv_i}, will take latest one")
+                    error.recoverable(f"Found multiple possible layers for UV{uv_i} on {mesh_name}, will take latest one")
                 numbered_uv_layers[uv_i] = layer
     if mesh.vertex_colors:
         for name, layer in mesh.vertex_colors.items():
@@ -41,7 +41,7 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
             if match:
                 uv_i = int(match.group(1))
                 if uv_i in numbered_uv_layers:
-                    error.recoverable(f"Found multiple possible layers for UV{uv_i}, will take latest one")
+                    error.recoverable(f"Found multiple possible layers for UV{uv_i} on {mesh_name}, will take latest one")
                 numbered_uv_layers[uv_i] = layer
 
     # Create the mesh builder (either Skinned or not)
@@ -139,7 +139,7 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
                 x_withoutbones.add_triangle(tri)
 
         if len(x_withoutbones.referenced_triangles) == len(x.referenced_triangles):
-            error.fatal("bonesplit() did not reduce triangle count!")
+            error.fatal(f"bonesplit() on submesh of {object_name} did not reduce triangle count!")
 
         return x_withbones, x_withoutbones
 
@@ -244,6 +244,7 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
     # https://blender.stackexchange.com/a/146911
     mesh = prepare_mesh(context, object)
 
+    error.debug("MESH", f"Exporting unskinned meshes for {object.name}")
     submesh_builders = split_mesh_by_material(object.name, mesh, Matrix.Identity(4), materials, False, vertex_group_mapping={}, error=error)
 
     return [builder.build_to_gmd(materials) for builder in submesh_builders]

@@ -5,7 +5,7 @@ from bpy.types import Operator, ShaderNodeGroup
 from bpy_extras.io_utils import ExportHelper
 
 from yk_gmd_blender.blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer, GMDSceneGathererConfig, \
-    SkinnedBoneMatrixOrigin
+    SkinnedBoneMatrixOrigin, UnskinnedGMDSceneGatherer
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
@@ -163,5 +163,74 @@ class ExportSkinnedGMD(BaseExportGMD):
         return {'CANCELLED'}
 
 
-def menu_func_export(self, context):
+def menu_func_export_skinned(self, context):
     self.layout.operator(ExportSkinnedGMD.bl_idname, text='Yakuza GMD [Skinned] (.gmd)')
+
+
+class ExportUnskinnedGMD(BaseExportGMD):
+    """Export scene as glTF 2.0 file"""
+    bl_idname = 'export_scene.gmd_unskinned'
+    bl_label = "Export Yakuza GMD [Unskinned]"
+
+    # TODO - dry run feature
+    #  when set, instead of exporting it will open a window with a report on what would be exported
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = True  # No animation.
+
+        # When properties are added, use "layout.prop" here to display them
+        layout.prop(self, 'strict')
+        layout.prop(self, 'logging_categories')
+        layout.prop(self, "game_enum")
+
+        layout.prop(self, 'debug_compare_matrices')
+
+    def execute(self, context):
+        error = self.create_logger()
+
+        try:
+            filepath = self.filepath
+            _, ext = os.path.splitext(filepath)
+            if not ext == ".gmd":
+                error.info(f"[Blender 2.93+ bug?] Filepath had no .gmd extension, adding one manually")
+                filepath = f"{filepath}.gmd"
+
+            error.info(f"Reading original file properties {filepath}")
+            gmd_version, gmd_header, gmd_contents = read_gmd_structures(filepath, error)
+            gmd_config = self.create_gmd_config(gmd_version, error)
+            check_version_writeable(gmd_version, error)
+
+            original_scene = GMDScene(
+                name=gmd_contents.name.text,
+                overall_hierarchy=HierarchyData([])
+            )
+
+            scene_gatherer = UnskinnedGMDSceneGatherer(filepath, original_scene, gmd_config, error, False)
+
+            self.report({"INFO"}, "Extracting blender data into abstract scene...")
+
+            scene_gatherer.gather_exported_items(context)
+            self.report({"INFO"}, "Finished extracting abstract scene")
+
+            gmd_scene = scene_gatherer.build()
+
+            self.report({"INFO"}, f"Writing scene out...")
+            write_abstract_scene_out(gmd_version,
+                                     gmd_contents.file_is_big_endian(), gmd_contents.vertices_are_big_endian(),
+                                     gmd_scene,
+                                     filepath,
+                                     error)
+
+            self.report({"INFO"}, f"Finished exporting {gmd_scene.name}")
+            return {'FINISHED'}
+        except GMDImportExportError as e:
+            print(e)
+            self.report({"ERROR"}, str(e))
+        return {'CANCELLED'}
+
+
+def menu_func_export_unskinned(self, context):
+    self.layout.operator(ExportUnskinnedGMD.bl_idname, text='Yakuza GMD [Unskinned] (.gmd)')

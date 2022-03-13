@@ -525,7 +525,7 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         self.try_copy_hierarchy = try_copy_hierarchy
 
     def gather_exported_items(self, context: bpy.types.Context):
-        selected_object, selected_collection = self.detect_export_collection(context)
+        selected_collection = self.detect_export_collection(context)
 
         # Stores a list of (parent node, blender object).
 
@@ -554,8 +554,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
             roots.append(object)
 
-        for parent, unskinned_object in roots:
-            self.export_unskinned_object(context, selected_collection, unskinned_object, parent)
+        for unskinned_object in roots:
+            self.export_unskinned_object(context, selected_collection, unskinned_object, None)
 
         self.error.debug("GATHER", f"NODE REPORT")
         for node in depth_first_iterate(self.node_roots):
@@ -593,8 +593,6 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
             self.error.fatal(f"bone {object.name} has invalid flags - must be a list of 4 integers")
 
-        # if object.type == "EMPTY":
-
         gmd_object = GMDUnskinnedObject(
             name=remove_blender_duplicate(object.name),
             node_type=NodeType.UnskinnedMesh,
@@ -614,9 +612,9 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             self.node_roots.append(gmd_object)
 
         # Add meshes to gmd_object
-        if not object.data.vertices:
+        if object.type == "EMPTY" or (object.type == "MESH" and not object.data.vertices):
             self.error.debug("MESH", f"Object {object.name} has no mesh")
-        else:
+        elif object.type == "MESH":
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
             attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
@@ -628,6 +626,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
+        else:
+            self.error.recoverable(f"Object {object.name} has unexpected type {object.type} - not exporting")
 
         # Object.children returns all children, not just direct descendants.
         direct_children = [o for o in collection.objects if o.parent == object]
