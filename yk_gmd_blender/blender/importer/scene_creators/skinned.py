@@ -99,14 +99,14 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
             # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
             perp_dir = parent_dir.cross(target_dir).normalized()
-            print(f"{parent_dir} X {target_dir} = {perp_dir}")
+            self.error.debug("BONES", f"{parent_dir} X {target_dir} = {perp_dir}")
 
             # Then, parent_dir cross perp_dir will create a vector that is both
             #   1) perpendicular to parent_dir
             #   2) in the same sort of direction as target_dir
             # use this vector as our tail_delta
             tail_delta_dir = parent_dir.cross(perp_dir).normalized()
-            print(f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
+            self.error.debug("BONES", f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
 
             # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
             # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
@@ -128,11 +128,10 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             else:
                 parent_matrix_unrotated = Matrix.Identity(4)
 
-            print(f"bone {gmd_node.name}")
+            self.error.debug("BONES", f"bone {gmd_node.name}")
             gmd_bone_pos, gmd_bone_axis_maybe, gmd_bone_scale = gmd_node.matrix.inverted().decompose()
-            print(f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
-            print(f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
-            print()
+            self.error.debug("BONES", f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
+            self.error.debug("BONES", f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
 
             # TODO - this produces an uninvertible matrix - why?
             #   this_bone_matrix = parent_matrix @ transform_to_matrix(gmd_node.pos, gmd_node.rot, gmd_node.scale)

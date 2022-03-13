@@ -121,8 +121,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
                     # This profiling is here incase we want to optimize vertex unpacking
                     self.error.debug("TIME", f"Time to build layout: {unpack_start - layout_build_start}")
-                    print(
-                        f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
+                    self.error.debug("TIME", f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
@@ -318,7 +317,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte+actual_len*unpack_type.sizeof()]
                 actual_bytes = [f"{x:02x}" for x in actual_bytes]
                 self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
-            print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
             # data_start = start_byte + 1
             # data_end = data_start + len_bytes
             # data = mesh_matrix_bytestrings[data_start:data_end]

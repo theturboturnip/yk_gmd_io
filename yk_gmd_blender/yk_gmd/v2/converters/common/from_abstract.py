@@ -252,15 +252,13 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
     # ordering meshes:
     # build list of vertex buffer layouts to use
-    # TODO - sorting order is required for Dragon Engine, but not other engines.
+    # TODO - sorting order is required for Dragon Engine, but not other engines?
     # TODO - with this setup K2 kiryu has unused shader names?
     # YK2 kiryu sort order is by prefix (sd_o*, sd_d*, sd_c*, sd_b*) and then some unknown ordering within those groups.
     # This will achieve the requested ordering for prefixes, but not for other things. However, we only care about ordering transparent shaders together at the end.
     def compare_attr_sets(a1: GMDAttributeSet, a2: GMDAttributeSet):
         a1_prefix = re.match(r'^[a-z]+_[a-z]', a1.shader.name).group(0)
         a2_prefix = re.match(r'^[a-z]+_[a-z]', a2.shader.name).group(0)
-
-        print(f"'{a1_prefix}' '{a2_prefix}'")
 
         if a1_prefix < a2_prefix:
             # sort by inverted prefix first
@@ -282,11 +280,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     shader_names = [a.shader.name for a in expected_attribute_set_order]
     # remove dupes
     shader_names = list(dict.fromkeys(shader_names))
-    print("\n".join(x for x in shader_names))
-    print()
     shader_names, shader_names_index = build_pools(shader_names)
-    print("\n".join(x.text for x in shader_names))
-    print(shader_names_index)
 
     known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
         mesh.vertices_data.layout
