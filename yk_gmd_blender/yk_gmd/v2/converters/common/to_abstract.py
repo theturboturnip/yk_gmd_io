@@ -317,6 +317,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte+actual_len*unpack_type.sizeof()]
                 actual_bytes = [f"{x:02x}" for x in actual_bytes]
                 self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
+            print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
             # data_start = start_byte + 1
             # data_end = data_start + len_bytes
             # data = mesh_matrix_bytestrings[data_start:data_end]
