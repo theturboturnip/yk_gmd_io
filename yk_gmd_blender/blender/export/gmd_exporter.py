@@ -208,6 +208,12 @@ class ExportUnskinnedGMD(BaseExportGMD):
                 overall_hierarchy=HierarchyData([])
             )
 
+            if self.debug_compare_matrices:
+                try:
+                    original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
+                except Exception as e:
+                    error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
+
             scene_gatherer = UnskinnedGMDSceneGatherer(filepath, original_scene, gmd_config, error, False)
 
             self.report({"INFO"}, "Extracting blender data into abstract scene...")
