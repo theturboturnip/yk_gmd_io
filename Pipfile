@@ -4,11 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+mathutils = "2.81.2"
 
 [dev-packages]
 mypy = "*"
 bpy-stubs = {editable=true,path = "./bpy-stubs/"}
 
 [requires]
-python_version = "3.10"
+python_version = "3.7"
 
