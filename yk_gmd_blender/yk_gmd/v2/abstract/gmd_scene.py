@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Generic, TypeVar, Generator
+from typing import Dict, List, Generic, TypeVar, Generator, Tuple
 
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 
@@ -41,6 +41,8 @@ class HierarchyData(Generic[TNode]):
 @dataclass(repr=False)
 class GMDScene:
     name: str
+
+    flags: Tuple[int, int, int, int, int, int]
 
     # Node Hierarchy stuff
     overall_hierarchy: HierarchyData[GMDNode]

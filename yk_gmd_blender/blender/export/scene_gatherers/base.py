@@ -9,7 +9,7 @@ from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import GMDGame
+from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
 from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, \
     transform_position_gmd_to_blender
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
@@ -60,6 +60,7 @@ class BaseGMDSceneGatherer(abc.ABC):
     name: str
     original_scene: GMDScene
     error: ErrorReporter
+    flags: Optional[Tuple[int, int, int, int, int, int]]
 
     node_roots: List[GMDNode]
     material_map: Dict[str, GMDAttributeSet]
@@ -70,6 +71,7 @@ class BaseGMDSceneGatherer(abc.ABC):
         self.name = original_scene.name
         self.original_scene = original_scene
         self.error = error
+        self.flags = None
 
         self.node_roots = []
         self.material_map = {}
@@ -78,8 +80,10 @@ class BaseGMDSceneGatherer(abc.ABC):
             assert original_scene is not None
 
     def build(self) -> GMDScene:
+        assert self.flags is not None
         return GMDScene(
             name=self.name,
+            flags=self.flags,
             overall_hierarchy=HierarchyData(self.node_roots)
         )
 
@@ -113,13 +117,30 @@ class BaseGMDSceneGatherer(abc.ABC):
             self.error.recoverable(
                 f"Collection {selected_collection.name} has children collections, which will be ignored.")
 
+        if not selected_object.yakuza_file_root_data.is_valid_root:
+            self.error.info(f"Yakuza File Root Data not checked for {selected_object.name} - assuming this is a legacy file. "
+                            f"In the future this might become an error.")
+
         return selected_object, selected_collection
+
+    def guess_or_take_flags(self, yakuza_file_root_data: YakuzaFileRootData):
+        imported_ver = GMDGame.mapping_from_blender_props()[yakuza_file_root_data.imported_version]
+        # If the scene we're exporting came from the same engine as the file we're exporting over, keep those flags
+        if yakuza_file_root_data.is_valid_root and (imported_ver & self.config.game != 0):
+            self.flags = json.loads(yakuza_file_root_data.flags_json)
+            if len(self.flags) != 6 or any(not isinstance(x, int) for x in self.flags):
+                self.error.fatal(f"File root has invalid flags {self.flags} - must be a list of 6 integers")
+            self.error.info(f"Taking flags from previously imported file root")
+        else:
+            # Take the flags from the target file
+            self.flags = self.original_scene.flags
+            self.error.info(f"Taking flags from target file")
 
     def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material, referencing_object: bpy.types.Object) -> GMDAttributeSet:
         if material.name in self.material_map:
             return self.material_map[material.name]
 
-        if (not material.yakuza_data.inited):
+        if not material.yakuza_data.inited:
             self.error.fatal(f"Material {material.name} on object {referencing_object.name} does not have any Yakuza Properties, and cannot be exported.\n"
                              f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
         if not material.use_nodes:
@@ -253,6 +274,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
     def gather_exported_items(self, context: bpy.types.Context):
         selected_armature, selected_collection = self.detect_export_armature_collection(context)
+        self.guess_or_take_flags(selected_armature.yakuza_file_root_data)
 
         armature_data = cast(bpy.types.Armature, selected_armature.data)
         old_pose_position = armature_data.pose_position
@@ -530,6 +552,7 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
     def gather_exported_items(self, context: bpy.types.Context):
         scene_root, selected_collection = self.detect_export_collection(context)
+        self.guess_or_take_flags(scene_root.yakuza_file_root_data)
 
         if remove_blender_duplicate(scene_root.name) != remove_blender_duplicate(selected_collection.name):
             self.error.fatal(f"Please select the root object of the collection, "

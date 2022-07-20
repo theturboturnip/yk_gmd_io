@@ -76,6 +76,9 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         armature.display_type = 'STICK'
         armature_obj = bpy.data.objects.new(f"{armature_name}", armature)
         armature_obj.show_in_front = True
+        armature_obj.yakuza_file_root_data.is_valid_root = True
+        armature_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
+        armature_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
 
         collection.objects.link(armature_obj)
 

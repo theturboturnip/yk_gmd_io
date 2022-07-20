@@ -363,15 +363,11 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
-    flags = list(base_flags)
+    flags = list(scene.flags)
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
     else:
         flags[5] &= ~0x8000_0000
-    # TODO: This is in all(?) Yakuza Dragon files
-    # It could be worth passing on the flags from original files if we're still exporting "over" them
-    flags[5] |= 0x22
-    flags[4] = 0x32b7c266 # TODO - wtf
 
     return FileData_Dragon(
         magic="GSGM",

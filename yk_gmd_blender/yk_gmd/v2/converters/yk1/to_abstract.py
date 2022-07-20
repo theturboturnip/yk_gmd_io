@@ -71,5 +71,7 @@ class GMDAbstractor_YK1(GMDAbstractor_Common[FileData_YK1]):
         return GMDScene(
             name=self.file_data.name.text,
 
+            flags=tuple(self.file_data.flags),
+
             overall_hierarchy=HierarchyData[GMDNode](roots),
         )

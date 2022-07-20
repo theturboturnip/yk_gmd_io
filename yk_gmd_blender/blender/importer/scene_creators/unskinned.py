@@ -38,6 +38,9 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
 
         root_name = root_name_for_gmd_file(self.gmd_scene)
         root_obj = bpy.data.objects.new(f"{root_name}", None)
+        root_obj.yakuza_file_root_data.is_valid_root = True
+        root_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
+        root_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
         collection.objects.link(root_obj)
 
         # Still create the vertex group list, so we create the vertex groups, but don't actually deform anything

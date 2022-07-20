@@ -71,5 +71,7 @@ class GMDAbstractor_Kenzan(GMDAbstractor_Common[FileData_Kenzan]):
         return GMDScene(
             name=self.file_data.name.text,
 
+            flags=tuple(self.file_data.flags),
+
             overall_hierarchy=HierarchyData[GMDNode](roots),
         )

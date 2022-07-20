@@ -120,24 +120,16 @@ class ExportSkinnedGMD(BaseExportGMD):
             gmd_config = self.create_gmd_config(gmd_version, error)
             check_version_writeable(gmd_version, error)
 
-            original_scene = GMDScene(
-                name=gmd_contents.name.text,
-                overall_hierarchy=HierarchyData([])
-            )
             bone_matrix_origin = {
                 "CALCULATE": SkinnedBoneMatrixOrigin.Calculate,
                 "FROM_TARGET_FILE": SkinnedBoneMatrixOrigin.FromTargetFile,
                 "FROM_CURRENT_SKELETON": SkinnedBoneMatrixOrigin.FromCurrentSkeleton,
             }[self.bone_matrix_origin]
 
-            if bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile or self.debug_compare_matrices:
-                try:
-                    original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
-                except Exception as e:
-                    if bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
-                        error.fatal(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
-                    else:
-                        error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
+            try:
+                original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
+            except Exception as e:
+                error.fatal(f"Original file failed to import properly, can't check flags or bone hierarchy\nError: {e}")
 
             scene_gatherer = SkinnedGMDSceneGatherer(filepath, original_scene, gmd_config, bone_matrix_origin, error)
 
@@ -203,16 +195,10 @@ class ExportUnskinnedGMD(BaseExportGMD):
             gmd_config = self.create_gmd_config(gmd_version, error)
             check_version_writeable(gmd_version, error)
 
-            original_scene = GMDScene(
-                name=gmd_contents.name.text,
-                overall_hierarchy=HierarchyData([])
-            )
-
-            if self.debug_compare_matrices:
-                try:
-                    original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
-                except Exception as e:
-                    error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
+            try:
+                original_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED, VertexImportMode.NO_VERTICES, gmd_contents, error)
+            except Exception as e:
+                error.info(f"Original file failed to import properly, can't check bone hierarchy\nError: {e}")
 
             scene_gatherer = UnskinnedGMDSceneGatherer(filepath, original_scene, gmd_config, error, False)
 
