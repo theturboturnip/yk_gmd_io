@@ -61,8 +61,10 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             if gmd_node.parent:
                 # Parenting an object to another object is easy
                 node_obj.parent = gmd_objects[id(gmd_node.parent)]
+                sibling_order = gmd_node.parent.children.index(gmd_node)
             else:
                 node_obj.parent = root_obj
+                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
 
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
@@ -79,6 +81,9 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             node_obj.yakuza_hierarchy_node_data.imported_matrix = \
                 list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
             node_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
+            # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
+            # This means you can insert new objects between other ones more easily
+            node_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj

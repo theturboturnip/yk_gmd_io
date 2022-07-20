@@ -2,7 +2,7 @@ from enum import IntEnum
 from typing import Tuple, List, Dict
 
 import bpy
-from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, EnumProperty
+from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
 
 
@@ -97,6 +97,13 @@ class YakuzaHierarchyNodeData(PropertyGroup):
     # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
     flags_json: StringProperty(name="Imported Node Flags (JSON)",default="[0,0,0,0]")
 
+    # The order of this node with respect to siblings
+    sort_order: IntProperty(name="Sort Order", default=0, description="Order of this node with respect to siblings. Applied on export.")
+
+
+def yakuza_hierarchy_node_data_sort_key(x) -> int:
+    return x.yakuza_hierarchy_node_data.sort_order
+
 
 class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
     bl_label = "Yakuza Hierarchy-Node Data"
@@ -116,6 +123,7 @@ class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
 
         layout.prop(ob.yakuza_hierarchy_node_data, "anim_axis")
         layout.prop(ob.yakuza_hierarchy_node_data, "flags_json")
+        layout.prop(ob.yakuza_hierarchy_node_data, "sort_order")
 
         if ob.yakuza_file_root_data.is_valid_root:
             layout.label(text="This is a Yakuza File Root, it shouldn't have hierarchy-node data")
@@ -152,6 +160,7 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
 
         layout.prop(bone.yakuza_hierarchy_node_data, "anim_axis")
         layout.prop(bone.yakuza_hierarchy_node_data, "flags_json")
+        layout.prop(bone.yakuza_hierarchy_node_data, "sort_order")
 
         if bone.yakuza_hierarchy_node_data.inited:
             def matrix_prop(dat, prop_name, length: int, text=""):

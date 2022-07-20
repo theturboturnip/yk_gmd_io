@@ -9,7 +9,7 @@ from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
+from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData, yakuza_hierarchy_node_data_sort_key
 from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, \
     transform_position_gmd_to_blender
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
@@ -292,6 +292,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         root_skinned_objects: List[bpy.types.Object] = []
 
         # Go through all objects at the top level of the collection and check them for errors
+        # Don't need to sort them here
         for object in selected_collection.objects:
             if object.type != "MESH":
                 continue
@@ -348,7 +349,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 # TODO - only do this if .lenient?
                 root_skinned_objects.append(object)
 
-        for skinned_object in root_skinned_objects:
+        # Export skinned objects in order
+        for skinned_object in sorted(root_skinned_objects, key=yakuza_hierarchy_node_data_sort_key):
             if skinned_object.children:
                 self.error.recoverable(
                     f"Mesh {skinned_object.name} is skinned, but it has children. These children will not be exported.")
@@ -421,11 +423,13 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 self.node_roots.append(bone)
             self.bone_name_map[bone.name] = bone
 
-            for child in blender_bone.children:
+            # Export bone children in order
+            for child in sorted(blender_bone.children, key=yakuza_hierarchy_node_data_sort_key):
                 add_bone(child, bone)
 
         # Build a GMDNode structure for the armature only (objects will be added to this later)
-        for root_bone in armature_data.bones:
+        # Export root bones in order
+        for root_bone in sorted(armature_data.bones, key=yakuza_hierarchy_node_data_sort_key):
             if root_bone.parent:
                 continue
             add_bone(root_bone, None)
@@ -586,7 +590,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                     f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
         # Export each child of the scene root
-        for unskinned_object in scene_root.children:
+        # Export unskinned object roots in order
+        for unskinned_object in sorted(scene_root.children, key=yakuza_hierarchy_node_data_sort_key):
             self.export_unskinned_object(context, selected_collection, unskinned_object, None)
 
         self.error.debug("GATHER", f"NODE REPORT")
@@ -663,5 +668,7 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         # Object.children returns all children, not just direct descendants.
         direct_children = [o for o in collection.objects if o.parent == object]
+        # In-place sort by key - export unskinned object children in order
+        direct_children.sort(key=yakuza_hierarchy_node_data_sort_key)
         for child_object in direct_children:
             self.export_unskinned_object(context, collection, child_object, gmd_object)
