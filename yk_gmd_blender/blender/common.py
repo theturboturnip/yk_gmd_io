@@ -6,8 +6,8 @@ import bpy
 from bmesh.types import BMesh, BMLayerCollection
 from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
-from yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
-from yk_gmd.v2.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
 class GMDGame(IntEnum):
@@ -293,7 +293,7 @@ class AttribSetLayerNames:
             if i == primary_uv_i:
                 uv_spec = LayerSpec(f"UV_Primary", uv_storage)
             else:
-                uv_spec = LayerSpec(f"UV{i}", uv_storage)
+                uv_spec = LayerSpec(f"UV{i}_{VecStorage.component_count(uv_storage)}_components", uv_storage)
 
             uv_layers.append(uv_spec)
 
@@ -427,6 +427,38 @@ class AttribSetLayerNames:
             uv_layers=uv_layers,
         )
 
+    def get_blender_uv_layers(self) -> List[str]:
+        """
+        Return a list of the layer names this expects to be present as UV layers
+        :return:
+        """
+        return [
+            spec.name
+            for spec in self.uv_layers
+            if VecStorage.component_count(spec.storage) == 2
+        ]
+
+    def get_blender_color_layers(self) -> List[str]:
+        """
+        Return a list of the layer names this expects to be present as vertex color layers
+        :return:
+        """
+        color_layers = []
+        if self.col0_layer:
+            color_layers.append(self.col0_layer.name)
+        if self.col1_layer:
+            color_layers.append(self.col1_layer.name)
+        if self.weight_data_layer:
+            color_layers.append(self.weight_data_layer.name)
+        if self.bone_data_layer:
+            color_layers.append(self.bone_data_layer.name)
+        if self.tangent_w_layer:
+            color_layers.append(self.tangent_w_layer.name)
+        return color_layers + [
+            spec.name
+            for spec in self.uv_layers
+            if VecStorage.component_count(spec.storage) != 2
+        ]
 
 @dataclass
 class AttribSetLayers_bpy:

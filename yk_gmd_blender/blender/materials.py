@@ -4,9 +4,13 @@ import re
 from typing import Optional, Tuple, cast
 
 import bpy
+from yk_gmd_blender.blender.common import AttribSetLayerNames
+from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, IntProperty
 from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 
@@ -30,6 +34,9 @@ class YakuzaPropertyGroup(PropertyGroup):
     shader_vertex_layout_flags: StringProperty(name="Vertex Layout Flags")
     assume_skinned: BoolProperty(name="Assumes Skinned Context",
                                  description="Was imported from a skinned mesh and requires bone-weight pairs")
+    cached_expected_uv_layers: StringProperty(name="Uses UV Layers", set=None)
+    cached_expected_color_layers: StringProperty(name="Uses Vertex Color Layers", set=None)
+
     attribute_set_flags: StringProperty(name="Attribute Layout Flags")
 
     unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)
@@ -55,8 +62,9 @@ class YakuzaPropertyPanel(bpy.types.Panel):
 
     def draw(self, context):
         ob = context.object
+        if not ob:
+            return
         ma = ob.active_material
-
         if not ma:
             return
 
@@ -69,8 +77,14 @@ class YakuzaPropertyPanel(bpy.types.Panel):
 
         if ma.yakuza_data.inited:
             self.layout.prop(ma.yakuza_data, "shader_name")
-            self.layout.prop(ma.yakuza_data, "shader_vertex_layout_flags")
-            self.layout.prop(ma.yakuza_data, "assume_skinned")
+
+            vertex_layout_box = self.layout.box()
+            vertex_layout_box.prop(ma.yakuza_data, "shader_vertex_layout_flags")
+            vertex_layout_box.prop(ma.yakuza_data, "assume_skinned")
+            vertex_layout_box.prop(ma.yakuza_data, "cached_expected_uv_layers")
+            vertex_layout_box.prop(ma.yakuza_data, "cached_expected_color_layers")
+            vertex_layout_box.operator("material.yakuza_update_expected_layers")
+
             self.layout.prop(ma.yakuza_data, "attribute_set_flags")
 
             self.layout.prop(ma.yakuza_data, "material_origin_type")
@@ -82,6 +96,45 @@ class YakuzaPropertyPanel(bpy.types.Panel):
         else:
             self.layout.label(text=f"No Yakuza Data present for this material")
 
+
+class MATERIAL_OT_yakuza_update_expected_layers(bpy.types.Operator):
+    """Re-check the expected color and UV layers based on the vertex layout flags"""
+    bl_idname = "material.yakuza_update_expected_layers"
+    bl_label = "Re-check expected layers for Yakuza material"
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        return ob is not None and ob.active_material is not None and ob.active_material.yakuza_data.inited
+
+    def execute(self, context):
+        ob = context.object
+        if not ob:
+            return
+        ma = ob.active_material
+        if not ma or not ma.yakuza_data.inited:
+            return
+
+        error = BlenderErrorReporter(self.report, StrictErrorReporter({"ALL"}))
+
+        try:
+            vertex_layout_flags = int(ma.yakuza_data.shader_vertex_layout_flags, base=16)
+        except ValueError as ex:
+            error.fatal_exception(ex)
+
+        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags,
+                                                                                    ma.yakuza_data.assume_skinned,
+                                                                                    error)
+
+        layer_names = AttribSetLayerNames.build_from(vertex_layout, ma.yakuza_data.assume_skinned)
+
+        expected_uv_layers = ", ".join(layer_names.get_blender_uv_layers())
+        expected_color_layers = ", ".join(layer_names.get_blender_color_layers())
+
+        ma.yakuza_data.cached_expected_uv_layers = expected_uv_layers
+        ma.yakuza_data.cached_expected_color_layers = expected_color_layers
+
+        return {'FINISHED'}
 
 # Custom property group for textures imported from GMD files.
 # Allows for "Yakuza relinking": updating the file associated with an image based on the texture name,
@@ -192,12 +245,17 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     :return: None
     """
 
+    layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout,
+                                                 attribute_set.shader.assume_skinned)
+
     # Setup the yakuza_data inside the material
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
     material.yakuza_data.assume_skinned = attribute_set.shader.assume_skinned
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
+    material.yakuza_data.cached_expected_uv_layers = ", ".join(layer_names.get_blender_uv_layers())
+    material.yakuza_data.cached_expected_color_layers = ", ".join(layer_names.get_blender_color_layers())
     material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
     material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32
     material.yakuza_data.attribute_set_floats = attribute_set.attr_extra_properties

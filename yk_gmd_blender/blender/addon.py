@@ -4,7 +4,8 @@ import bpy
 from bpy.props import PointerProperty
 
 from yk_gmd_blender.blender.importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup
+from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup, \
+    MATERIAL_OT_yakuza_update_expected_layers
 from .common import YakuzaHierarchyNodeData, OBJECT_PT_yakuza_hierarchy_node_data_panel, \
     BONE_PT_yakuza_hierarchy_node_data_panel, YakuzaFileRootData, OBJECT_PT_yakuza_file_root_data_panel
 from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, menu_func_export_unskinned, \
@@ -26,6 +27,7 @@ classes = (
     BONE_PT_yakuza_hierarchy_node_data_panel,
     YakuzaFileRootData,
     OBJECT_PT_yakuza_file_root_data_panel,
+    MATERIAL_OT_yakuza_update_expected_layers,
 )
 
 def register():
