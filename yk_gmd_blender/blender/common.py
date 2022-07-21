@@ -418,6 +418,17 @@ class AttribSetLayerNames:
 
             uv_layers.append((VecStorage.component_count(uv_spec.storage), uv_layer))
 
+        if self.primary_uv_i is not None and uv_layers[self.primary_uv_i][1] is None:
+            # Fallback for finding the primary map
+            # If the "primary map" is not already used for a layer, use it
+            if not ((2, mesh.uv_layers.active) in uv_layers):
+                uv_layers[self.primary_uv_i] = (2, mesh.uv_layers.active)
+                error.debug("MESH", f"Using UVlayer {mesh.uv_layers.active.name} as the primary UV map - it is otherwise unused")
+            else:
+                error.recoverable(f"Tried to find the primary UV map for {mesh.name}, but couldn't. "
+                                  f"The currently in-use UV map {mesh.uv_layers.active.name} is already used for a "
+                                  f"different UV layer.")
+
         return AttribSetLayers_bpy(
             col0_layer=col0_layer,
             col1_layer=col1_layer,
