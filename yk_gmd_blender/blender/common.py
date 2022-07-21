@@ -1,9 +1,13 @@
+from dataclasses import dataclass
 from enum import IntEnum
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional, Union
 
 import bpy
+from bmesh.types import BMesh, BMLayerCollection
 from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
+from yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
 class GMDGame(IntEnum):
@@ -210,3 +214,243 @@ class OBJECT_PT_yakuza_file_root_data_panel(Panel):
 
         layout.prop(ob.yakuza_file_root_data, "imported_version")
         layout.prop(ob.yakuza_file_root_data, "flags_json")
+
+
+@dataclass
+class LayerSpec:
+    """
+    Specification for a Blender layer - the name of the layer, and the data it's intended to store
+    """
+    name: str
+    storage: VecStorage
+
+
+@dataclass
+class AttribSetLayerNames:
+    """
+    Set of Blender layers required for a GMD attribute set/vertex buffer layout
+    """
+    col0_layer: Optional[LayerSpec]
+    col1_layer: Optional[LayerSpec]
+    tangent_w_layer: Optional[LayerSpec]
+    weight_data_layer: Optional[LayerSpec]
+    bone_data_layer: Optional[LayerSpec]
+    uv_layers: List[LayerSpec]
+    # Index into uv_layers
+    primary_uv_i: Optional[int]
+
+    @staticmethod
+    def build_from(layout: GMDVertexBufferLayout, is_skinned: bool) -> 'AttribSetLayerNames':
+        """
+        Look at a GMD vertex buffer layout and determine the required/expected Blender layers.
+        For skinned layouts, will assume the weight/bone data are stored in vertex groups instead of custom data layers.
+        :param layout: The GMD vertex buffer layout
+        :param is_skinned: True if this is intended for a skinned mesh
+        :return: The generated AttribSetLayerNames
+        """
+
+        # For Col0, Col1, TangentW, UVs
+        #   Create layer
+        # Color0
+        col0_layer = None
+        if layout.col0_storage:
+            col0_layer = LayerSpec("Color0", layout.col0_storage)
+
+        # Color1
+        col1_layer = None
+        if layout.col1_storage:
+            col1_layer = LayerSpec("Color1", layout.col1_storage)
+
+        # Weight Data
+        weight_data_layer = None
+        if layout.weights_storage and not is_skinned:
+            weight_data_layer = LayerSpec("Weight_Data", layout.weights_storage)
+
+        # Bone Data
+        bone_data_layer = None
+        if layout.bones_storage and not is_skinned:
+            bone_data_layer = LayerSpec("Bone_Data", layout.bones_storage)
+
+        # Normal W data
+        tangent_w_layer = None
+        if layout.tangent_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
+            tangent_w_layer = LayerSpec("TangentW", layout.tangent_storage)
+
+        # UVs
+        # Yakuza has 3D/4D UV coordinates. Blender doesn't support this in the UV channel.
+        # The solution is to have a deterministic "primary UV" designation that can only be 2D
+        # This is the only UV loaded into the actual UV layer, the rest are all loaded into vertex colors.
+
+        def get_primary_uv_index() -> Optional[int]:
+            for i, uv_storage in enumerate(layout.uv_storages):
+                if uv_storage in [VecStorage.Vec2Full, VecStorage.Vec2Half]:
+                    return i
+            return None
+        primary_uv_i = get_primary_uv_index()
+
+        uv_layers = []
+        for i, uv_storage in enumerate(layout.uv_storages):
+            if i == primary_uv_i:
+                uv_spec = LayerSpec(f"UV_Primary", uv_storage)
+            else:
+                uv_spec = LayerSpec(f"UV{i}", uv_storage)
+
+            uv_layers.append(uv_spec)
+
+        return AttribSetLayerNames(
+            col0_layer=col0_layer,
+            col1_layer=col1_layer,
+            weight_data_layer=weight_data_layer,
+            bone_data_layer=bone_data_layer,
+            tangent_w_layer=tangent_w_layer,
+            uv_layers=uv_layers,
+            primary_uv_i=primary_uv_i
+        )
+
+    def create_on(self, bm: BMesh, error: ErrorReporter) -> 'AttribSetLayers_bmesh':
+        """
+        Given a BMesh, create the necessary data layers
+        :param bm: The mesh to add the layers to
+        :param error: The error reporter used to report debug messages
+        :return: A structure containing the layers
+        """
+
+        def create_color_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
+            if spec is None:
+                return None
+            error.debug("MESH",
+                        f"Creating color layer {spec.name} for {purpose}: storage {spec.storage},"
+                        f"componentcount = {VecStorage.component_count(spec.storage)}")
+            return bm.loops.layers.color.new(spec.name)
+
+        def create_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
+            if spec is None:
+                return None
+            error.debug("MESH",
+                        f"Creating UV layer {spec.name} for {purpose}: storage {spec.storage},"
+                        f"componentcount = {VecStorage.component_count(spec.storage)}")
+            return bm.loops.layers.uv.new(spec.name)
+
+        col0_layer = create_color_layer(self.col0_layer, "Color0")
+        col1_layer = create_color_layer(self.col1_layer, "Color1")
+        weight_data_layer = create_color_layer(self.weight_data_layer, "WeightData")
+        bone_data_layer = create_color_layer(self.bone_data_layer, "BoneData")
+        tangent_w_layer = create_color_layer(self.tangent_w_layer, "TangentW")
+
+        if self.primary_uv_i is not None:
+            error.debug("MESH", f"Using UV{self.primary_uv_i} as primary UV layer")
+            assert VecStorage.component_count(self.uv_layers[self.primary_uv_i].storage) == 2
+
+        uv_layers = []
+        for i, uv_spec in enumerate(self.uv_layers):
+            if VecStorage.component_count(uv_spec.storage) == 2:
+                uv_layer = create_uv_layer(uv_spec, f"UV{i}")
+            else:
+                uv_layer = create_color_layer(uv_spec, f"UV{i}")
+            assert uv_layer is not None
+
+            uv_layers.append((VecStorage.component_count(uv_spec.storage), uv_layer))
+
+        return AttribSetLayers_bmesh(
+            col0_layer=col0_layer,
+            col1_layer=col1_layer,
+            weight_data_layer=weight_data_layer,
+            bone_data_layer=bone_data_layer,
+            tangent_w_layer=tangent_w_layer,
+            uv_layers=uv_layers,
+        )
+
+    def try_retrieve_from(self, mesh: bpy.types.Mesh, error: ErrorReporter) -> 'AttribSetLayers_bpy':
+        """
+        Given a bpy mesh, retrieve the layers that are present.
+        May not return all expected layers - the mesh may not have some, e.g. a mesh with a material that requires Color0 may not have it.
+        In that case, a warning will be reported.
+        :param mesh: The mesh to retrieve layers from
+        :param error: The error reporter used to report debug messages and warnings
+        :return: A structure containing the existing layers
+        """
+
+        def retrieve_color_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[bpy.types.MeshLoopColorLayer]:
+            if spec is None:
+                return None
+            layer = mesh.vertex_colors[spec.name] if spec.name in mesh.vertex_colors else None
+            if layer:
+                error.debug("MESH",
+                            f"Retrieved color layer {spec.name} for {purpose}: storage {spec.storage},"
+                            f"componentcount = {VecStorage.component_count(spec.storage)}")
+            else:
+                error.info(f"Expected {mesh.name} to have a color layer {spec.name} for {purpose}: "
+                           f"storage {spec.storage}, componentcount: {VecStorage.component_count(spec.storage)}, "
+                           f"but found None")
+            return layer
+
+        def retrieve_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[bpy.types.MeshUVLoopLayer]:
+            if spec is None:
+                return None
+            layer = mesh.uv_layers[spec.name] if spec.name in mesh.uv_layers else None
+            if layer:
+                error.debug("MESH",
+                            f"Retrieved UV layer {spec.name} for {purpose}: storage {spec.storage},"
+                            f"componentcount = {VecStorage.component_count(spec.storage)}")
+            else:
+                error.info(f"Expected {mesh.name} to have a UV layer {spec.name} for {purpose}: "
+                           f"storage {spec.storage}, componentcount: {VecStorage.component_count(spec.storage)}, "
+                           f"but found None")
+            return layer
+
+        col0_layer = retrieve_color_layer(self.col0_layer, "Color0")
+        col1_layer = retrieve_color_layer(self.col1_layer, "Color1")
+        weight_data_layer = retrieve_color_layer(self.weight_data_layer, "WeightData")
+        bone_data_layer = retrieve_color_layer(self.bone_data_layer, "BoneData")
+        tangent_w_layer = retrieve_color_layer(self.tangent_w_layer, "TangentW")
+
+        if self.primary_uv_i is not None:
+            error.debug("MESH", f"Using UV{self.primary_uv_i} as primary UV layer")
+            assert VecStorage.component_count(self.uv_layers[self.primary_uv_i].storage) == 2
+
+        uv_layers = []
+        for i, uv_spec in enumerate(self.uv_layers):
+            uv_layer: Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]
+            if VecStorage.component_count(uv_spec.storage) == 2:
+                uv_layer = retrieve_uv_layer(uv_spec, f"UV{i}")
+            else:
+                uv_layer = retrieve_color_layer(uv_spec, f"UV{i}")
+
+            uv_layers.append((VecStorage.component_count(uv_spec.storage), uv_layer))
+
+        return AttribSetLayers_bpy(
+            col0_layer=col0_layer,
+            col1_layer=col1_layer,
+            weight_data_layer=weight_data_layer,
+            bone_data_layer=bone_data_layer,
+            tangent_w_layer=tangent_w_layer,
+            uv_layers=uv_layers,
+        )
+
+
+@dataclass
+class AttribSetLayers_bpy:
+    """
+    Set of Blender layers used by the exporter to retrieve relevant vertex data
+    """
+    col0_layer: Optional[bpy.types.MeshLoopColorLayer]
+    col1_layer: Optional[bpy.types.MeshLoopColorLayer]
+    weight_data_layer: Optional[bpy.types.MeshLoopColorLayer]
+    bone_data_layer: Optional[bpy.types.MeshLoopColorLayer]
+    tangent_w_layer: Optional[bpy.types.MeshLoopColorLayer]
+    # Stores (component length, layer)
+    uv_layers: List[Tuple[int, Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]]]
+
+
+@dataclass
+class AttribSetLayers_bmesh:
+    """
+    Set of Blender layers used by the importer to create relevant vertex data
+    """
+    col0_layer: Optional[BMLayerCollection]
+    col1_layer: Optional[BMLayerCollection]
+    weight_data_layer: Optional[BMLayerCollection]
+    bone_data_layer: Optional[BMLayerCollection]
+    tangent_w_layer: Optional[BMLayerCollection]
+    # Stores (component length, layer)
+    uv_layers: List[Tuple[int, BMLayerCollection]]
