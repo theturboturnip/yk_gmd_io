@@ -94,7 +94,7 @@ class VertexFetcher:
                 if any(x < 0 or x > 1 for x in vec):
                     self.error.recoverable(
                         f"UV{uv_idx} has values outside of the storable range. Expected between 0 and 1, got {vec}")
-                return Vector(layer.data[loop.loops[tri_index]].color).resized(component_count)
+                return vec
         else:
             return Vector([0] * component_count)
 

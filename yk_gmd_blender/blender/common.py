@@ -321,7 +321,7 @@ class AttribSetLayerNames:
             error.debug("MESH",
                         f"Creating color layer {spec.name} for {purpose}: storage {spec.storage},"
                         f"componentcount = {VecStorage.component_count(spec.storage)}")
-            return bm.loops.layers.color.new(spec.name)
+            return bm.loops.layers.float_color.new(spec.name)
 
         def create_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
             if spec is None:
