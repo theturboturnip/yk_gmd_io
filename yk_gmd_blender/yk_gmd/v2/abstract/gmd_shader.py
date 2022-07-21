@@ -341,12 +341,6 @@ class GMDVertexBufferLayout:
                f"uv: {self.uv_storages}\n" \
                f")"
 
-    def get_primary_uv_index(self) -> int:
-        for i, uv_storage in enumerate(self.uv_storages):
-            if uv_storage in [VecStorage.Vec2Full, VecStorage.Vec2Half]:
-                return i
-        return -1
-
     @staticmethod
     def build_vertex_buffer_layout_from_flags(vertex_packing_flags: int, assume_skinned: bool,
                                               error: ErrorReporter, checked: bool = True) -> 'GMDVertexBufferLayout':

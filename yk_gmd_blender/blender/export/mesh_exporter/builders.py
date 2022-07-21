@@ -3,6 +3,7 @@ import collections
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Callable, Set, Union, Optional, Generic, TypeVar
 
+from yk_gmd_blender.blender.common import AttribSetLayers_bpy
 from bmesh.types import BMVert
 from mathutils import Vector, Matrix
 
@@ -32,13 +33,7 @@ class VertexFetcher:
     vertex_group_bone_index_map: Dict[int, int]
     mesh: bpy.types.Mesh
 
-    # deform_layer: Optional[BMLayerItem]
-    col0_layer: Optional[bpy.types.MeshLoopColorLayer]
-    col1_layer: Optional[bpy.types.MeshLoopColorLayer]
-    tangent_layer: Optional[bpy.types.MeshLoopColorLayer]
-    tangent_w_layer: Optional[bpy.types.MeshLoopColorLayer]
-    # Stores (component length, layer)
-    uv_layers: List[Tuple[int, Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]]]
+    layers: AttribSetLayers_bpy
     error: ErrorReporter
 
     def __init__(self,  # bm_vertices: List[BMVert],
@@ -48,12 +43,7 @@ class VertexFetcher:
                  transformation_direction: Matrix,
                  mesh: bpy.types.Mesh,
                  vertex_group_bone_index_map: Dict[int, int],
-                 # deform_layer: Optional[BMLayerItem],
-                 col0_layer: Optional[bpy.types.MeshLoopColorLayer],
-                 col1_layer: Optional[bpy.types.MeshLoopColorLayer],
-                 tangent_w_layer: Optional[bpy.types.MeshLoopColorLayer],
-                 uv_primary: Optional[bpy.types.MeshUVLoopLayer],
-                 uv_numbered: Dict[int, bpy.types.MeshLoopColorLayer],
+                 layers: AttribSetLayers_bpy,
                  error: ErrorReporter
                  ):
         self.vertex_layout = vertex_layout
@@ -61,79 +51,41 @@ class VertexFetcher:
         self.transformation_direction = transformation_direction
         self.mesh = mesh
         self.vertex_group_bone_index_map = vertex_group_bone_index_map
-
-        def verify_layer(storage, layer, name):
-            if storage:
-                if not layer:
-                    error.info(f"Expected mesh {mesh_name} to have a {name} layer but got None")
-                return layer
-            elif layer:
-                error.info(f"Mesh {mesh_name} has an unused {name} layer")
-
-        self.col0_layer = verify_layer(vertex_layout.col0_storage, col0_layer, "Color0")
-        self.col1_layer = verify_layer(vertex_layout.col1_storage, col1_layer, "Color1")
-        self.tangent_w_layer = verify_layer(
-            vertex_layout.tangent_storage in [VecStorage.Vec4Full, VecStorage.Vec4Fixed, VecStorage.Vec4Half],
-            tangent_w_layer,
-            "Tangent W Component"
-        )
-        # TODO - This "primary_uv_index" thing is icky
-        self.primary_uv_i = vertex_layout.get_primary_uv_index()
-        if self.primary_uv_i != -1 and self.primary_uv_i in uv_numbered:
-            error.recoverable(
-                f"VertexFetcher for mesh {mesh_name} given a primary uv index that refers to a numbered UV layer UV{self.primary_uv_i}. The primary UV will take precedence.")
-        self.uv_layers = []
-        for i, storage in enumerate(vertex_layout.uv_storages):
-            if self.primary_uv_i == i:
-                self.uv_layers.append((2, uv_primary))
-            elif i in uv_numbered:
-                layer = uv_numbered[i]
-                self.uv_layers.append((VecStorage.component_count(storage), layer))
-            else:
-                error.info(f"VertexFetcher for mesh {mesh_name} didn't have a UV for layer {i}, values will be all-0")
-                self.uv_layers.append((VecStorage.component_count(storage), None))
-
+        self.layers = layers
         self.error = error
 
-    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):  # , normal: Optional[Vector]
-        # normal = (self.transformation_direction @ (normal if normal is not None else Vector(loop.split_normals[tri_index]))).resized(4)
+    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
         normal = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].normal)).resized(4)
-        # if self.tangent_w_layer:
-        #     # normals are stored [-1, 1] so convert from [0, 1] range
-        #     normal.w = (self.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
-        # else:
+
         normal.w = 0
         normal.normalize()
         return normal
 
     def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
-        # if self.tangent_layer:
-        #     tangent = Vector(self.tangent_layer.data[loop.loops[tri_index]].color)
-        # else:
-        #     tangent = Vector((0.5, 0.5, 0.5, 0.5))
         tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4)
-        if self.tangent_w_layer:
-            tangent.w = (self.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
+        if self.layers.tangent_w_layer:
+            tangent.w = (self.layers.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
         else:
             tangent.w = 1
         return tangent
 
     def col0_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
-        if self.col0_layer:
-            return Vector(self.col0_layer.data[loop.loops[tri_index]].color)
+        if self.layers.col0_layer:
+            return Vector(self.layers.col0_layer.data[loop.loops[tri_index]].color)
         else:
             return Vector((1, 1, 1, 1))
 
     def col1_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
-        if self.col1_layer:
-            return Vector(self.col1_layer.data[loop.loops[tri_index]].color)
+        if self.layers.col1_layer:
+            return Vector(self.layers.col1_layer.data[loop.loops[tri_index]].color)
         else:
             return Vector((1, 1, 1, 1))
 
     def uv_for(self, uv_idx: int, loop: bpy.types.MeshLoopTriangle, tri_index: int):
-        component_count, layer = self.uv_layers[uv_idx]
+        component_count, layer = self.layers.uv_layers[uv_idx]
         if layer:
-            # If component_count == 2 then we should be storing it in a UV layer. For backwards compatibility, check if the layer actually has a "uv" section
+            # If component_count == 2 then we should be storing it in a UV layer.
+            # For backwards compatibility, check if the layer actually has a "uv" section
             if component_count == 2 and hasattr(layer.data[loop.loops[tri_index]], "uv"):
                 blender_uv = layer.data[loop.loops[tri_index]].uv
                 return Vector((blender_uv[0], 1 - blender_uv[1]))
@@ -190,7 +142,7 @@ class VertexFetcher:
             tangent=self.tangent_for(loop, tri_index).freeze(),
             col0=self.col0_for(loop, tri_index).freeze(),
             col1=self.col1_for(loop, tri_index).freeze(),
-            uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.uv_layers))])
+            uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.layers.uv_layers))])
         )
 
     def extract_vertex(self, vertex_buffer: GMDVertexBuffer_Generic, i: int, per_loop_data: PerLoopVertexData):
@@ -212,7 +164,7 @@ class VertexFetcher:
             vertex_buffer.col0.append(per_loop_data.col0)
         if vertex_buffer.col1 is not None:
             vertex_buffer.col1.append(per_loop_data.col1)
-        for uv_idx in range(len(self.uv_layers)):
+        for uv_idx in range(len(self.layers.uv_layers)):
             vertex_buffer.uvs[uv_idx].append(per_loop_data.uvs[uv_idx])
 
 

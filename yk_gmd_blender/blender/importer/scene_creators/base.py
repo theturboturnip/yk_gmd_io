@@ -9,7 +9,7 @@ import bmesh
 from mathutils import Vector, Matrix
 
 from yk_gmd_blender.blender.common import GMDGame
-from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh, UVComponentCounts
+from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, set_yakuza_shader_material_from_attributeset
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -108,11 +108,6 @@ class BaseGMDSceneCreator(abc.ABC):
         self.error.info(
             f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
 
-        # find out the maximum number of components for each UV component in every attribute set
-        overall_uv_counts = UVComponentCounts()
-        for attr_set in [m.attribute_set for m in gmd_node.mesh_list]:
-            overall_uv_counts.consider_attribute_set(attr_set)
-
         # then we make a merged GMDMesh object for each attribute set, containing the meshes that use that attribute set.
         for i, attr_set_id in enumerate(gmd_attr_set_ids):
             meshes_for_attr_set = [gmd_mesh for gmd_mesh in gmd_node.mesh_list if
@@ -120,18 +115,6 @@ class BaseGMDSceneCreator(abc.ABC):
             attr_set = meshes_for_attr_set[0].attribute_set
             self.error.info(
                 f"\tattr_set #{attr_set_id} has {len(meshes_for_attr_set)} meshes with {[len(gmd_mesh.vertices_data) for gmd_mesh in meshes_for_attr_set]} verts each.")
-
-            # if the number of components in *any* UV component isn't equal to the maximum component count over
-            # all other GMDMeshes for this object, then we have a problem.
-            # See mesh_importer.py, line 85 or so for a relevant TODO
-            if any(overall_uv_counts.uv_counts[i] != VecStorage.component_count(s)
-                   for i, s in enumerate(attr_set.shader.vertex_buffer_layout.uv_storages)):
-                self.error.recoverable(f"Shader {attr_set.shader.name} uses a set of UVs that "
-                                       f"conflicts with other shaders on object {gmd_node.name}.\n"
-                                       f"Turn off Strict Import to ignore this and continue.\n"
-                                       f"Multiple UV layers will be created, and this model won't export cleanly.\n"
-                                       f"You will need to turn off Strict Export to export this model once imported.\n"
-                                        )
 
             # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
             if self.config.import_materials:

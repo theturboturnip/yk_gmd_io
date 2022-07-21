@@ -2,6 +2,7 @@ import re
 from typing import List, Dict, Union
 
 import bmesh
+from yk_gmd_blender.blender.common import AttribSetLayerNames
 from mathutils import Vector, Matrix
 
 import bpy
@@ -15,34 +16,6 @@ from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_transformation: Matrix, attribute_sets: List[GMDAttributeSet], skinned: bool,
                            vertex_group_mapping: Dict[int, GMDBone], error: ErrorReporter) -> Union[List[SubmeshBuilder], List[SkinnedSubmeshBuilder]]:
-
-    # First, find all the basic layers we may need
-    col0_layer = mesh.vertex_colors["Color0"] if "Color0" in mesh.vertex_colors else None
-    col1_layer = mesh.vertex_colors["Color1"] if "Color1" in mesh.vertex_colors else None
-    tangent_w_layer = mesh.vertex_colors["TangentW"] if "TangentW" in mesh.vertex_colors else None
-
-    # Find all the UV layers by name
-    # UV layers can be exported to actual UVs (if they're two-component) or to vertex colors (if they're three or four-component)
-    uv_primary = "UV_Primary"
-    uv_numbered_regex = re.compile(r'UV(\d+)')
-    primary_uv_layer = mesh.uv_layers[uv_primary] if uv_primary in mesh.uv_layers else mesh.uv_layers.active
-    numbered_uv_layers = {}
-    if mesh.uv_layers:
-        for name, layer in mesh.uv_layers.items():
-            match = uv_numbered_regex.match(name)
-            if match:
-                uv_i = int(match.group(1))
-                if uv_i in numbered_uv_layers:
-                    error.recoverable(f"Found multiple possible layers for UV{uv_i} on {mesh_name}, will take latest one")
-                numbered_uv_layers[uv_i] = layer
-    if mesh.vertex_colors:
-        for name, layer in mesh.vertex_colors.items():
-            match = uv_numbered_regex.match(name)
-            if match:
-                uv_i = int(match.group(1))
-                if uv_i in numbered_uv_layers:
-                    error.recoverable(f"Found multiple possible layers for UV{uv_i} on {mesh_name}, will take latest one")
-                numbered_uv_layers[uv_i] = layer
 
     # Create the mesh builder (either Skinned or not)
     # If we're skinned, find the mapping of Blender vertex group indices to GMD vertex group indices
@@ -77,17 +50,15 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
     # Create a set of vertex fetchers for each attribute set
     vertex_fetchers = []
     for attribute_set in attribute_sets:
+        layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout, skinned)
+        layers = layer_names.try_retrieve_from(mesh, error)
         vertex_fetcher = VertexFetcher(mesh_name,
                                        attribute_set.shader.vertex_buffer_layout,
                                        transformation_position=transformation_position,
                                        transformation_direction=transformation_direction,
                                        vertex_group_bone_index_map=vertex_group_bone_index_map,
                                        mesh=mesh,
-                                       col0_layer=col0_layer,
-                                       col1_layer=col1_layer,
-                                       tangent_w_layer=tangent_w_layer,
-                                       uv_primary=primary_uv_layer,
-                                       uv_numbered=numbered_uv_layers,
+                                       layers=layers,
                                        error=error)
         vertex_fetchers.append(vertex_fetcher)
 
