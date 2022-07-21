@@ -1,5 +1,6 @@
 import abc
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Union
@@ -90,70 +91,51 @@ class BaseGMDSceneCreator(abc.ABC):
     def build_object_mesh(self, collection: bpy.types.Collection,
                           gmd_node: Union[GMDSkinnedObject, GMDUnskinnedObject],
                           vertex_group_indices: Dict[str, int]) -> bpy.types.Mesh:
-        temp_mesh = bpy.data.meshes.new(gmd_node.name)
-
         if isinstance(gmd_node, GMDSkinnedObject) and not vertex_group_indices:
             self.error.fatal(f"Trying to make a skinned object without any vertex groups")
 
-        # 1. Make a single BMesh containing all meshes referenced by this object.
-        # We want to do vertex deduplication any meshes that use the same attribute sets, as it is likely that they were
-        # originally split up for the sake of bone limits, and not merging them would make blender bug up.
-        # To do this, we list all of the unique attribute sets:
-        gmd_attr_set_ids = list({id(mesh.attribute_set) for mesh in gmd_node.mesh_list})
-        # TODO: This method probably wastes a lot of time creating new BMeshes.
-        #  It could be better to just append to the overall_bm instead of making a new one, sending it to a Mesh, then adding it back.
-        overall_bm = bmesh.new()
-        blender_material_list = []
-
+        gmd_attr_set_ids = set(id(mesh.attribute_set) for mesh in gmd_node.mesh_list)
         self.error.info(
             f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
 
-        # then we make a merged GMDMesh object for each attribute set, containing the meshes that use that attribute set.
-        for i, attr_set_id in enumerate(gmd_attr_set_ids):
-            meshes_for_attr_set = [gmd_mesh for gmd_mesh in gmd_node.mesh_list if
-                                   id(gmd_mesh.attribute_set) == attr_set_id]
-            attr_set = meshes_for_attr_set[0].attribute_set
-            self.error.info(
-                f"\tattr_set #{attr_set_id} has {len(meshes_for_attr_set)} meshes with {[len(gmd_mesh.vertices_data) for gmd_mesh in meshes_for_attr_set]} verts each.")
-
-            # Convert this merged GMDMesh to a BMesh, then merge it into the overall BMesh.
-            if self.config.import_materials:
-                blender_material_list.append(self.make_material(collection, attr_set))
-                new_bmesh = gmd_meshes_to_bmesh(
-                    meshes_for_attr_set,
-                    vertex_group_indices,
-                    attr_idx=i,
-                    gmd_to_blender_world=self.gmd_to_blender_world,
-                    fuse_vertices=self.config.fuse_vertices,
-                    error=self.error
-                )
-            else:
-                new_bmesh = gmd_meshes_to_bmesh(
-                    meshes_for_attr_set,
-                    vertex_group_indices,
-                    attr_idx=0,
-                    gmd_to_blender_world=self.gmd_to_blender_world,
-                    fuse_vertices=self.config.fuse_vertices,
-                    error=self.error
-                )
-
-            self.error.info(
-                f"\t\tAdding {len(new_bmesh.verts)} verts and {len(new_bmesh.faces)} faces for accumulated, (fused={self.config.fuse_vertices}) mesh of attr_set #{attr_set_id}")
-
-            # Merge it in to the overall bmesh.
-            new_bmesh.to_mesh(temp_mesh)
-            new_bmesh.free()
-            overall_bm.from_mesh(temp_mesh)
-        self.error.info(f"\tOverall mesh vert count: {len(overall_bm.verts)}")
-
-        # Turn the overall BMesh into a Blender Mesh (there's a difference) so that it can be attached to an Object.
-        # Reuse the temp mesh from before
-        overall_mesh = temp_mesh
-        overall_bm.to_mesh(overall_mesh)
-        overall_bm.free()
+        # Create materials, and make a mapping from (id(attr_set)) -> (blender material index)
         if self.config.import_materials:
-            for mat in blender_material_list:
-                overall_mesh.materials.append(mat)
+            attr_set_material_idx_mapping: Dict[int, int] = {}
+            blender_material_list = []
+
+            for i, attr_set_id in enumerate(gmd_attr_set_ids):
+                meshes_for_attr_set = (gmd_mesh for gmd_mesh in gmd_node.mesh_list if
+                                       id(gmd_mesh.attribute_set) == attr_set_id)
+                attr_set = next(meshes_for_attr_set).attribute_set
+
+                # Create the material
+                blender_material_list.append(self.make_material(collection, attr_set))
+                attr_set_material_idx_mapping[attr_set_id] = i
+        else:
+            # Otherwise all attribute sets are mapped to blender material index 0
+            attr_set_material_idx_mapping = defaultdict(lambda: 0)
+
+        overall_mesh = bpy.data.meshes.new(gmd_node.name)
+
+        # If we have any meshes, merge them into an overall BMesh
+        if gmd_node.mesh_list:
+            overall_bm = gmd_meshes_to_bmesh(
+                gmd_node.mesh_list,
+                vertex_group_indices,
+                attr_set_material_idx_mapping,
+                gmd_to_blender_world=self.gmd_to_blender_world,
+                fuse_vertices=self.config.fuse_vertices,
+                error=self.error
+            )
+            self.error.info(f"\tOverall mesh vert count: {len(overall_bm.verts)}")
+            overall_bm.to_mesh(overall_mesh)
+            overall_bm.free()
+            if self.config.import_materials:
+                for mat in blender_material_list:
+                    overall_mesh.materials.append(mat)
+        else:
+            # Else use an empty mesh
+            self.error.info(f"Empty mesh")
 
         return overall_mesh
 

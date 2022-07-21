@@ -329,7 +329,7 @@ class AttribSetLayerNames:
 
     def create_on(self, bm: BMesh, error: ErrorReporter) -> 'AttribSetLayers_bmesh':
         """
-        Given a BMesh, create the necessary data layers
+        Given a BMesh, create the necessary data layers, reusing pre-existing ones if present.
 
         :param bm: The mesh to add the layers to
         :param error: The error reporter used to report debug messages
@@ -339,6 +339,8 @@ class AttribSetLayerNames:
         def create_color_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
             if spec is None:
                 return None
+            if spec.name in bm.loops.layers.float_color:
+                return bm.loops.layers.float_color[spec.name]
             error.debug("MESH",
                         f"Creating color layer {spec.name} for {purpose}: storage {spec.storage},"
                         f"componentcount = {VecStorage.component_count(spec.storage)}")
@@ -347,6 +349,8 @@ class AttribSetLayerNames:
         def create_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
             if spec is None:
                 return None
+            if spec.name in bm.loops.layers.uv:
+                return bm.loops.layers.uv[spec.name]
             error.debug("MESH",
                         f"Creating UV layer {spec.name} for {purpose}: storage {spec.storage},"
                         f"componentcount = {VecStorage.component_count(spec.storage)}")
