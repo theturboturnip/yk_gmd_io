@@ -24,7 +24,7 @@ def sort_src_dest_lists(src: Iterable[T], dst: Iterable[T], key: Callable[[T], s
     return sorted_src, sorted_dst
 
 
-def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter, context: str):
+def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter, context: str) -> bool:
     src_vertices = set()
     dst_vertices = set()
 
@@ -75,6 +75,8 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
                           f"{src_but_not_dst_str}...\n\t"
                           f"{context} dst meshes have {len(dst_but_not_src)} vertices not in src:\n\t"
                           f"{dst_but_not_src_str}...")
+        return False
+    return True
 
 
 def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: ErrorReporter, context: str):
@@ -117,15 +119,21 @@ def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: 
                     f"{context} has different sets of attribute sets:\nsrc:\n\t{sorted_attrs_src}\ndst:{sorted_attrs_dst}\n\t")
 
             if vertices:
-                # For each unique vertex layout
+                # For each unique attribute set
                 # compare the vertices in the sets of meshes that use it
-                unique_layouts = set(m.vertices_data.layout for m in src.mesh_list)
-                for layout in unique_layouts:
+                unique_attr_sets = []
+                for m in src.mesh_list:
+                    if m.attribute_set not in unique_attr_sets:
+                        unique_attr_sets.append(m.attribute_set)
+                if all(
                     compare_same_layout_meshes(
-                        [m for m in src.mesh_list if m.vertices_data.layout == layout],
-                        [m for m in dst.mesh_list if m.vertices_data.layout == layout],
-                        error, context
+                        [m for m in src.mesh_list if m.attribute_set == attr],
+                        [m for m in dst.mesh_list if m.attribute_set == attr],
+                        error, f"{context}attr set {attr.texture_diffuse}"
                     )
+                    for attr in unique_attr_sets
+                ):
+                    error.info(f"{context} meshes are functionally identical")
 
 
 def recursive_compare_node_lists(vertices: bool, src: List[GMDNode], dst: List[GMDNode], error: ErrorReporter, context: str):
