@@ -193,6 +193,22 @@ def gmd_meshes_to_bmesh(
                     bones = gmd_mesh.vertices_data.bone_data[v_i] / 255
                     loop[layers.bone_data_layer] = (bones.x, bones.y, bones.z, bones.w)
 
+            if layers.normal_w_layer:
+                assert gmd_mesh.vertices_data.normal is not None
+                for (v_i, loop) in zip(tri_idxs, face.loops):
+                    normal_w = gmd_mesh.vertices_data.normal[v_i].w
+                    # Convert from [-1, 1] to [0, 1]
+                    # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
+                    loop[layers.normal_w_layer] = ((normal_w + 1) / 2, 0, 0, 0)
+
+            if layers.tangent_layer:
+                assert gmd_mesh.vertices_data.tangent is not None
+                for (v_i, loop) in zip(tri_idxs, face.loops):
+                    tangent = gmd_mesh.vertices_data.tangent[v_i]
+                    # Convert from [-1, 1] to [0, 1]
+                    # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
+                    loop[layers.tangent_layer] = ((tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3  ] + 1) / 2)
+
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
                 for (v_i, loop) in zip(tri_idxs, face.loops):

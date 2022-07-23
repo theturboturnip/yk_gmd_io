@@ -3,7 +3,7 @@ bl_info = {
     "name": "Yakuza GMD File Import/Export",
     "author": "Samuel Stark (TheTurboTurnip)",
     "version": (0, 4, 0),
-    "blender": (2, 92, 0),
+    "blender": (3, 2, 0),
     "location": "File > Import-Export",
     "description": "Import-Export Yakuza GMD Files",
     "warning": "",

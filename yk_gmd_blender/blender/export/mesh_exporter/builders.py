@@ -59,14 +59,23 @@ class VertexFetcher:
 
         normal.w = 0
         normal.normalize()
+
+        if self.layers.normal_w_layer:
+            normal.w = (self.layers.normal_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
+        else:
+            normal.w = 0
+
         return normal
 
     def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
-        tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4)
-        if self.layers.tangent_w_layer:
-            tangent.w = (self.layers.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
+        if self.layers.tangent_layer:
+            tangent = (self.layers.tangent_layer.data[loop.loops[tri_index]].color * 2) - 1
         else:
-            tangent.w = 1
+            tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4)
+            if self.layers.tangent_w_layer:
+                tangent.w = (self.layers.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
+            else:
+                tangent.w = 1
         return tangent
 
     def col0_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):

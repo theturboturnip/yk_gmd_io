@@ -232,7 +232,12 @@ class AttribSetLayerNames:
     """
     col0_layer: Optional[LayerSpec]
     col1_layer: Optional[LayerSpec]
+    # Used in unskinned, where the normal W component may store information. Skinned meshes don't do that
+    normal_w_layer: Optional[LayerSpec]
+    # Used in skinned, where only the tangent W component may store information. Skinned meshes calculate tangent XYZ from data
     tangent_w_layer: Optional[LayerSpec]
+    # Used for unskinned, where the whole tangent may not be calculated
+    tangent_layer: Optional[LayerSpec]
     weight_data_layer: Optional[LayerSpec]
     bone_data_layer: Optional[LayerSpec]
     uv_layers: List[LayerSpec]
@@ -244,6 +249,7 @@ class AttribSetLayerNames:
         """
         Look at a GMD vertex buffer layout and determine the required/expected Blender layers.
         For skinned layouts, will assume the weight/bone data are stored in vertex groups instead of custom data layers.
+
         :param layout: The GMD vertex buffer layout
         :param is_skinned: True if this is intended for a skinned mesh
         :return: The generated AttribSetLayerNames
@@ -271,10 +277,22 @@ class AttribSetLayerNames:
         if layout.bones_storage and not is_skinned:
             bone_data_layer = LayerSpec("Bone_Data", layout.bones_storage)
 
-        # Normal W data
+        # Normal W data - unskinned only
+        normal_w_layer = None
+        if layout.normal_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full] and not is_skinned:
+            normal_w_layer = LayerSpec("NormalW", layout.normal_storage)
+
+        # Tangent data
+        tangent_layer = None
         tangent_w_layer = None
-        if layout.tangent_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
-            tangent_w_layer = LayerSpec("TangentW", layout.tangent_storage)
+        if is_skinned:
+            # For skinned, we may need to store tangent-W
+            if layout.tangent_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
+                tangent_w_layer = LayerSpec("TangentW", layout.tangent_storage)
+        else:
+            # For unskinned, we may need to store the whole thing
+            if layout.tangent_storage:
+                tangent_layer = LayerSpec("Tangent", layout.tangent_storage)
 
         # UVs
         # Yakuza has 3D/4D UV coordinates. Blender doesn't support this in the UV channel.
@@ -302,6 +320,8 @@ class AttribSetLayerNames:
             col1_layer=col1_layer,
             weight_data_layer=weight_data_layer,
             bone_data_layer=bone_data_layer,
+            normal_w_layer=normal_w_layer,
+            tangent_layer=tangent_layer,
             tangent_w_layer=tangent_w_layer,
             uv_layers=uv_layers,
             primary_uv_i=primary_uv_i
@@ -310,6 +330,7 @@ class AttribSetLayerNames:
     def create_on(self, bm: BMesh, error: ErrorReporter) -> 'AttribSetLayers_bmesh':
         """
         Given a BMesh, create the necessary data layers
+
         :param bm: The mesh to add the layers to
         :param error: The error reporter used to report debug messages
         :return: A structure containing the layers
@@ -335,6 +356,8 @@ class AttribSetLayerNames:
         col1_layer = create_color_layer(self.col1_layer, "Color1")
         weight_data_layer = create_color_layer(self.weight_data_layer, "WeightData")
         bone_data_layer = create_color_layer(self.bone_data_layer, "BoneData")
+        normal_w_layer = create_color_layer(self.normal_w_layer, "NormalW")
+        tangent_layer = create_color_layer(self.tangent_layer, "Tangent")
         tangent_w_layer = create_color_layer(self.tangent_w_layer, "TangentW")
 
         if self.primary_uv_i is not None:
@@ -356,6 +379,8 @@ class AttribSetLayerNames:
             col1_layer=col1_layer,
             weight_data_layer=weight_data_layer,
             bone_data_layer=bone_data_layer,
+            normal_w_layer=normal_w_layer,
+            tangent_layer=tangent_layer,
             tangent_w_layer=tangent_w_layer,
             uv_layers=uv_layers,
         )
@@ -365,6 +390,7 @@ class AttribSetLayerNames:
         Given a bpy mesh, retrieve the layers that are present.
         May not return all expected layers - the mesh may not have some, e.g. a mesh with a material that requires Color0 may not have it.
         In that case, a warning will be reported.
+
         :param mesh: The mesh to retrieve layers from
         :param error: The error reporter used to report debug messages and warnings
         :return: A structure containing the existing layers
@@ -373,16 +399,20 @@ class AttribSetLayerNames:
         def retrieve_color_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[bpy.types.MeshLoopColorLayer]:
             if spec is None:
                 return None
-            layer = mesh.vertex_colors[spec.name] if spec.name in mesh.vertex_colors else None
-            if layer:
+            attr = mesh.color_attributes[spec.name] if spec.name in mesh.color_attributes else None
+            if attr:
+                if attr.domain != 'CORNER':
+                    error.fatal(f"Found color layer {spec.name} for {purpose}: storage {spec.storage}, "
+                                f"but has wrong domain {attr.domain} - expected CORNER.")
                 error.debug("MESH",
                             f"Retrieved color layer {spec.name} for {purpose}: storage {spec.storage},"
                             f"componentcount = {VecStorage.component_count(spec.storage)}")
+                return attr
             else:
                 error.info(f"Expected {mesh.name} to have a color layer {spec.name} for {purpose}: "
                            f"storage {spec.storage}, componentcount: {VecStorage.component_count(spec.storage)}, "
                            f"but found None")
-            return layer
+                return None
 
         def retrieve_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[bpy.types.MeshUVLoopLayer]:
             if spec is None:
@@ -402,6 +432,8 @@ class AttribSetLayerNames:
         col1_layer = retrieve_color_layer(self.col1_layer, "Color1")
         weight_data_layer = retrieve_color_layer(self.weight_data_layer, "WeightData")
         bone_data_layer = retrieve_color_layer(self.bone_data_layer, "BoneData")
+        normal_w_layer = retrieve_color_layer(self.normal_w_layer, "NormalW")
+        tangent_layer = retrieve_color_layer(self.tangent_w_layer, "Tangent")
         tangent_w_layer = retrieve_color_layer(self.tangent_w_layer, "TangentW")
 
         if self.primary_uv_i is not None:
@@ -434,6 +466,8 @@ class AttribSetLayerNames:
             col1_layer=col1_layer,
             weight_data_layer=weight_data_layer,
             bone_data_layer=bone_data_layer,
+            normal_w_layer=normal_w_layer,
+            tangent_layer=tangent_layer,
             tangent_w_layer=tangent_w_layer,
             uv_layers=uv_layers,
         )
@@ -441,7 +475,6 @@ class AttribSetLayerNames:
     def get_blender_uv_layers(self) -> List[str]:
         """
         Return a list of the layer names this expects to be present as UV layers
-        :return:
         """
         return [
             spec.name
@@ -452,7 +485,6 @@ class AttribSetLayerNames:
     def get_blender_color_layers(self) -> List[str]:
         """
         Return a list of the layer names this expects to be present as vertex color layers
-        :return:
         """
         color_layers = []
         if self.col0_layer:
@@ -463,6 +495,10 @@ class AttribSetLayerNames:
             color_layers.append(self.weight_data_layer.name)
         if self.bone_data_layer:
             color_layers.append(self.bone_data_layer.name)
+        if self.normal_w_layer:
+            color_layers.append(self.normal_w_layer.name)
+        if self.tangent_layer:
+            color_layers.append(self.tangent_layer.name)
         if self.tangent_w_layer:
             color_layers.append(self.tangent_w_layer.name)
         return color_layers + [
@@ -476,13 +512,15 @@ class AttribSetLayers_bpy:
     """
     Set of Blender layers used by the exporter to retrieve relevant vertex data
     """
-    col0_layer: Optional[bpy.types.MeshLoopColorLayer]
-    col1_layer: Optional[bpy.types.MeshLoopColorLayer]
-    weight_data_layer: Optional[bpy.types.MeshLoopColorLayer]
-    bone_data_layer: Optional[bpy.types.MeshLoopColorLayer]
-    tangent_w_layer: Optional[bpy.types.MeshLoopColorLayer]
+    col0_layer: Optional[bpy.types.FloatColorAttribute]
+    col1_layer: Optional[bpy.types.FloatColorAttribute]
+    weight_data_layer: Optional[bpy.types.FloatColorAttribute]
+    bone_data_layer: Optional[bpy.types.FloatColorAttribute]
+    normal_w_layer: Optional[bpy.types.FloatColorAttribute]
+    tangent_layer: Optional[bpy.types.FloatColorAttribute]
+    tangent_w_layer: Optional[bpy.types.FloatColorAttribute]
     # Stores (component length, layer)
-    uv_layers: List[Tuple[int, Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]]]
+    uv_layers: List[Tuple[int, Optional[Union[bpy.types.FloatColorAttribute, bpy.types.MeshUVLoopLayer]]]]
 
 
 @dataclass
@@ -494,6 +532,8 @@ class AttribSetLayers_bmesh:
     col1_layer: Optional[BMLayerCollection]
     weight_data_layer: Optional[BMLayerCollection]
     bone_data_layer: Optional[BMLayerCollection]
+    normal_w_layer: Optional[BMLayerCollection]
+    tangent_layer: Optional[BMLayerCollection]
     tangent_w_layer: Optional[BMLayerCollection]
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, BMLayerCollection]]
