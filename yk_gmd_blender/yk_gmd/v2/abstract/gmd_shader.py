@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Optional, Tuple, List, Sized, Iterable
 
 from mathutils import Vector
-
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, c_uint8, RangeConverterPrimitive
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter

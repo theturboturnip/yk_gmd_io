@@ -9,7 +9,6 @@ from bpy.types import (
     OperatorFileListElement,
 )
 from bpy_extras.io_utils import ImportHelper
-
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType

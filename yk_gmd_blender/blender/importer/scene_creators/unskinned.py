@@ -1,8 +1,7 @@
 import json
 
-from mathutils import Quaternion
-
 import bpy
+from mathutils import Quaternion
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
     root_name_for_gmd_file
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene

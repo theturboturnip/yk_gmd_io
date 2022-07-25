@@ -1,10 +1,9 @@
-import re
 import json
+import re
 from typing import Dict, Optional, Union
 
-from mathutils import Matrix, Vector, Quaternion
-
 import bpy
+from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene

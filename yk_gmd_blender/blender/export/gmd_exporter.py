@@ -1,24 +1,20 @@
+import os
+
 from bpy.props import (StringProperty,
                        BoolProperty,
                        EnumProperty)
-from bpy.types import Operator, ShaderNodeGroup
+from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
-
-from yk_gmd_blender.blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer, GMDSceneGathererConfig, \
-    SkinnedBoneMatrixOrigin, UnskinnedGMDSceneGatherer
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer, GMDSceneGathererConfig, \
+    SkinnedBoneMatrixOrigin, UnskinnedGMDSceneGatherer
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import check_version_writeable, write_abstract_scene_out, \
     read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProperties
-
-import os
 
 
 class BaseExportGMD(Operator, ExportHelper):

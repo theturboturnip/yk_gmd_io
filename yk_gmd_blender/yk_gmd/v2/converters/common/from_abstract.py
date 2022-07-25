@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import TypeVar, Tuple, List, Dict, Iterable, Callable, Set, Union
 
 from mathutils import Matrix
-
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet

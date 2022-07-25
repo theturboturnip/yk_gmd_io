@@ -1,17 +1,16 @@
 import array
 import collections
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, Union, Optional, Generic, TypeVar
-
-from yk_gmd_blender.blender.common import AttribSetLayers_bpy
-from bmesh.types import BMVert
-from mathutils import Vector, Matrix
+from typing import List, Tuple, Dict, Callable, Set, Optional, Generic, TypeVar
 
 import bpy
+from bmesh.types import BMVert
+from mathutils import Vector, Matrix
+from yk_gmd_blender.blender.common import AttribSetLayers_bpy
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, BoneWeight4, \
-    BoneWeight, VecStorage
+    BoneWeight
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 

@@ -6,7 +6,6 @@ from enum import Enum
 from typing import List, Tuple, cast, Union, TypeVar, Generic
 
 from mathutils import Matrix
-
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial

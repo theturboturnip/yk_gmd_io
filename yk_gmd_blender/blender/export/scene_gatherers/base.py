@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict, Optional, cast, Tuple
 
+import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
-
-import bpy
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData, yakuza_hierarchy_node_data_sort_key
 from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, \
     transform_position_gmd_to_blender

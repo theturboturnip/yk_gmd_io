@@ -1,7 +1,6 @@
 from typing import Iterable
 
 from mathutils import Quaternion, Vector
-
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
