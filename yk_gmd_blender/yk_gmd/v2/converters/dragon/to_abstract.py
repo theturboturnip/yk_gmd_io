@@ -73,5 +73,7 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
         return GMDScene(
             name=self.file_data.name.text,
 
+            flags=tuple(self.file_data.flags),
+
             overall_hierarchy=HierarchyData[GMDNode](roots),
         )

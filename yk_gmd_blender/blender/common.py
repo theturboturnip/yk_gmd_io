@@ -2,7 +2,7 @@ from enum import IntEnum
 from typing import Tuple, List, Dict
 
 import bpy
-from bpy.props import BoolProperty, FloatVectorProperty, StringProperty
+from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
 
 
@@ -77,10 +77,17 @@ class GMDGame(IntEnum):
             "YAKUZA7": GMDGame.Yakuza7,
         }
 
+    @staticmethod
+    def mapping_to_blender_props() -> Dict['GMDGame', str]:
+        return {v: k for k,v in GMDGame.mapping_from_blender_props().items()}
+
+    def as_blender(self) -> str:
+        return GMDGame.mapping_to_blender_props()[self]
+
 
 class YakuzaHierarchyNodeData(PropertyGroup):
     # Has this PropertyGroup been initialized from a GMD file?
-    # Used to hide data for normal Blender materials
+    # Used to hide data for normal Blender objects
     inited: BoolProperty(name="Initialized", default=False)
     # The original imported node matrix
     imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0]*16,size=16, subtype="MATRIX")
@@ -89,6 +96,13 @@ class YakuzaHierarchyNodeData(PropertyGroup):
     anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0]*4, size=4, subtype="QUATERNION")
     # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
     flags_json: StringProperty(name="Imported Node Flags (JSON)",default="[0,0,0,0]")
+
+    # The order of this node with respect to siblings
+    sort_order: IntProperty(name="Sort Order", default=0, description="Order of this node with respect to siblings. Applied on export.")
+
+
+def yakuza_hierarchy_node_data_sort_key(x) -> int:
+    return x.yakuza_hierarchy_node_data.sort_order
 
 
 class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
@@ -109,8 +123,11 @@ class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
 
         layout.prop(ob.yakuza_hierarchy_node_data, "anim_axis")
         layout.prop(ob.yakuza_hierarchy_node_data, "flags_json")
+        layout.prop(ob.yakuza_hierarchy_node_data, "sort_order")
 
-        if ob.yakuza_hierarchy_node_data.inited:
+        if ob.yakuza_file_root_data.is_valid_root:
+            layout.label(text="This is a Yakuza File Root, it shouldn't have hierarchy-node data")
+        elif ob.yakuza_hierarchy_node_data.inited:
             def matrix_prop(dat, prop_name, length: int, text=""):
                 layout.label(text=text)
                 box = layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
@@ -143,6 +160,7 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
 
         layout.prop(bone.yakuza_hierarchy_node_data, "anim_axis")
         layout.prop(bone.yakuza_hierarchy_node_data, "flags_json")
+        layout.prop(bone.yakuza_hierarchy_node_data, "sort_order")
 
         if bone.yakuza_hierarchy_node_data.inited:
             def matrix_prop(dat, prop_name, length: int, text=""):
@@ -155,3 +173,40 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
             matrix_prop(bone.yakuza_hierarchy_node_data, "imported_matrix", 16)
         else:
             layout.label(text=f"No original matrix, this bone wasn't imported from a GMD")
+
+
+class YakuzaFileRootData(PropertyGroup):
+    is_valid_root: BoolProperty(name="Is Valid Root", default=False)
+    # GMD version this file was imported from
+    imported_version: EnumProperty(items=GMDGame.blender_props(), name="Imported File Version", default=None)
+    # scene flags
+    flags_json: StringProperty(name="Imported Scene Flags (JSON)",default="[0,0,0,0,0,0]")
+
+
+class OBJECT_PT_yakuza_file_root_data_panel(Panel):
+    bl_label = "Yakuza File Root"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'object'
+    bl_category = "Tool"
+    bl_order = 1 # Make it appear near the top
+
+    def draw_header(self, context):
+        ob = context.object
+        if not ob:
+            return
+
+        self.layout.prop(ob.yakuza_file_root_data, "is_valid_root", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        ob = context.object
+        if not ob:
+            return
+
+        layout.active = ob.yakuza_file_root_data.is_valid_root
+
+        layout.prop(ob.yakuza_file_root_data, "imported_version")
+        layout.prop(ob.yakuza_file_root_data, "flags_json")

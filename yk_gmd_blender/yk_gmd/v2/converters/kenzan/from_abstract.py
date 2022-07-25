@@ -97,7 +97,7 @@ def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
 def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Kenzan:
+                               scene: GMDScene, error: ErrorReporter) -> FileData_Kenzan:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
@@ -344,7 +344,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
-    flags = list(base_flags)
+    flags = list(scene.flags)
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
     else:

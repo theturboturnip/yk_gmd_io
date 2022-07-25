@@ -76,6 +76,9 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         armature.display_type = 'STICK'
         armature_obj = bpy.data.objects.new(f"{armature_name}", armature)
         armature_obj.show_in_front = True
+        armature_obj.yakuza_file_root_data.is_valid_root = True
+        armature_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
+        armature_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
 
         collection.objects.link(armature_obj)
 
@@ -247,6 +250,11 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             if not isinstance(gmd_node, GMDBone):
                 continue
 
+            if gmd_node.parent:
+                sibling_order = gmd_node.parent.children.index(gmd_node)
+            else:
+                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
+
             # We find the bone we just created by name - we check elsewhere that the GMD doesn't have duplicate bone
             # names in skinned imports
             bone = armature.bones[gmd_node.name]
@@ -255,6 +263,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             bone.yakuza_hierarchy_node_data.imported_matrix = \
                 list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
             bone.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
+            bone.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
 
         return armature_obj
 

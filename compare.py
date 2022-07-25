@@ -64,15 +64,17 @@ def compare_single_node_pair(src: GMDNode, dst: GMDNode, error: ErrorReporter, c
 
 
 def recursive_compare_node_lists(src: List[GMDNode], dst: List[GMDNode], error: ErrorReporter, context: str):
-    sorted_src, sorted_dst = sort_src_dest_lists(src, dst, key=lambda n: n.name)
+    src_names_unordered = set(n.name for n in src)
+    dst_names_unordered = set(n.name for n in dst)
+    if src_names_unordered != dst_names_unordered:
+        error.fatal(f"{context} has different sets of children:\nsrc:\n\t{src_names_unordered}\ndst:{dst_names_unordered}\n\t")
 
-    src_names = [n.name for n in sorted_src]
-    dst_names = [n.name for n in sorted_dst]
-
+    src_names = [n.name for n in src]
+    dst_names = [n.name for n in dst]
     if src_names != dst_names:
-        error.fatal(f"{context} has different sets of children:\nsrc:\n\t{src_names}\ndst:{dst_names}\n\t")
+        error.fatal(f"{context} children in different order:\nsrc:\n\t{src_names}\ndst:{dst_names}\n\t")
 
-    for child_src, child_dst in zip(sorted_src, sorted_dst):
+    for child_src, child_dst in zip(src, dst):
         child_context = f"{context}{child_src.name} > "
         compare_single_node_pair(child_src, child_dst, error, child_context)
         recursive_compare_node_lists(child_src.children, child_dst.children, error, child_context)
