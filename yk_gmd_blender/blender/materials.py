@@ -28,6 +28,8 @@ class YakuzaPropertyGroup(PropertyGroup):
     # These flags are stored as a hex-string encoding a 64-bit unsigned number.
     # It can't be stored as an int because blender uses primitive C types for that, and would try to store it in 32 bits.
     shader_vertex_layout_flags: StringProperty(name="Vertex Layout Flags")
+    assume_skinned: BoolProperty(name="Assumes Skinned Context",
+                                 description="Was imported from a skinned mesh and requires bone-weight pairs")
     attribute_set_flags: StringProperty(name="Attribute Layout Flags")
 
     unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)
@@ -68,6 +70,7 @@ class YakuzaPropertyPanel(bpy.types.Panel):
         if ma.yakuza_data.inited:
             self.layout.prop(ma.yakuza_data, "shader_name")
             self.layout.prop(ma.yakuza_data, "shader_vertex_layout_flags")
+            self.layout.prop(ma.yakuza_data, "assume_skinned")
             self.layout.prop(ma.yakuza_data, "attribute_set_flags")
 
             self.layout.prop(ma.yakuza_data, "material_origin_type")
@@ -193,6 +196,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
     material.yakuza_data.shader_vertex_layout_flags = f"{attribute_set.shader.vertex_buffer_layout.packing_flags:016x}"
+    material.yakuza_data.assume_skinned = attribute_set.shader.assume_skinned
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
     material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
     material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 
@@ -11,7 +11,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 class GMDMesh:
     empty: bool
 
-    vertices_data: GMDVertexBuffer
+    vertices_data: GMDVertexBuffer_Generic
 
     triangle_indices: array.ArrayType
     triangle_strip_noreset_indices: array.ArrayType
@@ -22,12 +22,11 @@ class GMDMesh:
     def __post_init__(self):
         if not self.empty and len(self.vertices_data) < 3:
             raise TypeError(f"GMDMesh {self} has <3 vertices, at least 3 are required for a visible mesh")
-        if not hasattr(self, "relevant_bones") and self.vertices_data.bone_weights:
-            raise TypeError(f"GMDMesh {self} which is not skinned has vertices with bone weights")
 
 
 @dataclass(repr=False)
 class GMDSkinnedMesh(GMDMesh):
+    vertices_data: GMDVertexBuffer_Skinned
     relevant_bones: List[GMDBone]
 
     def __post_init__(self):

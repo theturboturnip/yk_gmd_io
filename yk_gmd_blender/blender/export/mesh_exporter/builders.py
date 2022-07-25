@@ -3,13 +3,13 @@ import collections
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Callable, Set, Union, Optional, Generic, TypeVar
 
-import bpy
 from bmesh.types import BMVert
 from mathutils import Vector, Matrix
 
+import bpy
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, BoneWeight4, \
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, BoneWeight4, \
     BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
@@ -193,13 +193,17 @@ class VertexFetcher:
             uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.uv_layers))])
         )
 
-    def extract_vertex(self, vertex_buffer: GMDVertexBuffer, i: int, per_loop_data: PerLoopVertexData):
+    def extract_vertex(self, vertex_buffer: GMDVertexBuffer_Generic, i: int, per_loop_data: PerLoopVertexData):
         if vertex_buffer.layout != self.vertex_layout:
             self.error.fatal(f"VertexFetcher told to fetch vertex for a buffer with a different layout")
 
         vertex_buffer.pos.append((self.transformation_position @ self.mesh.vertices[i].co).resized(4))
-        if vertex_buffer.bone_weights is not None:
-            vertex_buffer.bone_weights.append(self.boneweights_for(i))
+        # TODO refactor boneweights functionality - on an unskinned object extracting boneweights will be different
+        boneweights = self.boneweights_for(i)
+        if vertex_buffer.bone_data is not None:
+            vertex_buffer.bone_data.append(Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone)))
+        if vertex_buffer.weight_data is not None:
+            vertex_buffer.weight_data.append(Vector((boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight)))
         if vertex_buffer.normal is not None:
             vertex_buffer.normal.append(per_loop_data.normal)
         if vertex_buffer.tangent is not None:
@@ -218,7 +222,7 @@ class SubmeshBuilder:
     Contains at most 65535 vertices.
     """
 
-    vertices: GMDVertexBuffer
+    vertices: GMDVertexBuffer_Generic
     triangles: List[Tuple[int, int, int]]
     blender_vid_to_this_vid: Dict[Tuple[int, 'PerLoopData'], int]
     # This could use a Set with hashing, but Vectors aren't hashable by default and there's at most like 5 per list
@@ -226,7 +230,7 @@ class SubmeshBuilder:
     material_index: int
 
     def __init__(self, layout: GMDVertexBufferLayout, material_index: int):
-        self.vertices = GMDVertexBuffer.build_empty(layout, 0)
+        self.vertices = GMDVertexBuffer_Generic.build_empty(layout, 0)
         self.triangles = []
         self.blender_vid_to_this_vid = {}
         self.per_loop_data_for_blender_vid = collections.defaultdict(list)
@@ -276,7 +280,7 @@ class SubmeshBuilder:
 
     # Calls the function to add the vertex to the buffer and returns the index of the generated vertex.
     # This is anonymous, it will not be considered for per-loop duplication and will not be added to any vertex ID counts
-    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer_Generic], None]) -> int:
         idx = len(self.vertices)
         if idx > 65535:
             raise RuntimeError("Trying to create >65535 anonymous vertices")
@@ -375,9 +379,14 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         self.relevant_gmd_bones = relevant_gmd_bones
 
     # Override: when a vertex is added, adds it to weighted_bone_verts for all bones it references
-    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer], None]) -> int:
+    def add_anonymous_vertex(self, generate_vertex: Callable[[GMDVertexBuffer_Generic], None]) -> int:
         idx = super().add_anonymous_vertex(generate_vertex)
-        self.update_bone_vtx_lists(self.vertices.bone_weights[idx], idx)
+        # Register this vertex as a user of bone blah
+        for i_weight in range(4):
+            bone = int(self.vertices.bone_data[idx][i_weight])
+            weight = self.vertices.weight_data[idx][i_weight]
+            if weight != 0:
+                self.weighted_bone_verts[bone].append(idx)
         return idx
 
     # Override: when a triangle is added, adds it to weighted_bone_faces for all bones it references
@@ -395,9 +404,13 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
     def total_referenced_bones(self):
         return set(bone_id for bone_id, vs in self.weighted_bone_verts.items() if len(vs) > 0)
 
-    def triangle_referenced_bones(self, tri_idx):
-        return {weight.bone for vtx_idx in self.triangles[tri_idx] for weight in self.vertices.bone_weights[vtx_idx] if
-                weight.weight > 0}
+    def triangle_referenced_bones(self, tri_idx) -> Set[int]:
+        return {
+            int(self.vertices.bone_data[vtx_idx][i_weight])
+            for vtx_idx in self.triangles[tri_idx]
+            for i_weight in range(4)
+            if self.vertices.weight_data[vtx_idx][i_weight] > 0
+        }
 
     # This submesh builder was created with a set of relevant_bones
     # Remove references to any bones that are unused, and strip those bones out
@@ -414,28 +427,16 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
             bone_index_mapping[old_bone_idx] = new_bone_idx
 
         self.relevant_gmd_bones = new_relevant_bones
-
-        def remap_weight(bone_weight: BoneWeight):
-            # If the weight is 0 the bone is unused, so don't remap it.
-            # It's usually 0, which is a valid remappable value, but if we remap it then BoneWeight(bone=0, weight=0) != BoneWeight(bone=remapped 0, weight=0)
-            if bone_weight.weight == 0:
-                return bone_weight
-            else:
-                return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
-
         self.weighted_bone_verts = collections.defaultdict(list)
         for i in range(len(self.vertices)):
-            old_weights = self.vertices.bone_weights[i]
-            self.vertices.bone_weights[i] = (
-                remap_weight(old_weights[0]),
-                remap_weight(old_weights[1]),
-                remap_weight(old_weights[2]),
-                remap_weight(old_weights[3]),
-            )
+            for i_weight in range(4):
+                weight = self.vertices.weight_data[i][i_weight]
+                if weight != 0:
+                    old_bone = int(self.vertices.bone_data[i][i_weight])
+                    new_bone = bone_index_mapping[old_bone]
+                    self.vertices.bone_data[i][i_weight] = new_bone
+                    self.weighted_bone_verts[new_bone].append(i)
 
-            for weight in self.vertices.bone_weights[i]:
-                if weight.weight != 0:
-                    self.weighted_bone_verts[weight.bone].append(i)
         self.weighted_bone_faces = collections.defaultdict(list)
         for triangle_index in range(len(self.triangles)):
             for bone in self.triangle_referenced_bones(triangle_index):
@@ -447,7 +448,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         return GMDSkinnedMesh(
             empty=False,
             attribute_set=gmd_attribute_sets[self.material_index],
-            vertices_data=self.vertices,
+            vertices_data=self.vertices.move_to_skinned(),
             triangle_indices=triangle_list,
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,

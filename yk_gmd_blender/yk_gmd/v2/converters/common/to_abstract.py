@@ -12,7 +12,7 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDShader, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -54,12 +54,11 @@ class FileImportMode(Enum):
 
 
 class VertexImportMode(Enum):
-    SKINNED = 0
-    UNSKINNED = 1
+    IMPORT_VERTICES = 0
     # In this mode, vertex buffers will not be unpacked.
     # This is helpful in situations where the data is unnecessary,
     # such as imports for the sake of exporting-over
-    NO_VERTICES = 2
+    NO_VERTICES = 1
 
 
 class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
@@ -81,10 +80,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         self.vertex_import_mode = vertex_import_mode
         self.error = error_reporter
 
-        if self.vertex_import_mode == VertexImportMode.SKINNED and \
-            self.file_import_mode == FileImportMode.UNSKINNED:
-            self.error.fatal("Unskinned file cannot have Skinned vertices")
-
         self.file_data = file_data
 
     def make_abstract_scene(self) -> GMDScene:
@@ -95,14 +90,14 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                           vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
 
                                           profile: bool = False) \
-            -> List[GMDVertexBuffer]:
-        can_have_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
+            -> List[GMDVertexBuffer_Generic]:
+        assume_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
 
         abstract_vertex_buffers = []
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, can_have_skinned_vertex_buffers, self.error)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
@@ -110,7 +105,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
                 # Create an empty vertex buffer
-                abstract_vertex_buffer = GMDVertexBuffer.build_empty(abstract_layout, 0)
+                abstract_vertex_buffer = GMDVertexBuffer_Generic.build_empty(abstract_layout, 0)
             else:
                 # Actually unpack vertices
                 unpack_start = time.time()
@@ -136,7 +131,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
     def build_shaders_from_structs(self,
 
-                                   abstract_vertex_buffers: List[GMDVertexBuffer],
+                                   abstract_vertex_buffers: List[GMDVertexBuffer_Generic],
 
                                    mesh_arr: List[MeshStruct], attribute_arr: List[AttributeStruct],
                                    shader_name_arr: List[ChecksumStrStruct]) \
@@ -146,15 +141,23 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         for mesh_struct in mesh_arr:
             shader_name = shader_name_arr[attribute_arr[mesh_struct.attribute_index].shader_index].text
             vertex_layout = abstract_vertex_buffers[mesh_struct.vertex_buffer_index].layout
+            # If we're importing in a skinned context AND the vertex layout has both bones and weight,
+            # we assume the shader is skinned.
+            assume_skinned_from_mesh = vertex_layout.assume_skinned and \
+                                       bool(vertex_layout.bones_storage) and \
+                                       bool(vertex_layout.weights_storage)
 
             if shader_name not in shader_vertex_layout_map:
                 shader_vertex_layout_map[shader_name] = vertex_layout
                 shaders_map[shader_name] = GMDShader(
                     name=shader_name,
-                    vertex_buffer_layout=vertex_layout
+                    vertex_buffer_layout=vertex_layout,
+                    assume_skinned=assume_skinned_from_mesh
                 )
             elif shader_vertex_layout_map[shader_name] != vertex_layout:
                 self.error.fatal(f"Shader {shader_name} was found to be mapped to two different vertex layouts")
+                # assume_skinned_from_mesh = entirely vertex layout dependent, so it must be the same
+                # if the vertex layout is the same
 
         # Return shaders in the same order as the shader_name_arr
         return [shaders_map[name.text] for name in shader_name_arr]
@@ -284,7 +287,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def build_meshes_from_structs(self,
 
                                   abstract_attributes: List[GMDAttributeSet],
-                                  abstract_vertex_buffers: List[GMDVertexBuffer],
+                                  abstract_vertex_buffers: List[GMDVertexBuffer_Generic],
                                   abstract_nodes_ordered: List[GMDNode],
 
                                   mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
@@ -389,6 +392,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                 self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
 
+            vertex_buffer = abstract_vertex_buffers[mesh_struct.vertex_buffer_index]
+            vertex_slice = slice(vertex_start, vertex_end)
+
             relevant_bone_indices = read_bytestring(mesh_struct.matrixlist_offset, mesh_struct.matrixlist_length)
             if relevant_bone_indices:
                 relevant_bones = [abstract_nodes_ordered[bone_idx] for bone_idx in relevant_bone_indices]
@@ -404,7 +410,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     relevant_bones=cast(List[GMDBone], relevant_bones),
 
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
+                    vertices_data=vertex_buffer.extract_as_skinned(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
@@ -416,7 +422,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 meshes.append(GMDMesh(
                     empty=(self.vertex_import_mode == VertexImportMode.NO_VERTICES),
 
-                    vertices_data=abstract_vertex_buffers[mesh_struct.vertex_buffer_index][vertex_start:vertex_end],
+                    vertices_data=vertex_buffer.extract_as_generic(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,

@@ -8,6 +8,9 @@ class ErrorReporter(abc.ABC):
     def recoverable(self, msg: str):
         raise NotImplementedError()
 
+    def fatal_exception(self, ex: Exception) -> NoReturn:
+        raise NotImplementedError()
+
     def fatal(self, msg: str) -> NoReturn:
         raise NotImplementedError()
 
@@ -26,6 +29,9 @@ class StrictErrorReporter(ErrorReporter):
 
     def recoverable(self, msg: str):
         raise GMDImportExportError(msg)
+
+    def fatal_exception(self, ex: Exception) -> NoReturn:
+        raise ex
 
     def fatal(self, msg: str) -> NoReturn:
         raise GMDImportExportError(msg)
@@ -50,6 +56,9 @@ class LenientErrorReporter(ErrorReporter):
 
     def recoverable(self, msg: str):
         print(f"[YKGMD] [RECOV] {msg}")
+
+    def fatal_exception(self, ex: Exception) -> NoReturn:
+        raise ex
 
     def fatal(self, msg: str) -> NoReturn:
         raise GMDImportExportError(msg)
