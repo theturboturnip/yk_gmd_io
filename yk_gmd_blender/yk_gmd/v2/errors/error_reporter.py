@@ -64,7 +64,7 @@ class LenientErrorReporter(ErrorReporter):
         raise GMDImportExportError(msg)
 
     def info(self, msg: str):
-        print(f"[YKGMD] [INFO ] msg")
+        print(f"[YKGMD] [INFO ] {msg}")
 
     def debug(self, category: str, msg: str) -> bool:
         if category in self.allowed_categories or "ALL" in self.allowed_categories:
