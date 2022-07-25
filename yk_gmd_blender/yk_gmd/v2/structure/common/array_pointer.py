@@ -6,6 +6,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.sized_pointer import SizedPointer
 
 T = TypeVar('T')
 
+
 @dataclass
 class ArrayPointerStruct(Generic[T]):
     sized_ptr: SizedPointerStruct
@@ -16,12 +17,14 @@ class ArrayPointerStruct(Generic[T]):
     @property
     def ptr(self):
         return self.sized_ptr.ptr
+
     @property
     def count(self):
         return self.sized_ptr.size
 
     def __repr__(self):
         return f"{self.__class__.__name__}(ptr=0x{self.ptr:x}, cnt={self.count})"
+
 
 ArrayPointerStruct_Unpack = StructureUnpacker(
     ArrayPointerStruct,

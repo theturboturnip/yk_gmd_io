@@ -8,7 +8,7 @@ from mathutils import Vector, Quaternion, Matrix
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
-@dataclass(init=False,repr=False)
+@dataclass(init=False, repr=False)
 class GMDNode:
     name: str
     node_type: NodeType
@@ -61,5 +61,8 @@ class GMDNode:
 
     def __repr__(self):
         return str(self)
+
     def __str__(self):
-        return f"{self.__class__.__name__}(name={self.name}, pos={self.pos}, rot={self.rot}, scale={self.scale}, parent={self.parent.name if self.parent else None}, children={[c.name for c in self.children]})"
+        return f"{self.__class__.__name__}(name={self.name}, pos={self.pos}, rot={self.rot}, " \
+               f"scale={self.scale}, parent={self.parent.name if self.parent else None}, " \
+               f"children={[c.name for c in self.children]})"

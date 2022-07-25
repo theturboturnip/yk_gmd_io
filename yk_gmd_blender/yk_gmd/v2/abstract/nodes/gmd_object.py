@@ -45,7 +45,8 @@ class GMDSkinnedObject(GMDNode):
                  world_pos: Vector, anim_axis: Vector,
                  parent: Optional[GMDNode],
                  flags: List[int]):
-        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, matrix=None, parent=parent, flags=flags)
+        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, matrix=None, parent=parent,
+                         flags=flags)
         self.mesh_list = []
 
         if self.node_type != NodeType.SkinnedMesh:

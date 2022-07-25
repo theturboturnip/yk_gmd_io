@@ -25,7 +25,6 @@ class BoundsDataStruct_YK1:
     padding: float = 0.0
 
 
-
 BoundsData_YK1_Unpack = StructureUnpacker(
     BoundsDataStruct_YK1,
     fields=[

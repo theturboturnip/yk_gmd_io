@@ -57,9 +57,6 @@ class RearrangedData:
     mesh_matrixlist: List[Tuple]
     # build with build_index_mapping(pool, key=tuple)
     mesh_matrixlist_index: Dict[Tuple, int]
-    # packed_mesh_matrixlist: bytes
-    # packed_mesh_matrixlist_index: Dict[Tuple, int]
-    pass
 
 
 T = TypeVar('T')
@@ -81,8 +78,8 @@ def build_pools(strs: Iterable[str]) -> Tuple[List[ChecksumStrStruct], Dict[str,
     return pool, build_index_mapping(pool, key=lambda css: css.text)
 
 
-def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16bit: bool, big_endian: bool) -> Tuple[
-    bytes, Dict[Tuple, int]]:
+def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]],
+                             pack_as_16bit: bool, big_endian: bool) -> Tuple[bytes, Dict[Tuple, int]]:
     matrixlist_bytearray = bytearray()
     matrixlist_index = {}
     for matrixlist in mesh_matrixlist:
@@ -103,38 +100,12 @@ def pack_mesh_matrix_strings(mesh_matrixlist: List[Tuple[int, ...]], pack_as_16b
 
 def generate_vertex_layout_packing_flags(layout: GMDVertexBufferLayout) -> int:
     return layout.packing_flags
-    # vertex_packing_flags = 0
-    #
-    # def pack_vector_type(vec_storage: Optional[VecStorage]) -> int:
-    #
-    #
-    # # pos_count = extract_bits(0, 3)
-    # # pos_precision = extract_bits(3, 1)
-    # # if pos_precision == 1:
-    # #     pos_storage = VecStorage.Vec3Half if pos_count == 3 else VecStorage.Vec4Half
-    # # else:
-    # #     pos_storage = VecStorage.Vec3Full if pos_count == 3 else VecStorage.Vec4Full
-    # if layout.pos_storage in [VecStorage.Vec3Full, VecStorage.Vec3Half]:
-    #     vertex_packing_flags |= 3
-    # else:
-    #     vertex_packing_flags |= 4
-    # if layout.pos_storage in [VecStorage.Vec3Half, VecStorage.Vec4Half]:
-    #     vertex_packing_flags |= (1 << 3)
 
 
 def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> RearrangedData:
     # Note - flags
     # many bones flag is important, but so are the others - look into which ones are supposed to be there
     # is relative-indexing set in a flag?
-
-    # ordered_nodes = []
-    # node_id_to_node_index = {}
-    # ordered_matrices = []
-    # node_id_to_matrix_index = {}
-    # root_node_indices = []
-    #
-    # skinned_objects = list(scene.skinned_objects.depth_first_iterate())
-    # unskinned_objects = list(scene.unskinned_objects.depth_first_iterate())
 
     ordered_nodes = []
     ordered_matrices = []
@@ -189,7 +160,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             error.fatal(f"Skinned Object {gmd_node.name} has no meshes, cannot export")
 
         if isinstance(gmd_node, GMDUnskinnedObject) and not gmd_node.children and not gmd_node.mesh_list:
-            error.info(f"Unskinned object {gmd_node.name} has no meshes and no children, expected a child or mesh to be present.")
+            error.info(f"Unskinned object {gmd_node.name} has no meshes and no children, "
+                       f"expected a child or mesh to be present.")
 
         # if node is bone or unskinned, emit a matrix
         if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
@@ -208,7 +180,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         node_names.add(gmd_node.name)
 
     # Put unskinned objects before skinned ones
-    # Skinned objects don't have matrices, so don't put them before things that do, because it's a sequential id and it could go wrong.
+    # Skinned objects don't have matrices, so don't put them before things that do,
+    # because it's a sequential id and it could go wrong.
     ordered_objects = ordered_unskinned_objects + ordered_skinned_objects
     node_id_to_object_index = build_index_mapping(ordered_objects, key=id)
 
@@ -255,7 +228,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     # TODO - sorting order is required for Dragon Engine, but not other engines?
     # TODO - with this setup K2 kiryu has unused shader names?
     # YK2 kiryu sort order is by prefix (sd_o*, sd_d*, sd_c*, sd_b*) and then some unknown ordering within those groups.
-    # This will achieve the requested ordering for prefixes, but not for other things. However, we only care about ordering transparent shaders together at the end.
+    # This will achieve the requested ordering for prefixes, but not for other things.
+    # However, we only care about ordering transparent shaders together at the end.
     def compare_attr_sets(a1: GMDAttributeSet, a2: GMDAttributeSet):
         a1_prefix = re.match(r'^[a-z]+_[a-z]', a1.shader.name).group(0)
         a2_prefix = re.match(r'^[a-z]+_[a-z]', a2.shader.name).group(0)
@@ -276,7 +250,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
                 return 0
 
     # Order the attribute sets, and get a nice order for shaders too
-    expected_attribute_set_order = sorted({id(m.attribute_set):m.attribute_set for m in meshes}.values(), key=functools.cmp_to_key(compare_attr_sets))
+    expected_attribute_set_order = sorted({id(m.attribute_set): m.attribute_set for m in meshes}.values(),
+                                          key=functools.cmp_to_key(compare_attr_sets))
     shader_names = [a.shader.name for a in expected_attribute_set_order]
     # remove dupes
     shader_names = list(dict.fromkeys(shader_names))
@@ -297,7 +272,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         # emit buffer_layout, meshes_for_buffer
         vertex_layout_groups.append((layout, flag, meshes_for_buffer))
 
-    #ordered_meshes = sum([ms for _, _, ms in vertex_layout_groups], [])
+    # ordered_meshes = sum([ms for _, _, ms in vertex_layout_groups], [])
     ordered_meshes = meshes[:]
     ordered_meshes.sort(key=lambda m: expected_attribute_set_order.index(m.attribute_set))
     mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
@@ -322,10 +297,6 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
     mesh_matrixlist = list(mesh_matrixlist_set)
     mesh_matrixlist_index = build_index_mapping(mesh_matrixlist)
-    # mesh_id_to_matrix_string_index = {
-    #     mesh_id:mesh_matrixlist.index(matrixlist)
-    #     for mesh_id, matrixlist in mesh_id_to_matrixlist.items()
-    # }
 
     if set(mesh_id_to_index.keys()) != set(mesh_id_to_object_index.keys()):
         error.fatal("Somehow the mapping of mesh -> mesh index maps different meshes than the mesh -> object index")
@@ -349,7 +320,6 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     if ordered_attribute_sets != expected_attribute_set_order:
         error.recoverable(f"Export Error - Attribute Sets were reordered from the intended order!")
 
-
     # make index mapping for ordered_materials
     attribute_set_id_to_index = build_index_mapping(ordered_attribute_sets, key=id)
 
@@ -361,24 +331,6 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             ordered_materials.append(attribute_set.material)
             material_ids.add(id(attribute_set.material))
     material_id_to_index = build_index_mapping(ordered_materials, key=id)
-
-    # TODO: Build drawlists?
-
-    # Build matrixlists
-    # mesh_matrix_index_list_set = set()
-    # mesh_id_to_matrixlist: Dict[int, List[int]] = {}
-    # for mesh in ordered_meshes:
-    #     if not isinstance(mesh, GMDSkinnedMesh):
-    #         continue
-    #
-    #     matrix_list = [node_id_to_node_index[id(bone)] for bone in mesh.relevant_bones]
-    #     mesh_matrix_index_list_set.add(tuple(matrix_list))
-    #     mesh_id_to_matrixlist[id(mesh)] = matrix_list
-    # mesh_matrixlist = [list(s) for s in mesh_matrix_index_list_set]
-    # mesh_matrixlist_index = build_index_mapping(mesh_matrixlist, key=tuple)
-
-    # now all arrangements should be made - next is to port into the respective file formats
-    # this is for tomorrow tho
 
     return RearrangedData(
         ordered_nodes=ordered_nodes,

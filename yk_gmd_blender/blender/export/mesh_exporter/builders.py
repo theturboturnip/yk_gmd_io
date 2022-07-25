@@ -36,7 +36,7 @@ class VertexFetcher:
     layers: AttribSetLayers_bpy
     error: ErrorReporter
 
-    def __init__(self,  # bm_vertices: List[BMVert],
+    def __init__(self,
                  mesh_name: str,
                  vertex_layout: GMDVertexBufferLayout,
                  transformation_position: Matrix,
@@ -71,7 +71,8 @@ class VertexFetcher:
         if self.layers.tangent_layer:
             tangent = (self.layers.tangent_layer.data[loop.loops[tri_index]].color * 2) - 1
         else:
-            tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent)).resized(4)
+            tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent))
+            tangent = tangent.resized(4)
             if self.layers.tangent_w_layer:
                 tangent.w = (self.layers.tangent_w_layer.data[loop.loops[tri_index]].color[0] * 2) - 1
             else:
@@ -162,9 +163,11 @@ class VertexFetcher:
         # TODO refactor boneweights functionality - on an unskinned object extracting boneweights will be different
         boneweights = self.boneweights_for(i)
         if vertex_buffer.bone_data is not None:
-            vertex_buffer.bone_data.append(Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone)))
+            vertex_buffer.bone_data.append(
+                Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone)))
         if vertex_buffer.weight_data is not None:
-            vertex_buffer.weight_data.append(Vector((boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight)))
+            vertex_buffer.weight_data.append(
+                Vector((boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight)))
         if vertex_buffer.normal is not None:
             vertex_buffer.normal.append(per_loop_data.normal)
         if vertex_buffer.tangent is not None:
@@ -200,7 +203,8 @@ class SubmeshBuilder:
     # Try to add the three vertices needed for a triangle, and add a triangle with those indices
     # If can't add all of them (e.g. pushes indices over 65535), returns False, doesn't add any vertices, doesn't add a new triangle
     # Otherwise adds all required vertices and new triangles
-    def add_triangle_vertices(self, blender_vids: Tuple[int,int,int], vertex_fetcher: 'VertexFetcher', blender_loop_tri: 'bpy.types.MeshLoopTriangle') -> bool:
+    def add_triangle_vertices(self, blender_vids: Tuple[int, int, int], vertex_fetcher: 'VertexFetcher',
+                              blender_loop_tri: 'bpy.types.MeshLoopTriangle') -> bool:
         # Find the overall blender indices of each vertex
         # (including the per-loop-data, because vertices can differ between different 'loops' in Blender)
         overall_idxs = [
@@ -468,6 +472,8 @@ class SkinnedSubmeshBuilderSubset:
 
 
 TSubmeshBuilder = TypeVar('TSubmeshBuilder', SubmeshBuilder, SkinnedSubmeshBuilder)
+
+
 class MeshBuilder(Generic[TSubmeshBuilder]):
     """
     Class that holds a mapping of (attribute set index -> current builder for that index),
@@ -493,7 +499,7 @@ class MeshBuilder(Generic[TSubmeshBuilder]):
     # If that function returns False, that builder is removed from current_builders and pushed to filled_builders
     def add_triangle_vertices(self,
                               attr_set_i: int,
-                              blender_vids: Tuple[int,int,int],
+                              blender_vids: Tuple[int, int, int],
                               vertex_fetcher: 'VertexFetcher',
                               blender_loop_tri: 'bpy.types.MeshLoopTriangle'):
         # If we haven't added this builder yet, do so
@@ -502,7 +508,8 @@ class MeshBuilder(Generic[TSubmeshBuilder]):
         # Now, a builder definitely exists.
         # Try adding the new triangle to the builder
         if not self.current_builders[attr_set_i].add_triangle_vertices(blender_vids, vertex_fetcher, blender_loop_tri):
-            self.error.debug("MESH", f"Mesh {self.mesh_name} filled out the SubmeshBuilder for material idx {attr_set_i}, creating a new submesh...")
+            self.error.debug("MESH",
+                             f"Mesh {self.mesh_name} filled out the SubmeshBuilder for material idx {attr_set_i}, creating a new submesh...")
             # Couldn't add more triangles to the current builder
             # => move the old builder into self.filled_builders, and make a new builder
             self.filled_builders.append(self.current_builders[attr_set_i])
@@ -511,7 +518,8 @@ class MeshBuilder(Generic[TSubmeshBuilder]):
             # This new builder must not run out of space, if it does then hard crash
             if not self.current_builders[attr_set_i].add_triangle_vertices(blender_vids, vertex_fetcher,
                                                                            blender_loop_tri):
-                self.error.fatal(f"Brand new {type(self.current_builders[attr_set_i]).__name__} couldn't add new triangle")
+                self.error.fatal(
+                    f"Brand new {type(self.current_builders[attr_set_i]).__name__} couldn't add new triangle")
 
     # Internal function for creating a new builder in self.current_builders
     def create_builder_for(self, attr_set_i: int):

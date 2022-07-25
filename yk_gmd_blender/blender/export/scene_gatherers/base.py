@@ -47,7 +47,7 @@ def name_matches_expected(name, expected):
     return True
 
 
-def remove_blender_duplicate(name:str) -> str:
+def remove_blender_duplicate(name: str) -> str:
     return re.sub(r'\.\d\d\d', "", name)
 
 
@@ -107,7 +107,8 @@ class BaseGMDSceneGatherer(abc.ABC):
                 selected_collection = collection
                 break
         if not selected_collection:
-            self.error.fatal(f"Can't figure out which collection the selected object is a part of! This should never happen")
+            self.error.fatal(
+                f"Can't figure out which collection the selected object is a part of! This should never happen")
 
         if not name_matches_expected(selected_collection.name, self.name):
             self.error.recoverable(f"Collection name {selected_collection.name} does not map to expected {self.name}!\n"
@@ -118,8 +119,9 @@ class BaseGMDSceneGatherer(abc.ABC):
                 f"Collection {selected_collection.name} has children collections, which will be ignored.")
 
         if not selected_object.yakuza_file_root_data.is_valid_root:
-            self.error.info(f"Yakuza File Root Data not checked for {selected_object.name} - assuming this is a legacy file. "
-                            f"In the future this might become an error.")
+            self.error.info(
+                f"Yakuza File Root Data not checked for {selected_object.name} - assuming this is a legacy file. "
+                f"In the future this might become an error.")
 
         return selected_object, selected_collection
 
@@ -136,57 +138,72 @@ class BaseGMDSceneGatherer(abc.ABC):
             self.flags = self.original_scene.flags
             self.error.info(f"Taking flags from target file")
 
-    def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material, referencing_object: bpy.types.Object) -> GMDAttributeSet:
+    def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material,
+                                              referencing_object: bpy.types.Object) -> GMDAttributeSet:
         if material.name in self.material_map:
             return self.material_map[material.name]
 
         if not material.yakuza_data.inited:
-            self.error.fatal(f"Material {material.name} on object {referencing_object.name} does not have any Yakuza Properties, and cannot be exported.\n"
-                             f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
+            self.error.fatal(
+                f"Material {material.name} on object {referencing_object.name} does not have any Yakuza Properties, "
+                f"and cannot be exported.\n"
+                f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
         if not material.use_nodes:
             self.error.fatal(
-                f"Material {material.name} on object {referencing_object.name} does not use nodes, and cannot be exported.\n"
+                f"Material {material.name} on object {referencing_object.name} does not use nodes, "
+                f"and cannot be exported.\n"
                 f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
 
-        yakuza_shader_nodes = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and node.node_tree.name == YAKUZA_SHADER_NODE_GROUP]
+        yakuza_shader_nodes = [node for node in material.node_tree.nodes if
+                               node.bl_idname == "ShaderNodeGroup" and node.node_tree.name == YAKUZA_SHADER_NODE_GROUP]
         self.error.debug("MATERIAL", str([node.name for node in material.node_tree.nodes]))
         self.error.debug("MATERIAL", str([node.bl_idname for node in material.node_tree.nodes]))
         self.error.debug("MATERIAL", str([node.bl_label for node in material.node_tree.nodes]))
         if not yakuza_shader_nodes:
             self.error.fatal(
-                f"Material {material.name} on object {referencing_object.name} does not have a Yakuza Shader node, and cannot be exported.\n"
+                f"Material {material.name} on object {referencing_object.name} does not have a Yakuza Shader node, "
+                f"and cannot be exported.\n"
                 f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
         elif len(yakuza_shader_nodes) > 1:
             self.error.fatal(
-                f"Material {material.name} on object {referencing_object.name} has multiple Yakuza Shader nodes, and cannot be exported.\n"
+                f"Material {material.name} on object {referencing_object.name} has multiple Yakuza Shader nodes, "
+                f"and cannot be exported.\n"
                 f"A Yakuza Material must have valid Yakuza Properties, and must have exactly one Yakuza Shader node.")
         yakuza_shader_node = cast(ShaderNodeGroup, yakuza_shader_nodes[0])
 
         yakuza_data: YakuzaPropertyGroup = material.yakuza_data
         vertex_layout_flags = int(yakuza_data.shader_vertex_layout_flags, base=16)
-        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, True, self.error)
+        vertex_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(vertex_layout_flags, True,
+                                                                                    self.error)
 
         shader = GMDShader(
             name=yakuza_data.shader_name,
             vertex_buffer_layout=vertex_layout,
             assume_skinned=yakuza_data.assume_skinned
         )
+
         def get_texture(texture_name: str) -> Optional[str]:
             input = yakuza_shader_node.inputs[texture_name]
             if not input.links:
                 return None
             if not isinstance(input.links[0].from_node, ShaderNodeTexImage):
-                self.error.fatal(f"Material {material.name} on object {referencing_object.name} has an input {texture_name} which is linked to a {type(input.links[0])} node.\n"
-                                 f"All the texture inputs on a Yakuza Shader node should either be linked to an Image Texture node or not linked at all.")
+                self.error.fatal(
+                    f"Material {material.name} on object {referencing_object.name} has an input {texture_name} "
+                    f"which is linked to a {type(input.links[0])} node.\n"
+                    f"All the texture inputs on a Yakuza Shader node should either be linked to an Image Texture node or not linked at all.")
             teximage_node: ShaderNodeTexImage = input.links[0].from_node
             import os
             image_name, ext = os.path.splitext(teximage_node.image.name)
             if ext not in ['', '.dds']:
-                self.error.fatal(f"Input {texture_name} in material {material.name} on object {referencing_object.name} is '{teximage_node.image.name}', which is not a DDS file.\n"
-                                 f"Yakuza cannot handle these. Please change it to be a .dds file.")
+                self.error.fatal(
+                    f"Input {texture_name} in material {material.name} on object {referencing_object.name} "
+                    f"is '{teximage_node.image.name}', which is not a DDS file.\n"
+                    f"Yakuza cannot handle these. Please change it to be a .dds file.")
 
             if not image_name:
-                self.error.fatal(f"Material {material.name}.{texture_name} filepath {teximage_node.image.filepath} couldn't be parsed correctly.")
+                self.error.fatal(
+                    f"Material {material.name}.{texture_name} filepath {teximage_node.image.filepath} "
+                    f"couldn't be parsed correctly.")
 
             return image_name
 
@@ -241,19 +258,21 @@ class SkinnedBoneMatrixOrigin(Enum):
     # Take the bone matrices from the per-bone Yakuza Hierarchy Node Data
     # (the entire skeleton must have been imported from another GMD!)
     FromCurrentSkeleton = 2
-    
+
 
 class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
     bone_matrix_origin: SkinnedBoneMatrixOrigin
     bone_name_map: Dict[str, GMDBone]
 
-    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig, bone_matrix_origin: SkinnedBoneMatrixOrigin, error: ErrorReporter):
+    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig,
+                 bone_matrix_origin: SkinnedBoneMatrixOrigin, error: ErrorReporter):
         super().__init__(filepath, original_scene, config, error)
 
         self.bone_matrix_origin = bone_matrix_origin
         self.bone_name_map = {}
 
-    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Object, bpy.types.Collection]:
+    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[
+        bpy.types.Object, bpy.types.Collection]:
         # Check we're selecting a correct armature
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
         selected_armature, selected_collection = super().detect_export_collection(context)
@@ -313,7 +332,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 self.error.fatal(f"Mesh {object.name} has an armature modifier, but it isn't parented to the armature.")
 
             if object.vertex_groups:
-                # This is recoverable, because sometimes if you're converting a skinned -> unskinned (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
+                # This is recoverable, because sometimes if you're converting a skinned -> unskinned
+                # (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
                 self.error.info(
                     f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
 
@@ -345,7 +365,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                     f"Mesh {object.name} is a child of the skeleton, but it doesn't have any vertex groups.")
             elif object.vertex_groups and not armature_modifiers:
                 self.error.info(
-                    f"Mesh {object.name} is a child of the skeleton, but it doesn't have an armature modifier!\nIt will still be exported")
+                    f"Mesh {object.name} is a child of the skeleton, but it doesn't have an armature modifier!\n"
+                    f"It will still be exported")
                 # TODO - only do this if .lenient?
                 root_skinned_objects.append(object)
 
@@ -388,8 +409,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
             if use_previously_imported_matrix:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
-                    self.error.fatal(f"Blender bone {blender_bone.name} was not imported from a GMD, so I can't reuse an imported matrix."
-                                     f"Try rerunning with Bone Matrices = Calculated")
+                    self.error.fatal(
+                        f"Blender bone {blender_bone.name} was not imported from a GMD, so I can't reuse an imported matrix."
+                        f"Try rerunning with Bone Matrices = Calculated")
                 bone_matrix = blender_bone.yakuza_hierarchy_node_data.imported_matrix
                 self.error.info(str(bone_matrix))
             else:
@@ -397,8 +419,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 # TODO - calculate this better
                 bone_matrix = Matrix.Translation(transform_position_gmd_to_blender(blender_bone.head_local))
                 bone_matrix.resize_4x4()
-            
-            gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(*blender_bone.matrix_local.decompose())
+
+            gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(
+                *blender_bone.matrix_local.decompose())
             # TODO - try to extract this mathematically instead of copying the one from the last import
             anim_axis = blender_bone.yakuza_hierarchy_node_data.anim_axis
             flags = json.loads(blender_bone.yakuza_hierarchy_node_data.flags_json)
@@ -410,8 +433,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 parent=parent_gmd_bone,
 
                 pos=gmd_bone_pos,
-                rot=Quaternion(), # TODO - Is there a better way to handle this? Does the game react to this at all?
-                scale=Vector((1,1,1)),
+                rot=Quaternion(),  # TODO - Is there a better way to handle this? Does the game react to this at all?
+                scale=Vector((1, 1, 1)),
 
                 world_pos=Vector((gmd_bone_pos.x, gmd_bone_pos.y, gmd_bone_pos.z, 1)),
                 anim_axis=anim_axis,
@@ -438,17 +461,20 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
 
         def check_bone_sets_match(parent_name: str, blender_bones: List[bpy.types.Bone], gmd_bones: List[GMDBone]):
-            blender_bone_dict = {x.name:x for x in blender_bones}
-            gmd_bone_dict = {x.name:x for x in gmd_bones}
+            blender_bone_dict = {x.name: x for x in blender_bones}
+            gmd_bone_dict = {x.name: x for x in gmd_bones}
             if blender_bone_dict.keys() != gmd_bone_dict.keys():
                 blender_bone_names = set(blender_bone_dict.keys())
                 gmd_bone_names = set(gmd_bone_dict.keys())
                 missing_names = gmd_bone_names - blender_bone_names
                 unexpected_names = blender_bone_names - gmd_bone_names
-                self.error.fatal(f"Bones under {parent_name} didn't match between the file and the Blender object. Missing {missing_names}, and found unexpected names {unexpected_names}")
+                self.error.fatal(
+                    f"Bones under {parent_name} didn't match between the file and the Blender object. "
+                    f"Missing {missing_names}, and found unexpected names {unexpected_names}")
             for (name, gmd_bone) in gmd_bone_dict.items():
                 blender_bone = blender_bone_dict[name]
-                check_bone_sets_match(name, blender_bone.children, [b for b in gmd_bone.children if isinstance(b, GMDBone)])
+                check_bone_sets_match(name, blender_bone.children,
+                                      [b for b in gmd_bone.children if isinstance(b, GMDBone)])
 
         check_bone_sets_match("root",
                               [b for b in armature_data.bones if not b.parent],
@@ -496,12 +522,12 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             name=remove_blender_duplicate(object.name),
             node_type=NodeType.SkinnedMesh,
 
-            pos=Vector((0,0,0)),
+            pos=Vector((0, 0, 0)),
             rot=Quaternion(),
-            scale=Vector((1,1,1)),
+            scale=Vector((1, 1, 1)),
             parent=None,
 
-            world_pos=Vector((0,0,0,1)),
+            world_pos=Vector((0, 0, 0, 1)),
             anim_axis=object.yakuza_hierarchy_node_data.anim_axis,
             flags=flags
         )
@@ -513,7 +539,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         else:
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
-            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
+            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for
+                              material_slot in object.material_slots]
             assumed_unskinned_attr_sets = [
                 attr.shader.name
                 for attr in attribute_sets
@@ -529,18 +556,21 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             ]
             if len(impossible_unskinned_attr_sets) > 0:
                 self.error.fatal(
-                    f"Object {object.name} uses shaders {impossible_unskinned_attr_sets} which require it to be not-skinned.\n"
+                    f"Object {object.name} uses shaders {impossible_unskinned_attr_sets} "
+                    f"which require it to be not-skinned.\n"
                     f"Try unparenting it from the skeleton, or changing to a different material."
                 )
             if len(assumed_unskinned_attr_sets) > 0:
                 self.error.fatal(
-                    f"Object {object.name} uses shaders {assumed_unskinned_attr_sets} which *may* require it to be not-skinned.\n"
+                    f"Object {object.name} uses shaders {assumed_unskinned_attr_sets} "
+                    f"which *may* require it to be not-skinned.\n"
                     f"Try unparenting it from the skeleton, or changing to a different material.\n"
                     f"If you're absolutely sure that this material works for skinned meshes,"
                     f"check the 'Assume Skinned' box in the Yakuza Material Properties."
                 )
-            #bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
-            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32, self.error)
+            # bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
+            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32,
+                                                           self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
 
@@ -582,12 +612,16 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
             armature_modifiers = [m for m in object.modifiers if m.type == "ARMATURE"]
             if armature_modifiers:
-                self.error.recoverable(f"Mesh {object.name} has an armature modifier, but it isn't parented to an armature. It may be exported incorrectly.")
+                self.error.recoverable(
+                    f"Mesh {object.name} has an armature modifier, but it isn't parented to an armature. "
+                    f"It may be exported incorrectly.")
 
             if object.type == "MESH" and object.vertex_groups:
-                # This is recoverable, because sometimes if you're converting a skinned -> unskinned (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
+                # This is recoverable, because sometimes if you're converting a skinned -> unskinned
+                # (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
                 self.error.info(
-                    f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
+                    f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. "
+                    f"Exporting as an unskinned mesh.")
 
         # Export each child of the scene root
         # Export unskinned object roots in order
@@ -604,12 +638,14 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
                     self.error.debug("GATHER", f"{node.name} vs original scene")
                     self.error.debug("GATHER",
-                                     f"Old Matrix\n{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
+                                     f"Old Matrix\n"
+                                     f"{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
                     self.error.debug("GATHER", f"New Matrix\n{node.matrix}")
                     self.error.debug("GATHER", "")
         pass
 
-    def export_unskinned_object(self, context: bpy.types.Context, collection: bpy.types.Collection, object: bpy.types.Object, parent: Optional[GMDNode]):
+    def export_unskinned_object(self, context: bpy.types.Context, collection: bpy.types.Collection,
+                                object: bpy.types.Object, parent: Optional[GMDNode]):
         """
         Export a Blender object into a GMDUnskinnedObject
         :param object: TODO
@@ -617,7 +653,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         """
 
         # pos, rot, scale are local
-        adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location, object.rotation_quaternion, object.scale)
+        adjusted_pos, adjusted_rot, adjusted_scale = transform_blender_to_gmd(object.location,
+                                                                              object.rotation_quaternion, object.scale)
         inv_t = Matrix.Translation(-adjusted_pos)
         inv_r = adjusted_rot.inverted().to_matrix().to_4x4()
         inv_s = Matrix.Diagonal(Vector((1 / adjusted_scale.x, 1 / adjusted_scale.y, 1 / adjusted_scale.z))).to_4x4()
@@ -654,10 +691,12 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         elif object.type == "MESH":
             if not object.material_slots:
                 self.error.fatal(f"Object {object.name} has no materials")
-            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for material_slot in object.material_slots]
+            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for
+                              material_slot in object.material_slots]
             if any(attr.shader.assume_skinned for attr in attribute_sets):
                 self.error.fatal(f"Object {object.name} uses a material which *may* require it to be skinned.\n"
-                                 f"Try parenting it to the skeleton using Ctrl P > Empty Weights, or changing to a different material.\n"
+                                 f"Try parenting it to the skeleton using Ctrl P > Empty Weights, "
+                                 f"or changing to a different material.\n"
                                  f"If you're absolutely sure that this material works for unskinned meshes,"
                                  f"uncheck the 'Assume Skinned' box in the Yakuza Material Properties.")
             gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)

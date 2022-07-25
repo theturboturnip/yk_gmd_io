@@ -5,7 +5,7 @@ import bmesh
 from mathutils import Matrix
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, ==, GMDVertexBuffer_Skinned
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, GMDVertexBuffer_Skinned
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 
@@ -91,8 +91,8 @@ def gmd_meshes_to_bmesh(
             for bone_weight in buf.bone_weights[i]:
                 if bone_weight.weight > 0:
                     if bone_weight.bone >= len(relevant_bones):
-                        error.debug("BONES",
-                            f"bone out of bounds - bone {bone_weight.bone} in {[b.name for b in relevant_bones]}")
+                        error.debug("BONES", f"bone out of bounds - "
+                                             f"bone {bone_weight.bone} in {[b.name for b in relevant_bones]}")
                         error.debug("BONES", f"submesh len = {len(buf)}")
                     vertex_group_index = vertex_group_indices[relevant_bones[bone_weight.bone].name]
                     vert[deform][vertex_group_index] = bone_weight.weight
@@ -217,7 +217,8 @@ def gmd_meshes_to_bmesh(
                     tangent = gmd_mesh.vertices_data.tangent[v_i]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
-                    loop[layers.tangent_layer] = ((tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3  ] + 1) / 2)
+                    loop[layers.tangent_layer] = (
+                    (tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3] + 1) / 2)
 
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None

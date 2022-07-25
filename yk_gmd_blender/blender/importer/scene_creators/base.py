@@ -165,7 +165,9 @@ class BaseGMDSceneCreator(abc.ABC):
         elif self.config.material_naming_convention == MaterialNamingType.DiffuseTexture:
             material_name = f"{gmd_attribute_set.texture_diffuse or 'no_tex'}"
         else:
-            self.error.fatal(f"config.material_naming_convention not valid - expected a MaterialNamingType, got {self.config.material_naming_convention}")
+            self.error.fatal(
+                f"config.material_naming_convention not valid - "
+                f"expected a MaterialNamingType, got {self.config.material_naming_convention}")
 
         material = bpy.data.materials.new(material_name)
         # Yakuza shaders all use backface culling (even the transparent ones!)

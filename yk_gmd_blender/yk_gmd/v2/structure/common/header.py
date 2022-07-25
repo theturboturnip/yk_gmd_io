@@ -57,6 +57,7 @@ class GMDHeaderStruct:
     def version_str(self) -> str:
         return f"{self.version_major}.{self.version_minor}"
 
+
 GMDHeaderStruct_Unpack = StructureUnpacker(
     GMDHeaderStruct,
     fields=[

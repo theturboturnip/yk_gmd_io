@@ -6,8 +6,10 @@ from mathutils import Vector, Quaternion, Matrix
 def transform_position_gmd_to_blender(pos: Vector) -> Vector:
     return Vector((-pos.x, pos.z, pos.y))
 
+
 def transform_rotation_gmd_to_blender(rot: Quaternion) -> Quaternion:
     return Quaternion((rot.w, -rot.x, rot.z, rot.y))
+
 
 def transform_gmd_to_blender(pos: Vector, rot: Quaternion, scale: Vector) -> Tuple[Vector, Quaternion, Vector]:
     pos = Vector((-pos.x, pos.z, pos.y))
@@ -21,15 +23,18 @@ def transform_blender_to_gmd(pos: Vector, rot: Quaternion, scale: Vector) -> Tup
     # The transformation is symmetrical
     return transform_gmd_to_blender(pos, rot, scale)
 
+
 def transform_matrix_gmd_to_blender(matrix: Matrix) -> Matrix:
     pos, rot, scale = matrix.decompose()
     pos, rot, scale = transform_gmd_to_blender(pos, rot, scale)
     return transform_to_matrix(pos, rot, scale)
 
+
 def transform_matrix_blender_to_gmd(matrix: Matrix) -> Matrix:
     pos, rot, scale = matrix.decompose()
     pos, rot, scale = transform_blender_to_gmd(pos, rot, scale)
     return transform_to_matrix(pos, rot, scale)
+
 
 def transform_to_matrix(pos: Vector, rot: Quaternion, scale: Vector) -> Matrix:
     scale_matrix = Matrix.Diagonal(scale)
