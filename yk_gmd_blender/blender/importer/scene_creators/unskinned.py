@@ -1,8 +1,10 @@
+import json
+
 from mathutils import Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import root_name_for_gmd_file
-from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
+from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
+    root_name_for_gmd_file
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -67,6 +69,13 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
+
+            # Set custom GMD data
+            node_obj.yakuza_hierarchy_node_data.inited = True
+            node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            node_obj.yakuza_hierarchy_node_data.imported_matrix = \
+                list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
+            node_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj

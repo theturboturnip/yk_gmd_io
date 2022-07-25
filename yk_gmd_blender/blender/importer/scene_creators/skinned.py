@@ -1,10 +1,10 @@
 import re
-from typing import Dict, Optional
+import json
+from typing import Dict, Optional, Union
 
 from mathutils import Matrix, Vector, Quaternion
 
 import bpy
-from yk_gmd_blender.blender.common import armature_name_for_gmd_file
 from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
@@ -12,6 +12,13 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+
+
+def armature_name_for_gmd_file(gmd_file: Union[GMDScene, str]):
+    if isinstance(gmd_file, GMDScene):
+        return f"{gmd_file.name}_armature"
+    else:
+        return f"{gmd_file}_armature"
 
 
 class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
@@ -92,14 +99,14 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
             # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
             perp_dir = parent_dir.cross(target_dir).normalized()
-            print(f"{parent_dir} X {target_dir} = {perp_dir}")
+            self.error.debug("BONES", f"{parent_dir} X {target_dir} = {perp_dir}")
 
             # Then, parent_dir cross perp_dir will create a vector that is both
             #   1) perpendicular to parent_dir
             #   2) in the same sort of direction as target_dir
             # use this vector as our tail_delta
             tail_delta_dir = parent_dir.cross(perp_dir).normalized()
-            print(f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
+            self.error.debug("BONES", f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
 
             # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
             # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
@@ -121,11 +128,10 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             else:
                 parent_matrix_unrotated = Matrix.Identity(4)
 
-            print(f"bone {gmd_node.name}")
+            self.error.debug("BONES", f"bone {gmd_node.name}")
             gmd_bone_pos, gmd_bone_axis_maybe, gmd_bone_scale = gmd_node.matrix.inverted().decompose()
-            print(f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
-            print(f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
-            print()
+            self.error.debug("BONES", f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
+            self.error.debug("BONES", f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
 
             # TODO - this produces an uninvertible matrix - why?
             #   this_bone_matrix = parent_matrix @ transform_to_matrix(gmd_node.pos, gmd_node.rot, gmd_node.scale)
@@ -133,7 +139,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0,0,0))
             self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix_unrotated
 
-            tail_delta = gmd_node.bone_pos.xyz + gmd_node.bone_axis.xyz
+            tail_delta = gmd_node.world_pos.xyz + gmd_node.anim_axis.xyz
             # This is unused now because we can just use the gmd bone axis
             """
             # Take a page out of XNA Importer's book for bone tails - make roots just stick towards the camera
@@ -195,15 +201,15 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            if tail_delta.xyz == (0, 0, 0) or gmd_node.bone_axis.w < 0.00001:
+            if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
                tail_delta = Vector((0, 0, 0.5))
             if not anim_skeleton:
-                bone.head = self.gmd_to_blender_world @ gmd_node.bone_pos.xyz
+                bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
                 bone.tail = self.gmd_to_blender_world @ tail_delta
-                if gmd_node.bone_axis.w < 0.00001:
+                if gmd_node.anim_axis.w < 0.00001:
                     bone.length = 0.0001
                 else:
-                    bone.length = gmd_node.bone_axis.w
+                    bone.length = gmd_node.anim_axis.w
             else:
                 bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,0))
                 bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0,0,1))
@@ -234,6 +240,21 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         # having color differentiation may make it easier to navigate
 
         bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Set extra GMD data - we have to do this in object mode, because the extra data is on Bone not EditBone
+        # (I think this is right, because EditBone only exists in Edit mode?)
+        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+            if not isinstance(gmd_node, GMDBone):
+                continue
+
+            # We find the bone we just created by name - we check elsewhere that the GMD doesn't have duplicate bone
+            # names in skinned imports
+            bone = armature.bones[gmd_node.name]
+            bone.yakuza_hierarchy_node_data.inited = True
+            bone.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            bone.yakuza_hierarchy_node_data.imported_matrix = \
+                list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(gmd_node.matrix[3])
+            bone.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
 
         return armature_obj
 

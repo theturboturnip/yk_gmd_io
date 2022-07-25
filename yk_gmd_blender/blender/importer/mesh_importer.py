@@ -1,11 +1,35 @@
+from dataclasses import dataclass
 from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
 from mathutils import Matrix
 
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, VecStorage
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+
+
+@dataclass
+class UVComponentCounts:
+    uv_counts: List[int]
+
+    def __init__(self):
+        self.uv_counts = []
+
+    def consider_attribute_set(self, attr_set: GMDAttributeSet):
+        for i, uv_storage in enumerate(attr_set.shader.vertex_buffer_layout.uv_storages):
+            count = VecStorage.component_count(uv_storage)
+            if i >= len(self.uv_counts):
+                self.uv_counts.append(count)
+            else:
+                self.uv_counts[i] = max(self.uv_counts[i], count)
+
+    def get_primary_uv_index(self) -> int:
+        for i, count in enumerate(self.uv_counts):
+            if count == 2:
+                return i
+        return -1
 
 
 def gmd_meshes_to_bmesh(
@@ -138,13 +162,15 @@ def gmd_meshes_to_bmesh(
     # Weight Data
     weight_data_layer = None
     if merged_vertex_buffer.weight_data and not is_skinned:
-        error.debug("MESH", f"Generating layer for Weight Data with storage {merged_vertex_buffer.layout.weights_storage}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.weights_storage)}")
+        error.debug("MESH", f"Generating layer for Weight Data with storage {merged_vertex_buffer.layout.weights_storage},"
+                            f"componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.weights_storage)}")
         weight_data_layer = bm.loops.layers.color.new("Weight_Data")
 
     # Bone Data
     bone_data_layer = None
     if merged_vertex_buffer.bone_data and not is_skinned:
-        error.debug("MESH", f"Generating layer for Bone Data with storage {merged_vertex_buffer.layout.bones_storage}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.bones_storage)}")
+        error.debug("MESH", f"Generating layer for Bone Data with storage {merged_vertex_buffer.layout.bones_storage},"
+                            f"componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.bones_storage)}")
         bone_data_layer = bm.loops.layers.color.new("Bone_Data")
 
     # Normal W data
@@ -156,17 +182,20 @@ def gmd_meshes_to_bmesh(
     # Yakuza has 3D/4D UV coordinates. Blender doesn't support this in the UV channel.
     # The solution is to have a deterministic "primary UV" designation that can only be 2D
     # This is the only UV loaded into the actual UV layer, the rest are all loaded into the vertex colors with special names.
+    # TODO problem - the bmesh with this layout is later merged with other bmeshes with different layouts
+    #    if bmesh #1 uses 2D UV1, and bmesh #2 uses 4D UV1, then you'll get two sets of layers
     primary_uv_i = merged_vertex_buffer.layout.get_primary_uv_index()
     uv_layers = []
     for i, uv in enumerate(merged_vertex_buffer.uvs):
         error.debug("MESH", f"Generating layer for UV {i} with storage {merged_vertex_buffer.layout.uv_storages[i]}, componentcount = {VecStorage.component_count(merged_vertex_buffer.layout.uv_storages[i])}")
         if i == primary_uv_i:
-            error.debug("MESH", f"Making layer as UV layer")
+            error.debug("MESH", f"Making UV{i} as primary UV layer")
             uv_layers.append(bm.loops.layers.uv.new(f"UV_Primary"))
         elif VecStorage.component_count(merged_vertex_buffer.layout.uv_storages[i]) == 2:
-            error.debug("MESH", f"Making layer as UV layer")
+            error.debug("MESH", f"Making UV{i} as UV layer")
             uv_layers.append(bm.loops.layers.uv.new(f"UV{i}"))
         else:
+            error.debug("MESH", f"Making UV{i} as color layer")
             uv_layers.append(bm.loops.layers.color.new(f"UV{i}"))
 
     # For mesh in meshes

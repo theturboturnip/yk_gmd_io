@@ -12,10 +12,13 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 class GMDUnskinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
 
-    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
+    def __init__(self, name: str, node_type: NodeType,
+                 pos: Vector, rot: Quaternion, scale: Vector,
+                 world_pos: Vector, anim_axis: Vector,
                  parent: Optional[GMDNode],
-                 matrix: Matrix):
-        super().__init__(name, node_type, pos, rot, scale, matrix, parent)
+                 matrix: Matrix,
+                 flags: List[int]):
+        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, matrix, parent, flags)
         self.mesh_list = []
 
         if self.node_type != NodeType.UnskinnedMesh:
@@ -37,9 +40,12 @@ class GMDUnskinnedObject(GMDNode):
 class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDSkinnedMesh]
 
-    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
-                 parent: Optional[GMDNode]):
-        super().__init__(name, node_type, pos, rot, scale, matrix=None, parent=parent)
+    def __init__(self, name: str, node_type: NodeType,
+                 pos: Vector, rot: Quaternion, scale: Vector,
+                 world_pos: Vector, anim_axis: Vector,
+                 parent: Optional[GMDNode],
+                 flags: List[int]):
+        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, matrix=None, parent=parent, flags=flags)
         self.mesh_list = []
 
         if self.node_type != NodeType.SkinnedMesh:

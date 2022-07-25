@@ -12,7 +12,7 @@ from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer_Generic
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -120,9 +120,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 if profile:
                     # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
                     # This profiling is here incase we want to optimize vertex unpacking
-                    print(f"Time to build layout: {unpack_start - layout_build_start}")
-                    print(
-                        f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
+                    self.error.debug("TIME", f"Time to build layout: {unpack_start - layout_build_start}")
+                    self.error.debug("TIME", f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
@@ -236,11 +235,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
-                    bone_pos=node_struct.bone_pos,
-                    bone_axis=node_struct.bone_axis,
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
                     matrix=matrix_arr[node_struct.matrix_index],
 
-                    parent=parent_stack.peek() if parent_stack else None
+                    parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             elif node_struct.node_type == NodeType.SkinnedMesh:
                 if 0 <= node_struct.matrix_index < len(matrix_arr):
@@ -254,7 +254,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
+
                     parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -270,9 +274,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     rot=node_struct.rot,
                     scale=node_struct.scale,
 
-                    parent=parent_stack.peek() if parent_stack else None,
-
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
                     matrix=matrix,
+
+                    parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags
                 )
             else:
                 self.error.fatal(f"Unknown node type enum value {node_struct.node_type} for {name}")
@@ -310,7 +317,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte+actual_len*unpack_type.sizeof()]
                 actual_bytes = [f"{x:02x}" for x in actual_bytes]
                 self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
-            print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
             # data_start = start_byte + 1
             # data_end = data_start + len_bytes
             # data = mesh_matrix_bytestrings[data_start:data_end]
