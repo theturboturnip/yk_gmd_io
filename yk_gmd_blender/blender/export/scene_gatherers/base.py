@@ -270,8 +270,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         self.bone_matrix_origin = bone_matrix_origin
         self.bone_name_map = {}
 
-    def detect_export_armature_collection(self, context: bpy.types.Context) -> Tuple[
-        bpy.types.Object, bpy.types.Collection]:
+    def detect_export_armature_collection(self, context: bpy.types.Context) \
+            -> Tuple[bpy.types.Object, bpy.types.Collection]:
         # Check we're selecting a correct armature
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
         selected_armature, selected_collection = super().detect_export_collection(context)
@@ -284,7 +284,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         if selected_armature.matrix_world != Matrix.Identity(4):
             self.error.fatal(
-                f"Selected armature {selected_armature.name} should be at the origin (0, 0, 0), and must not be rotated or scaled!")
+                f"Selected armature {selected_armature.name} should be at the origin (0, 0, 0), "
+                f"and must not be rotated or scaled!")
 
         self.error.info(f"Selected armature {selected_armature.name}")
 
@@ -334,10 +335,12 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 # This is recoverable, because sometimes if you're converting a skinned -> unskinned
                 # (i.e. majima as a baseball bat) then you don't want to go through deleting vertex groups.
                 self.error.info(
-                    f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. Exporting as an unskinned mesh.")
+                    f"Mesh {object.name} has vertex groups, but it isn't parented to the armature. "
+                    f"Exporting as an unskinned mesh.")
 
             self.error.recoverable(
-                f"Mesh {object.name} is not parented, so isn't skinned. This exporter doesn't support unskinned meshes.")
+                f"Mesh {object.name} is not parented, so isn't skinned. "
+                f"This exporter doesn't support unskinned meshes.")
 
         # Go through the objects we're actually going to export
         for object in selected_armature.children:
@@ -392,7 +395,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
                     self.error.debug("GATHER", f"{node.name} vs original scene")
                     self.error.debug("GATHER",
-                                     f"Old Matrix\n{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
+                                     f"Old Matrix\n"
+                                     f"{self.original_scene.overall_hierarchy.elem_from_name[node.name].matrix}")
                     self.error.debug("GATHER", f"New Matrix\n{node.matrix}")
                     self.error.debug("GATHER", "")
 
@@ -409,7 +413,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             if use_previously_imported_matrix:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
                     self.error.fatal(
-                        f"Blender bone {blender_bone.name} was not imported from a GMD, so I can't reuse an imported matrix."
+                        f"Blender bone {blender_bone.name} was not imported from a GMD, "
+                        f"so I can't reuse an imported matrix."
                         f"Try rerunning with Bone Matrices = Calculated")
                 bone_matrix = blender_bone.yakuza_hierarchy_node_data.imported_matrix
                 self.error.info(str(bone_matrix))
