@@ -11,4 +11,5 @@
 Set-Alias 7zip "$env:ProgramFiles\7-Zip\7z.exe"
 Remove-Item yk_gmd_blender.zip
 # Use 7zip to add all files from yk_gmd_blender (including the root folder yk_gmd_blender) *excluding* pyc and __pycache__ files/dirs.
-7zip a yk_gmd_blender.zip ./yk_gmd_blender/ -r "-xr!*.pyc" "-xr!__pycache__"
+# Don't use -r because that seems to be *Very* eager (e.g. it picks up ./testing/blender/..../addons/yk_gmd_blender)
+7zip a yk_gmd_blender.zip ./yk_gmd_blender/ "-xr!*.pyc" "-xr!__pycache__" "-xr!.mypy_cache"

@@ -151,57 +151,62 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     def execute(self, context):
         error = self.create_logger()
 
-        successes = 0
-        base_folder = self.directory
-        for f in self.files:
-            gmd_filepath = os.path.join(base_folder, f.name)
+        if self.files:
+            successes = 0
+            base_folder = self.directory
+            for f in self.files:
+                gmd_filepath = os.path.join(base_folder, f.name)
 
-            try:
-                if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
-                    error.fatal(f"{gmd_filepath} is not a gmd file.")
+                try:
+                    self.import_single(context, gmd_filepath, error)
+                    successes += 1
+                except GMDImportExportError as e:
+                    print(e)
+                    self.report({"ERROR"}, str(e))
+                    # If one failure should stop subsequent files from importing, return here.
+                    # Otherwise, the loop will continue.
+                    if self.stop_on_fail:
+                        if len(self.files) > 1:
+                            self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
+                        return {'CANCELLED'}
 
-                self.report({"INFO"}, f"Importing {f.name}...")
-
-                self.report({"INFO"}, "Extracting abstract scene...")
-                gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
-                gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED,
-                                                                     VertexImportMode.IMPORT_VERTICES, gmd_contents,
-                                                                     error)
-                self.report({"INFO"}, "Finished extracting abstract scene")
-
-                scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
-
-                scene_creator.validate_scene()
-
-                gmd_collection = scene_creator.make_collection(context)
-
-                if self.import_hierarchy:
-                    self.report({"INFO"}, "Importing bone hierarchy...")
-                    gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection,
-                                                                     anim_skeleton=self.anim_skeleton)
-
-                if self.import_objects:
-                    self.report({"INFO"}, "Importing objects...")
-                    scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
-
-                self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
-
-                successes += 1
-            except GMDImportExportError as e:
-                print(e)
-                self.report({"ERROR"}, str(e))
-                # If one failure should stop subsequent files from importing, return here.
-                # Otherwise, the loop will continue.
-                if self.stop_on_fail:
-                    if len(self.files) > 1:
-                        self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
-                    return {'CANCELLED'}
-
-        if len(self.files) > 1:
-            self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+            if len(self.files) > 1:
+                self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+        else:
+            self.import_single(context, self.filepath, error)
 
         return {'FINISHED'}
+
+    def import_single(self, context, gmd_filepath, error):
+        if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
+            error.fatal(f"{gmd_filepath} is not a gmd file.")
+
+        self.report({"INFO"}, f"Importing {gmd_filepath}...")
+
+        self.report({"INFO"}, "Extracting abstract scene...")
+        gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
+        gmd_config = self.create_gmd_config(gmd_version, error)
+        gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED,
+                                                             VertexImportMode.IMPORT_VERTICES, gmd_contents,
+                                                             error)
+        self.report({"INFO"}, "Finished extracting abstract scene")
+
+        scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
+
+        scene_creator.validate_scene()
+
+        gmd_collection = scene_creator.make_collection(context)
+
+        if self.import_hierarchy:
+            self.report({"INFO"}, "Importing bone hierarchy...")
+            gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection,
+                                                             anim_skeleton=self.anim_skeleton)
+
+        if self.import_objects:
+            self.report({"INFO"}, "Importing objects...")
+            scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
+
+        self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
 
 
 def menu_func_import_skinned(self, context):
@@ -231,50 +236,55 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
     def execute(self, context):
         error = self.create_logger()
 
-        successes = 0
-        base_folder = self.directory
-        for f in self.files:
-            gmd_filepath = os.path.join(base_folder, f.name)
+        if self.files:
+            successes = 0
+            base_folder = self.directory
+            for f in self.files:
+                gmd_filepath = os.path.join(base_folder, f.name)
+                try:
+                    self.import_single(context, gmd_filepath, error)
+                    successes += 1
+                except GMDImportExportError as e:
+                    print(e)
+                    self.report({"ERROR"}, str(e))
+                    # If one failure should stop subsequent files from importing, return here.
+                    # Otherwise, the loop will continue.
+                    if self.stop_on_fail:
+                        if len(self.files) > 1:
+                            self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
+                        return {'CANCELLED'}
 
-            try:
-                if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
-                    error.fatal(f"{gmd_filepath} is not a gmd file.")
-
-                self.report({"INFO"}, f"Importing {f.name}...")
-
-                self.report({"INFO"}, "Extracting abstract scene...")
-                gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
-                gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.UNSKINNED,
-                                                                     VertexImportMode.IMPORT_VERTICES, gmd_contents,
-                                                                     error)
-                self.report({"INFO"}, "Finished extracting abstract scene")
-
-                scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
-
-                scene_creator.validate_scene()
-
-                gmd_collection = scene_creator.make_collection(context)
-
-                self.report({"INFO"}, "Importing objects...")
-                scene_creator.make_objects(gmd_collection)
-
-                self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
-                successes += 1
-            except GMDImportExportError as e:
-                print(e)
-                self.report({"ERROR"}, str(e))
-                # If one failure should stop subsequent files from importing, return here.
-                # Otherwise, the loop will continue.
-                if self.stop_on_fail:
-                    if len(self.files) > 1:
-                        self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
-                    return {'CANCELLED'}
-
-        if len(self.files) > 1:
-            self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+            if len(self.files) > 1:
+                self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+        else:
+            self.import_single(context, self.filepath, error)
 
         return {'FINISHED'}
+
+    def import_single(self, context, gmd_filepath, error):
+        if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
+            error.fatal(f"{gmd_filepath} is not a gmd file.")
+
+        self.report({"INFO"}, f"Importing {gmd_filepath}...")
+
+        self.report({"INFO"}, "Extracting abstract scene...")
+        gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
+        gmd_config = self.create_gmd_config(gmd_version, error)
+        gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.UNSKINNED,
+                                                             VertexImportMode.IMPORT_VERTICES, gmd_contents,
+                                                             error)
+        self.report({"INFO"}, "Finished extracting abstract scene")
+
+        scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
+
+        scene_creator.validate_scene()
+
+        gmd_collection = scene_creator.make_collection(context)
+
+        self.report({"INFO"}, "Importing objects...")
+        scene_creator.make_objects(gmd_collection)
+
+        self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
 
 
 def menu_func_import_unskinned(self, context):
