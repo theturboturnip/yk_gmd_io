@@ -11,5 +11,5 @@ mypy = "*"
 bpy-stubs = { editable = true, path = "./bpy-stubs/" }
 
 [requires]
-python_version = "3.7"
+python_version = "3.8"
 
