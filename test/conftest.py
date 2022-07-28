@@ -55,9 +55,9 @@ def pytest_generate_tests(metafunc):
                 dst=output_dir / model_dir.name / model.name,
                 skinned=skinned
             ))
-    metafunc.parametrize("gmdtest", gmdtests)
-    metafunc.parametrize("blender", [blender])
-    metafunc.parametrize("isolate_blender", [isolate_blender])
+    metafunc.parametrize("blender", [blender], ids=[""])
+    metafunc.parametrize("isolate_blender", [isolate_blender], ids=[""])
+    metafunc.parametrize("gmdtest", gmdtests, ids=lambda gmdtest: gmdtest.src.name)
 
 
 def pytest_sessionstart(session):
