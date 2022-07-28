@@ -92,8 +92,8 @@ class BaseGMDSceneCreator(abc.ABC):
             self.error.fatal(f"Trying to make a skinned object without any vertex groups")
 
         gmd_attr_set_ids = set(id(mesh.attribute_set) for mesh in gmd_node.mesh_list)
-        self.error.info(
-            f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
+        self.error.debug("OBJ",
+                         f"Creating node {gmd_node.name} from {len(gmd_node.mesh_list)} meshes and {len(gmd_attr_set_ids)} attribute sets")
 
         # Create materials, and make a mapping from (id(attr_set)) -> (blender material index)
         if self.config.import_materials:
@@ -124,7 +124,7 @@ class BaseGMDSceneCreator(abc.ABC):
                 fuse_vertices=self.config.fuse_vertices,
                 error=self.error
             )
-            self.error.info(f"\tOverall mesh vert count: {len(overall_bm.verts)}")
+            self.error.debug("OBJ", f"\tOverall mesh vert count: {len(overall_bm.verts)}")
             overall_bm.to_mesh(overall_mesh)
             overall_bm.free()
             if self.config.import_materials:
@@ -132,7 +132,7 @@ class BaseGMDSceneCreator(abc.ABC):
                     overall_mesh.materials.append(mat)
         else:
             # Else use an empty mesh
-            self.error.info(f"Empty mesh")
+            self.error.debug("OBJ", f"Empty mesh")
 
         return overall_mesh
 

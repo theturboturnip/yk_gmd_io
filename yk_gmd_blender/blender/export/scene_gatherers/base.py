@@ -417,7 +417,6 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                         f"so I can't reuse an imported matrix."
                         f"Try rerunning with Bone Matrices = Calculated")
                 bone_matrix = blender_bone.yakuza_hierarchy_node_data.imported_matrix
-                self.error.info(str(bone_matrix))
             else:
                 # Calculate from scratch
                 # TODO - calculate this better
