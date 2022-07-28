@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -83,12 +84,17 @@ def pytest_sessionstart(session):
             zip_ref.extractall(addon_extract_path)
     else:
         # Ask blender to install the addon itself
+        SCRIPTLOC = os.path.dirname(__file__)
+        env = os.environ.copy()
+        env.update({
+            "YKGMDIO_TEST_ADDON": str(addon)
+        })
         subprocess.run([
             str(blender / "blender"),
             "-b",
             "--python-exit-code", "1",
-            "--python-expr", f"import bpy; bpy.ops.preferences.addon_install(filepath='{str(addon)}')"
-        ], check=True)
+            "-P", f"{SCRIPTLOC}/blender_install_addon.py"
+        ], check=True, env=env)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -106,12 +112,10 @@ def pytest_sessionfinish(session, exitstatus):
             shutil.rmtree(addon_output_path)
     else:
         # Ask blender to uninstall the addon itself
-        uninstall_py = f"import bpy\n" \
-                       f"with bpy.context.temp_override(area=bpy.data.screens[\"Layout\"].areas[0]):\n" \
-                       f"    bpy.ops.preferences.addon_remove(module='yk_gmd_blender')"
+        SCRIPTLOC = os.path.dirname(__file__)
         subprocess.run([
             str(blender / "blender"),
             "-b",
             "--python-exit-code", "1",
-            "--python-expr", uninstall_py
+            "-P", f"{SCRIPTLOC}/blender_uninstall_addon.py"
         ], check=True)
