@@ -106,9 +106,12 @@ def pytest_sessionfinish(session, exitstatus):
             shutil.rmtree(addon_output_path)
     else:
         # Ask blender to uninstall the addon itself
+        uninstall_py = f"import bpy\n" \
+                       f"with bpy.context.temp_override(area=bpy.data.screens[\"Layout\"].areas[0]):\n" \
+                       f"    bpy.ops.preferences.addon_remove(module='yk_gmd_blender')"
         subprocess.run([
             str(blender / "blender"),
             "-b",
             "--python-exit-code", "1",
-            "--python-expr", f"import bpy; bpy.ops.preferences.addon_remove('yk_gmd_blender')"
+            "--python-expr", uninstall_py
         ], check=True)
