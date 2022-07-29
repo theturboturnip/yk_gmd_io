@@ -108,19 +108,31 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
                              context: str):
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
-            error.recoverable(f"{context}: field {f} differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+            error.fatal(f"{context}: field {f} differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+
+    def compare_vec_field(f: str):
+        src_f = tuple(round(x, 1) for x in getattr(src, f))
+        dst_f = tuple(round(x, 1) for x in getattr(dst, f))
+        if src_f != dst_f:
+            error.recoverable(f"{context}: vector {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+
+    def compare_mat_field(f: str):
+        src_f = tuple(tuple(round(x, 1) for x in v) for v in getattr(src, f))
+        dst_f = tuple(tuple(round(x, 1) for x in v) for v in getattr(dst, f))
+        if src_f != dst_f:
+            error.recoverable(f"{context}: matrix {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
-    compare_field("pos")
-    compare_field("rot")
-    compare_field("scale")
-    compare_field("world_pos")
-    compare_field("anim_axis")
+    compare_vec_field("pos")
+    compare_vec_field("rot")
+    compare_vec_field("scale")
+    compare_vec_field("world_pos")
+    compare_vec_field("anim_axis")
     compare_field("flags")
-    
+
     if not isinstance(src, GMDSkinnedObject):
-        compare_field("matrix")
+        compare_mat_field("matrix")
 
     if src.node_type == dst.node_type:
         if src.node_type == NodeType.MatrixTransform:
@@ -143,7 +155,7 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             )
 
             if sorted_attrs_src != sorted_attrs_dst:
-                error.recoverable(
+                error.fatal(
                     f"{context} has different sets of attribute sets:\nsrc:\n\t{sorted_attrs_src}\ndst:{sorted_attrs_dst}\n\t")
 
             if vertices:
