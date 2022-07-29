@@ -101,7 +101,9 @@ def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: 
     compare_field("world_pos")
     compare_field("anim_axis")
     compare_field("flags")
-    compare_field("matrix")
+    
+    if not isinstance(src, GMDSkinnedObject):
+        compare_field("matrix")
 
     if src.node_type == dst.node_type:
         if src.node_type == NodeType.MatrixTransform:
