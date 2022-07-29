@@ -278,9 +278,9 @@ class AttribSetLayerNames:
         if layout.bones_storage and not is_skinned:
             bone_data_layer = LayerSpec("Bone_Data", layout.bones_storage)
 
-        # Normal W data - unskinned only
+        # Normal W data
         normal_w_layer = None
-        if layout.normal_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full] and not is_skinned:
+        if layout.normal_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
             normal_w_layer = LayerSpec("NormalW", layout.normal_storage)
 
         # Tangent data
