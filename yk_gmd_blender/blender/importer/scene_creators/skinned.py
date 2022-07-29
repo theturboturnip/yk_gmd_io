@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, cast
 
 import bpy
 from mathutils import Matrix, Vector, Quaternion
@@ -240,8 +240,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDSkinnedObject):
                 continue
-
-            is_skinned = isinstance(gmd_node, GMDSkinnedObject)
+            gmd_node: GMDSkinnedObject = cast(GMDSkinnedObject, gmd_node)
 
             overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
 
@@ -256,14 +255,27 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             #  .xzy is used to swap the components for now, but there's probably a better way?
             mesh_obj.scale = gmd_node.scale.xzy
 
-            if is_skinned:
-                # Skinned Objects are parented to the armature, with an Armature modifier to deform them.
-                if armature_object:
-                    mesh_obj.parent = armature_object
-                    for name in vertex_group_list:
-                        mesh_obj.vertex_groups.new(name=name)
-                    modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
-                    modifier.object = armature_object
+            if gmd_node.parent:
+                sibling_order = gmd_node.parent.children.index(gmd_node)
+            else:
+                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
+
+            mesh_obj.yakuza_hierarchy_node_data.inited = True
+            mesh_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            # gmd_node is a skinned object, doesn't have a matrix
+            mesh_obj.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
+            mesh_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
+            # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
+            # This means you can insert new objects between other ones more easily
+            mesh_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
+
+            # Skinned Objects are parented to the armature, with an Armature modifier to deform them.
+            if armature_object:
+                mesh_obj.parent = armature_object
+                for name in vertex_group_list:
+                    mesh_obj.vertex_groups.new(name=name)
+                modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
+                modifier.object = armature_object
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = mesh_obj
