@@ -25,7 +25,8 @@ c_uint64 = BoundedPrimitiveUnpacker(struct_fmt="Q", python_type=int, range=(0, 1
 c_int8 = BoundedPrimitiveUnpacker(struct_fmt="b", python_type=int, range=(-128, 127))
 c_int16 = BoundedPrimitiveUnpacker(struct_fmt="h", python_type=int, range=(-32_768, 32_767))
 c_int32 = BoundedPrimitiveUnpacker(struct_fmt="i", python_type=int, range=(-2_147_483_648, 2_147_483_647))
-c_int64 = BoundedPrimitiveUnpacker(struct_fmt="q", python_type=int, range=(-9_223_372_036_854_775_808, 9_223_372_036_854_775_807))
+c_int64 = BoundedPrimitiveUnpacker(struct_fmt="q", python_type=int,
+                                   range=(-9_223_372_036_854_775_808, 9_223_372_036_854_775_807))
 
 c_float16 = BasePrimitive(struct_fmt="e", python_type=float)
 c_float32 = BasePrimitive(struct_fmt="f", python_type=float)
@@ -43,7 +44,7 @@ class RangeConverterPrimitive(BoundedPrimitiveUnpacker[float]):
         self.from_range = from_range
         self.to_range = to_range
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[float, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[float, int]:
         value, offset = self.base_unpack.unpack(big_endian, data, offset)
 
         independent_float = (value - self.from_range[0]) / (self.from_range[1] - self.from_range[0])
@@ -54,11 +55,12 @@ class RangeConverterPrimitive(BoundedPrimitiveUnpacker[float]):
     def pack(self, big_endian: bool, value: float, append_to: bytearray):
         self.validate_value(value)
 
-        independent_float = (value - self.to_range[0])/(self.to_range[1] - self.to_range[0])
+        independent_float = (value - self.to_range[0]) / (self.to_range[1] - self.to_range[0])
         target_range_float = (independent_float * (self.from_range[1] - self.from_range[0])) + self.from_range[0]
         self.base_unpack.pack(big_endian, self.base_unpack.python_type(target_range_float), append_to)
 
     def sizeof(self):
         return self.base_unpack.sizeof()
 
-c_unorm8 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0,255), to_range=(0,1))
+
+c_unorm8 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(0, 1))

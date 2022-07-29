@@ -4,15 +4,14 @@ import re
 from typing import Optional, Tuple, cast
 
 import bpy
-from yk_gmd_blender.blender.common import AttribSetLayerNames
-from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, IntProperty
 from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter
-
+from yk_gmd_blender.blender.common import AttribSetLayerNames
+from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter
 
 
 class YakuzaPropertyGroup(PropertyGroup):
@@ -30,7 +29,7 @@ class YakuzaPropertyGroup(PropertyGroup):
 
     shader_name: StringProperty(name="Shader Name")
     # These flags are stored as a hex-string encoding a 64-bit unsigned number.
-    # It can't be stored as an int because blender uses primitive C types for that, and would try to store it in 32 bits.
+    # It can't be stored as an int because blender uses primitive C types and would try to store it in 32 bits.
     shader_vertex_layout_flags: StringProperty(name="Vertex Layout Flags")
     assume_skinned: BoolProperty(name="Assumes Skinned Context",
                                  description="Was imported from a skinned mesh and requires bone-weight pairs")
@@ -42,7 +41,6 @@ class YakuzaPropertyGroup(PropertyGroup):
     unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)
     unk14: FloatVectorProperty(name="GMD Unk14 Data", size=32)
     attribute_set_floats: FloatVectorProperty(name="GMD Attribute Set Floats", size=16)
-    #material_floats: FloatVectorProperty(name="GMD Material Floats", size=16)
     material_origin_type: IntProperty(name="GMDMaterial origin type")
     material_json: StringProperty(name="GMDMaterial data JSON")
 
@@ -54,7 +52,7 @@ class YakuzaPropertyPanel(bpy.types.Panel):
 
     bl_label = "Yakuza Properties"
 
-    bl_order = 1 # Make it appear near the top
+    bl_order = 1  # Make it appear near the top
 
     bl_space_type = "PROPERTIES"
     bl_context = "material"
@@ -71,8 +69,8 @@ class YakuzaPropertyPanel(bpy.types.Panel):
         def matrix_prop(prop_name, length: int, text=""):
             self.layout.label(text=text)
             box = self.layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
-            for i in range(length//4):
-                for j in range(i*4, (i+1)*4):
+            for i in range(length // 4):
+                for j in range(i * 4, (i + 1) * 4):
                     box.prop(ma.yakuza_data, prop_name, index=j, text="")
 
         if ma.yakuza_data.inited:
@@ -90,7 +88,6 @@ class YakuzaPropertyPanel(bpy.types.Panel):
             self.layout.prop(ma.yakuza_data, "material_origin_type")
             self.layout.prop(ma.yakuza_data, "material_json")
             matrix_prop("attribute_set_floats", 16, text="Attribute Set Floats")
-            #matrix_prop("material_floats", 16, text="Material Floats")
             matrix_prop("unk12", 32, text="Unk 12")
             matrix_prop("unk14", 32, text="Unk 14 (Should be ints)")
         else:
@@ -135,6 +132,7 @@ class MATERIAL_OT_yakuza_update_expected_layers(bpy.types.Operator):
         ma.yakuza_data.cached_expected_color_layers = expected_color_layers
 
         return {'FINISHED'}
+
 
 # Custom property group for textures imported from GMD files.
 # Allows for "Yakuza relinking": updating the file associated with an image based on the texture name,
@@ -185,7 +183,8 @@ def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, fl
     return image
 
 
-def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_name: str, color_if_not_found=(1, 0, 1, 1)) -> ShaderNodeTexImage:
+def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_name: str,
+                           color_if_not_found=(1, 0, 1, 1)) -> ShaderNodeTexImage:
     """
     Given a GMD texture name, find or create the Blender counterpart and add a texture node to the given material tree
     using that texture.
@@ -256,8 +255,8 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.attribute_set_flags = f"{attribute_set.attr_flags:016x}"
     material.yakuza_data.cached_expected_uv_layers = ", ".join(layer_names.get_blender_uv_layers())
     material.yakuza_data.cached_expected_color_layers = ", ".join(layer_names.get_blender_color_layers())
-    material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0]*32
-    material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0]*32
+    material.yakuza_data.unk12 = attribute_set.unk12.float_data if attribute_set.unk12 else [0] * 32
+    material.yakuza_data.unk14 = attribute_set.unk14.int_data if attribute_set.unk14 else [0] * 32
     material.yakuza_data.attribute_set_floats = attribute_set.attr_extra_properties
     material.yakuza_data.material_origin_type = attribute_set.material.origin_version.value
     material.yakuza_data.material_json = json.dumps(vars(attribute_set.material.origin_data))
@@ -272,7 +271,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
             return None, next_image_y
         image_node = load_texture_from_name(material.node_tree, gmd_folder, tex_name, color_if_not_found)
         image_node.location = (-500, next_image_y)
-        #image_node.label = tex_name
+        # image_node.label = tex_name
         image_node.hide = True
         material.node_tree.links.new(image_node.outputs["Color"], set_into)
         next_image_y -= 100
@@ -421,11 +420,13 @@ def get_yakuza_shader_node_group():
     # main_color.hide = True
     # main_color.location = (-400, 0)
     # The G is emission, so use it to mix between diffuse and emission
-    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
+    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], group_input_diffuse.outputs['texture_diffuse'],
+                                             (0, 0, 0, 1))
     main_color_diffuse_portion.label = "Diffuse Portion"
     main_color_diffuse_portion.hide = True
     main_color_diffuse_portion.location = (-200, 0)
-    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1), group_input_diffuse.outputs['texture_diffuse'])
+    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1),
+                                              group_input_diffuse.outputs['texture_diffuse'])
     main_color_emissive_portion.label = "Emissive Portion"
     main_color_emissive_portion.hide = True
     main_color_emissive_portion.location = (-200, -50)

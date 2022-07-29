@@ -1,14 +1,43 @@
-#zip -r yk_gmd_blender.zip yk_gmd_blender -x "yk_gmd_blender/**/__pycache__/*"
-#$filePath = "./yk_gmd_blender/"
-#$ZipName = "yk_gmd_blender_build.zip"
-#
-#$PyFiles = Get-ChildItem -Recurse -Path $filePath -Include *.py
-#
-#$PyFiles |
-#
-#Get-ChildItem -Path "./yk_gmd_blender/*" -Include *.py -Recurse | Compress-Archive -Force -DestinationPath "yk_gmd_blender_build.zip"
+# Native PowerShell solution for generating ZIP file, taken from https://stackoverflow.com/a/59018865/4248422
 
-Set-Alias 7zip "$env:ProgramFiles\7-Zip\7z.exe"
-Remove-Item yk_gmd_blender.zip
-# Use 7zip to add all files from yk_gmd_blender (including the root folder yk_gmd_blender) *excluding* pyc and __pycache__ files/dirs.
-7zip a yk_gmd_blender.zip ./yk_gmd_blender/ -r "-xr!*.pyc" "-xr!__pycache__"
+Write-Output "Zipping addon..."
+
+# top level from where to start and location of the zip file
+$path = "."
+# top path that we want to keep in the source code zip file
+$subdir = "yk_gmd_blender"
+# location of the zip file
+$ZipFile = "${path}\yk_gmd_blender.zip"
+
+# change current directory
+Set-Location "$path"
+
+# collecting list of files that we want to archive excluding those that we don't want to preserve
+$Files = @(Get-ChildItem "${subdir}" -Recurse -File | Where-Object { $_ -Match "^*.py$" })
+$FullFilenames = $files | ForEach-Object -Process { Write-Output -InputObject $_.FullName }
+
+# remove old zip file
+if (Test-Path $ZipFile)
+{
+    Remove-Item $ZipFile -ErrorAction Stop
+}
+
+#create zip file
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::Open(($ZipFile), [System.IO.Compression.ZipArchiveMode]::Create)
+
+# write entries with relative paths as names
+foreach ($fname in $FullFilenames)
+{
+    $rname = $( Resolve-Path -Path $fname -Relative ) -replace '\.\\', ''
+    Write-Output $rname
+    $zentry = $zip.CreateEntry($rname)
+    $zentryWriter = New-Object -TypeName System.IO.BinaryWriter $zentry.Open()
+    $zentryWriter.Write([System.IO.File]::ReadAllBytes($fname))
+    $zentryWriter.Flush()
+    $zentryWriter.Close()
+}
+
+# release zip file
+$zip.Dispose()

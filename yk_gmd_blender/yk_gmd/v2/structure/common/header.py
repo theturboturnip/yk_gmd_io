@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from dataclasses import dataclass
 from typing import Tuple
 
 from yk_gmd_blender.structurelib.base import *
@@ -56,6 +55,7 @@ class GMDHeaderStruct:
 
     def version_str(self) -> str:
         return f"{self.version_major}.{self.version_minor}"
+
 
 GMDHeaderStruct_Unpack = StructureUnpacker(
     GMDHeaderStruct,

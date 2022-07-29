@@ -38,9 +38,9 @@ class GMDHeader_YK1(GMDHeaderStruct):
 
     overall_bounds: BoundsDataStruct_YK1
 
-    unk12: ArrayPointerStruct[Unk12Struct] # Material properties
-    unk13: ArrayPointerStruct[int] # List of root node indices - those without parents
-    unk14: ArrayPointerStruct[Unk14Struct] # Material properties
+    unk12: ArrayPointerStruct[Unk12Struct]  # Material properties
+    unk13: ArrayPointerStruct[int]  # List of root node indices - those without parents
+    unk14: ArrayPointerStruct[Unk14Struct]  # Material properties
     flags: List[int]
 
 

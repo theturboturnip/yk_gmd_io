@@ -9,6 +9,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
 
 T = TypeVar('T')
 
+
 @dataclass(frozen=True)
 class GMDVersionRestricted(abc.ABC):
     origin_version: GMDVersion
@@ -50,7 +51,8 @@ class GMDMaterial(GMDVersionRestricted):
                     padding=0,
                 )
             )
-        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version in [GMDVersion.Kiwami1, GMDVersion.Dragon]:
+        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version in [GMDVersion.Kiwami1,
+                                                                                     GMDVersion.Dragon]:
             return GMDMaterial(
                 origin_version=new_version,
                 origin_data=MaterialStruct_YK1(
@@ -84,11 +86,13 @@ class GMDUnk12:
     #         float_data=self.float_data
     #     )
 
+
 # TODO: Implement port_to_version properly?
 @dataclass(frozen=True)
 class GMDUnk14:
     """
-    This consists of 16 uint32, which may or may not be transferrable between engines. They are mostly 0 in Kiwami 1 KiwamiBob.
+    This consists of 16 uint32, which may or may not be transferrable between engines.
+    They are mostly 0 in Kiwami 1 KiwamiBob.
     We don't know how to edit them, so they are frozen.
     """
     int_data: List[int]
@@ -96,14 +100,6 @@ class GMDUnk14:
     @staticmethod
     def get_default() -> List[int]:
         pass
-
-    # def port_to_version(self, new_version: GMDVersion):
-    #     if new_version == self.origin_version:
-    #         return self
-    #     return GMDUnk14(
-    #         origin_version=new_version,
-    #         int_data=self.int_data
-    #     )
 
 
 @dataclass

@@ -6,7 +6,6 @@ from enum import Enum
 from typing import List, Tuple, cast, Union, TypeVar, Generic
 
 from mathutils import Matrix
-
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
@@ -72,7 +71,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
     file_data: TFileData
 
-    def __init__(self, version_props: VersionProperties, file_import_mode: FileImportMode, vertex_import_mode: VertexImportMode, file_data: TFileData, error_reporter: ErrorReporter):
+    def __init__(self, version_props: VersionProperties, file_import_mode: FileImportMode,
+                 vertex_import_mode: VertexImportMode, file_data: TFileData, error_reporter: ErrorReporter):
         self.version_props = version_props
         self.file_is_big_endian = file_data.file_is_big_endian()
         self.vertices_are_big_endian = file_data.vertices_are_big_endian()
@@ -97,10 +97,12 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
         vertex_bytes_offset = 0
         for layout_struct in vertex_layout_arr:
             layout_build_start = time.time()
-            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
+            abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(
+                layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
                 self.error.fatal(
-                    f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match expected {layout_struct.bytes_per_vertex}\n"
+                    f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match "
+                    f"expected {layout_struct.bytes_per_vertex}\n"
                     f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
 
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
@@ -121,12 +123,13 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     # Note - importing st_dead_sera takes ~3seconds total - this doesn't seem like a perf regression from the original tho
                     # This profiling is here incase we want to optimize vertex unpacking
                     self.error.debug("TIME", f"Time to build layout: {unpack_start - layout_build_start}")
-                    self.error.debug("TIME", f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} ({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
+                    self.error.debug("TIME",
+                                     f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} "
+                                     f"({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
         return abstract_vertex_buffers
-
 
     def build_shaders_from_structs(self,
 
@@ -160,7 +163,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         # Return shaders in the same order as the shader_name_arr
         return [shaders_map[name.text] for name in shader_name_arr]
-
 
     def build_materials_from_structs(self,
 
@@ -244,7 +246,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 )
             elif node_struct.node_type == NodeType.SkinnedMesh:
                 if 0 <= node_struct.matrix_index < len(matrix_arr):
-                    self.error.recoverable(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
+                    self.error.recoverable(
+                        f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
 
                 node = GMDSkinnedObject(
                     name=name,
@@ -290,7 +293,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         return nodes
 
-
     def build_meshes_from_structs(self,
 
                                   abstract_attributes: List[GMDAttributeSet],
@@ -311,23 +313,15 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 return []
 
             unpack_type = c_uint16 if bytestrings_are_16bit else c_uint8
-            #len_bytes = length * unpack_type.sizeof()
             actual_len, offset = unpack_type.unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=start_byte)
             if actual_len != length:
-                actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte+actual_len*unpack_type.sizeof()]
+                actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte + actual_len * unpack_type.sizeof()]
                 actual_bytes = [f"{x:02x}" for x in actual_bytes]
-                self.error.fatal(f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
-            print(start_byte, actual_len, (start_byte + (actual_len + 1) * unpack_type.sizeof()))
-            # data_start = start_byte + 1
-            # data_end = data_start + len_bytes
-            # data = mesh_matrix_bytestrings[data_start:data_end]
-            # if bytestrings_are_16bit:
-            #     # TODO: are 16bit strings always big-endian?
-            #     data, _ = FixedSizeArrayUnpacker(c_uint16, length).unpack(True, data, 0)
-            #     return data
-            # else:
-            #     return [int(bone_idx_byte) for bone_idx_byte in data]
-            data, _ = FixedSizeArrayUnpacker(unpack_type, length).unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=offset)
+                self.error.fatal(
+                    f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
+
+            data, _ = FixedSizeArrayUnpacker(unpack_type, length).unpack(self.file_is_big_endian,
+                                                                         mesh_matrix_bytestrings, offset=offset)
             return data
 
         # Take a range, look up that range in the index buffer, return normalized indices from 0 to vertex_count
@@ -374,7 +368,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                                                                        mesh_struct.noreset_strip_indices,
                                                                                        min_index, max_index)
                 triangle_strip_reset_indices, min_index, max_index = process_indices(mesh_struct,
-                                                                                     mesh_struct.reset_strip_indices, min_index,
+                                                                                     mesh_struct.reset_strip_indices,
+                                                                                     min_index,
                                                                                      max_index)
 
                 if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
@@ -385,7 +380,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 # This is shifted up by the vertex_offset_from_index field.
                 # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
                 # it can shift its indices down by a set amount to prevent exceeding the limit.
-                vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + mesh_struct.vertex_offset_from_index
+                vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + \
+                               mesh_struct.vertex_offset_from_index
                 vertex_end = vertex_start + mesh_struct.vertex_count
 
                 if vertex_start < 0 or vertex_end < 0 or vertex_end <= vertex_start:
@@ -395,9 +391,13 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 # [vertex_start, vertex_end) is *exclusive* at the end
                 if (not file_uses_relative_indices) and (vertex_end - vertex_start) != (max_index - min_index + 1):
                     self.error.fatal(
-                        f"Mesh vertex_count is {mesh_struct.vertex_count} and calculated range is {vertex_end - vertex_start} long but indices show a range of length {max_index - min_index + 1} is used.")
+                        f"Mesh vertex_count is {mesh_struct.vertex_count} and calculated range is "
+                        f"{vertex_end - vertex_start} long but indices show a range of length "
+                        f"{max_index - min_index + 1} is used.")
 
-                self.error.debug("MESH_PROPS", f"index props: min_index {min_index}, max_index {max_index}, vertex_start {vertex_start}, vertex_end {vertex_end}")
+                self.error.debug("MESH_PROPS",
+                                 f"index props: min_index {min_index}, max_index {max_index}, "
+                                 f"vertex_start {vertex_start}, vertex_end {vertex_end}")
 
             vertex_buffer = abstract_vertex_buffers[mesh_struct.vertex_buffer_index]
             vertex_slice = slice(vertex_start, vertex_end)
@@ -407,7 +407,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 relevant_bones = [abstract_nodes_ordered[bone_idx] for bone_idx in relevant_bone_indices]
                 if any(not isinstance(node, GMDBone) for node in relevant_bones):
                     self.error.fatal(
-                        f"Skinned mesh references some non-bone nodes {[node.name for node in relevant_bones if not isinstance(node, GMDBone)]}")
+                        f"Skinned mesh references some non-bone nodes "
+                        f"{[node.name for node in relevant_bones if not isinstance(node, GMDBone)]}")
 
                 if self.file_import_mode == FileImportMode.UNSKINNED:
                     self.error.fatal("Found mesh with a matrixlist in an unskinned file - can't import this yet")
@@ -440,7 +441,6 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
         return meshes
 
-
     def connect_object_meshes(self,
 
                               abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
@@ -454,7 +454,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                 if not isinstance(abstract_node, (GMDSkinnedObject, GMDUnskinnedObject)):
                     self.error.fatal(
-                        f"Node type mismatch: node {i} is of type {node_struct.node_type} but the abstract version is a {type(abstract_node)}")
+                        f"Node type mismatch: node {i} is of type {node_struct.node_type} "
+                        f"but the abstract version is a {type(abstract_node)}")
 
                 # This is guaranteed to be some sort of object
                 # Parse the drawlist
@@ -472,102 +473,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     abstract_mesh = abstract_meshes[mesh_idx]
                     if abstract_attribute_set != abstract_mesh.attribute_set:
                         self.error.recoverable(
-                            f"Object {abstract_node.name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
+                            f"Object {abstract_node.name} specifies an unexpected material/mesh pair in it's drawlist "
+                            f"that doesn't match the mesh's requested material")
 
                     abstract_node.add_mesh(abstract_mesh)
                     pass
-
-
-# def build_object_nodes(self,
-#
-#                        abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
-#
-#                        remaining_node_arr: List[NodeStruct], node_name_arr: List[ChecksumStrStruct],
-#                        object_drawlist_ptrs: List[int],
-#                        matrix_arr: List[Matrix], mesh_drawlists: bytes,
-#                        big_endian: bool) \
-#         -> Tuple[List[GMDSkinnedObject], List[GMDUnskinnedObject]]:
-#     skinned_objects = []
-#     unskinned_objects = []
-#
-#     # TODO - the model sword has unskinned BEFORE matrix transform (despite none of those matrix transforms actually being used)
-#     # TODO - the shotgun model has unskinned INSIDE A HIERARCHY
-#         # Blender has a "Child Of" constraint for this
-#
-#     parent_stack = ParentStack()
-#     for node_struct in remaining_node_arr:
-#         name = node_name_arr[node_struct.name_index].text
-#
-#         if node_struct.node_type == NodeType.MatrixTransform:
-#             # print(skinned_objects)
-#             # print(unskinned_objects)
-#             raise Exception(f"Node {name} of type {node_struct.node_type} found after bone heirarchy had finished")
-#
-#         # This is guaranteed to be some sort of object
-#         # Parse the drawlist
-#         object_abstract_meshes = []
-#
-#         drawlist_ptr = object_drawlist_ptrs[node_struct.object_index]
-#         offset = drawlist_ptr
-#         drawlist_len, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-#         zero, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-#         for i in range(drawlist_len):
-#             material_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-#             mesh_idx, offset = c_uint16.unpack(big_endian, mesh_drawlists, offset)
-#
-#             abstract_attribute_set = abstract_attribute_sets[material_idx]
-#             abstract_mesh = abstract_meshes[mesh_idx]
-#             if abstract_attribute_set != abstract_mesh.attribute_set:
-#                 raise Exception(f"Object {name} specifies an unexpected material/mesh pair in it's drawlist, that doesn't match the mesh's requested material")
-#
-#             object_abstract_meshes.append(abstract_mesh)
-#             pass
-#
-#         if node_struct.node_type == NodeType.SkinnedMesh:
-#             if 0 <= node_struct.matrix_index < len(matrix_arr):
-#                 raise Exception(f"Skinned object {name} references a valid matrix, even though skinned meshes aren't supposed to have them!")
-#
-#             obj = GMDSkinnedObject(
-#                 name=name,
-#                 node_type=node_struct.node_type,
-#
-#                 pos=node_struct.pos,
-#                 rot=node_struct.rot,
-#                 scale=node_struct.scale,
-#
-#                 parent=parent_stack.peek() if parent_stack else None,
-#
-#                 mesh_list=object_abstract_meshes
-#             )
-#             skinned_objects.append(obj)
-#         else:
-#             if not(0 <= node_struct.matrix_index < len(matrix_arr)):
-#                 raise Exception(f"Unskinned object {name} doesn't reference a valid matrix")
-#
-#             matrix = matrix_arr[node_struct.matrix_index]
-#
-#             obj = GMDUnskinnedObject(
-#                 name=name,
-#                 node_type=node_struct.node_type,
-#
-#                 pos=node_struct.pos,
-#                 rot=node_struct.rot,
-#                 scale=node_struct.scale,
-#
-#                 parent=parent_stack.peek() if parent_stack else None,
-#
-#                 matrix=matrix,
-#
-#                 mesh_list=object_abstract_meshes
-#             )
-#             unskinned_objects.append(obj)
-#
-#         # Apply the stack operation to the parent_stack
-#         parent_stack.handle_node(node_struct.stack_op, obj)
-#
-#     return skinned_objects, unskinned_objects
-
-
-# TODO: Think about how to do this
-def validate_scene(scene: GMDScene):
-    pass

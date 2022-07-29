@@ -10,10 +10,11 @@ class SizedPointerStruct:
     size: int
 
     def extract_bytes(self, data: bytes):
-        return data[self.ptr:self.ptr+self.size]
+        return data[self.ptr:self.ptr + self.size]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(ptr=0x{self.ptr:x}, size={self.size})"
+
 
 SizedPointerStruct_Unpack = StructureUnpacker(
     SizedPointerStruct,

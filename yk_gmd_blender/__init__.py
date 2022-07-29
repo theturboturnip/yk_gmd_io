@@ -14,6 +14,7 @@ bl_info = {
 # Check if we're in Blender by seeing if bpy.app.version exists.
 # We can't just check for the presence of bpy, because the type library
 import bpy.app
+
 if getattr(bpy.app, "version", None) is not None:
     # If we're in Blender, add the rest of the addon
     from .blender.addon import *

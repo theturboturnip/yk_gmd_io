@@ -30,6 +30,7 @@ classes = (
     MATERIAL_OT_yakuza_update_expected_layers,
 )
 
+
 def register():
     for c in classes:
         bpy.utils.register_class(c)

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from mathutils import Vector, Quaternion
-
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker, QuatUnpacker
@@ -23,7 +22,6 @@ class BoundsDataStruct_YK1:
     box_rotation: Quaternion
 
     padding: float = 0.0
-
 
 
 BoundsData_YK1_Unpack = StructureUnpacker(

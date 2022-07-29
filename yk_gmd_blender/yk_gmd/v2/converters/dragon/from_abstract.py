@@ -1,7 +1,6 @@
 from typing import Iterable
 
 from mathutils import Quaternion, Vector
-
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
@@ -42,18 +41,6 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1
 
 
 def bounds_of(mesh) -> BoundsDataStruct_YK1:
-    # min_pos = Vector(mesh.vertices_data.pos[0])
-    # max_pos = Vector(mesh.vertices_data.pos[0])
-    #
-    # for pos in mesh.vertices_data.pos:
-    #     min_pos.x = min(pos.x, min_pos.x)
-    #     min_pos.y = min(pos.y, min_pos.y)
-    #     min_pos.z = min(pos.z, min_pos.z)
-    #
-    #     max_pos.x = max(pos.x, max_pos.x)
-    #     max_pos.y = max(pos.y, max_pos.y)
-    #     max_pos.z = max(pos.z, max_pos.z)
-
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -61,8 +48,6 @@ def bounds_of(mesh) -> BoundsDataStruct_YK1:
 
 
 def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
-    # min_pos = None
-    # max_pos = None
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -95,8 +80,11 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
-def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
+
+def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool,
+                                  vertices_big_endian: bool,
+                                  scene: GMDScene, error: ErrorReporter,
+                                  base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
@@ -194,11 +182,14 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
                 error.fatal(f"Encountered a vertex_offset_from_index greater than 32bit, needs")
 
             try:
-                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
+                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data,
+                                                        vertex_data_bytearray)
             except PackingValidationError as e:
                 error.fatal(f"Error while packing a mesh for {node.name}: {e}")
 
-            error.debug("MESH_EXPORT", f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, min_index: {min_index}, vertex_count: {vertex_count})")
+            error.debug("MESH_EXPORT",
+                        f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, "
+                        f"min_index: {min_index}, vertex_count: {vertex_count})")
             mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset_from_index, min_index, vertex_count)
 
             min_index += vertex_count
@@ -304,20 +295,22 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     # DRAGON ENGINE DIFFERENCE - ordered textures
     # duplicates are allowed, each attribute set *must* use contiguous texture indices.
     ordered_texture_arr = []
+
     def make_texture_index(name: str):
         if name:
             idx = len(ordered_texture_arr)
             ordered_texture_arr.append(ChecksumStrStruct.make_from_str(name))
             return TextureIndexStruct_Dragon(idx)
         return TextureIndexStruct_Dragon(-1)
-    #make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
+
+    # make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
-            data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
+            data=gmd_attribute_set.unk12.float_data  # .port_to_version(version_properties.major_version).float_data
             if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
-            data=gmd_attribute_set.unk14.int_data#port_to_version(version_properties.major_version).int_data
+            data=gmd_attribute_set.unk14.int_data  # port_to_version(version_properties.major_version).int_data
             if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 
@@ -345,7 +338,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
-# DRAGON ENGINE CHANGE - TEXTURES MUST BE DECLARED IN ORDER TO MAKE SURE THE RANGE IS CORRECT
+            # DRAGON ENGINE CHANGE - TEXTURES MUST BE DECLARED IN ORDER TO MAKE SURE THE RANGE IS CORRECT
             texture_diffuse=make_texture_index(gmd_attribute_set.texture_diffuse),
             texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
@@ -387,7 +380,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         matrix_arr=rearranged_data.ordered_matrices,
         vertex_buffer_arr=vertex_buffer_arr,
         vertex_data=bytes(vertex_data_bytearray),
-        texture_arr=ordered_texture_arr, # DRAGON ENGINE DIFFERENCE
+        texture_arr=ordered_texture_arr,  # DRAGON ENGINE DIFFERENCE
         shader_arr=rearranged_data.shader_names,
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,
@@ -399,4 +392,3 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         unk14=unk14_arr,
         flags=flags,
     )
-

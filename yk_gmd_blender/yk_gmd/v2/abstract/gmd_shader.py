@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Optional, Tuple, List, Sized, Iterable
 
 from mathutils import Vector
-
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, c_uint8, RangeConverterPrimitive
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
@@ -80,6 +79,7 @@ class BoneWeight:
 
 
 BoneWeight4 = Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]
+
 
 # Generic representation of a vertex buffer, that can contain "weights" and "bones" separately.
 # Some unskinned objects use the "weights" and "bones" categories for different things, which this supports.
@@ -193,7 +193,7 @@ class GMDVertexBuffer_Generic(Sized):
             BoneWeight(bone=int(bones[1]), weight=weights[1]),
             BoneWeight(bone=int(bones[2]), weight=weights[2]),
             BoneWeight(bone=int(bones[3]), weight=weights[3]),
-        ) for bones,weights in zip(self.bone_data, self.weight_data)]
+        ) for bones, weights in zip(self.bone_data, self.weight_data)]
 
         skinned = GMDVertexBuffer_Skinned(
             layout=self.layout,
@@ -290,6 +290,7 @@ class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
                 for uv in self.uvs
             ],
         )
+
 
 # VertexBufferLayouts are external dependencies (shaders have a fixed layout, which we can't control) so they are frozen
 @dataclass(frozen=True, init=True)
@@ -471,7 +472,8 @@ class GMDVertexBufferLayout:
             expected_touched_bits = {x for x in range(64)}
             if touched_packing_bits != expected_touched_bits:
                 error.recoverable(
-                    f"Incomplete vertex format parse - bits {expected_touched_bits.difference(touched_packing_bits)} were not touched")
+                    f"Incomplete vertex format parse - "
+                    f"bits {expected_touched_bits - touched_packing_bits} were not touched")
 
         error.debug("BYTES", f"packing-flags: {vertex_packing_flags:x}")
 
@@ -560,7 +562,8 @@ class GMDVertexBufferLayout:
             size += uv_unpacker.sizeof()
         return size
 
-    def unpack_from(self, big_endian: bool, vertex_count: int, data: bytes, offset: int) -> Tuple[GMDVertexBuffer_Generic, int]:
+    def unpack_from(self, big_endian: bool, vertex_count: int,
+                    data: bytes, offset: int) -> Tuple[GMDVertexBuffer_Generic, int]:
         vertices: GMDVertexBuffer_Generic = GMDVertexBuffer_Generic.build_empty(self, vertex_count)
 
         for i in range(vertex_count):

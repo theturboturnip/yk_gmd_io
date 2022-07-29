@@ -83,7 +83,7 @@ class GMDGame(IntEnum):
 
     @staticmethod
     def mapping_to_blender_props() -> Dict['GMDGame', str]:
-        return {v: k for k,v in GMDGame.mapping_from_blender_props().items()}
+        return {v: k for k, v in GMDGame.mapping_from_blender_props().items()}
 
     def as_blender(self) -> str:
         return GMDGame.mapping_to_blender_props()[self]
@@ -94,15 +94,16 @@ class YakuzaHierarchyNodeData(PropertyGroup):
     # Used to hide data for normal Blender objects
     inited: BoolProperty(name="Initialized", default=False)
     # The original imported node matrix
-    imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0]*16,size=16, subtype="MATRIX")
+    imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0] * 16, size=16, subtype="MATRIX")
 
     # The animation axis for the node imported from the GMD
-    anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0]*4, size=4, subtype="QUATERNION")
+    anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0] * 4, size=4, subtype="QUATERNION")
     # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
-    flags_json: StringProperty(name="Imported Node Flags (JSON)",default="[0,0,0,0]")
+    flags_json: StringProperty(name="Imported Node Flags (JSON)", default="[0,0,0,0]")
 
     # The order of this node with respect to siblings
-    sort_order: IntProperty(name="Sort Order", default=0, description="Order of this node with respect to siblings. Applied on export.")
+    sort_order: IntProperty(name="Sort Order", default=0,
+                            description="Order of this node with respect to siblings. Applied on export.")
 
 
 def yakuza_hierarchy_node_data_sort_key(x) -> int:
@@ -135,8 +136,8 @@ class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
             def matrix_prop(dat, prop_name, length: int, text=""):
                 layout.label(text=text)
                 box = layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
-                for i in range(length//4):
-                    for j in range(i*4, (i+1)*4):
+                for i in range(length // 4):
+                    for j in range(i * 4, (i + 1) * 4):
                         box.prop(dat, prop_name, index=j, text="")
 
             matrix_prop(ob.yakuza_hierarchy_node_data, "imported_matrix", 16)
@@ -170,8 +171,8 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
             def matrix_prop(dat, prop_name, length: int, text=""):
                 layout.label(text=text)
                 box = layout.box().grid_flow(row_major=True, columns=4, even_rows=True, even_columns=True)
-                for i in range(length//4):
-                    for j in range(i*4, (i+1)*4):
+                for i in range(length // 4):
+                    for j in range(i * 4, (i + 1) * 4):
                         box.prop(dat, prop_name, index=j, text="")
 
             matrix_prop(bone.yakuza_hierarchy_node_data, "imported_matrix", 16)
@@ -184,7 +185,7 @@ class YakuzaFileRootData(PropertyGroup):
     # GMD version this file was imported from
     imported_version: EnumProperty(items=GMDGame.blender_props(), name="Imported File Version", default=None)
     # scene flags
-    flags_json: StringProperty(name="Imported Scene Flags (JSON)",default="[0,0,0,0,0,0]")
+    flags_json: StringProperty(name="Imported Scene Flags (JSON)", default="[0,0,0,0,0,0]")
 
 
 class OBJECT_PT_yakuza_file_root_data_panel(Panel):
@@ -193,7 +194,7 @@ class OBJECT_PT_yakuza_file_root_data_panel(Panel):
     bl_region_type = 'WINDOW'
     bl_context = 'object'
     bl_category = "Tool"
-    bl_order = 1 # Make it appear near the top
+    bl_order = 1  # Make it appear near the top
 
     def draw_header(self, context):
         ob = context.object
@@ -304,6 +305,7 @@ class AttribSetLayerNames:
                 if uv_storage in [VecStorage.Vec2Full, VecStorage.Vec2Half]:
                     return i
             return None
+
         primary_uv_i = get_primary_uv_index()
 
         uv_layers = []
@@ -459,7 +461,8 @@ class AttribSetLayerNames:
             # If the "primary map" is not already used for a layer, use it
             if not ((2, mesh.uv_layers.active) in uv_layers):
                 uv_layers[self.primary_uv_i] = (2, mesh.uv_layers.active)
-                error.debug("MESH", f"Using UVlayer {mesh.uv_layers.active.name} as the primary UV map - it is otherwise unused")
+                error.debug("MESH",
+                            f"Using UVlayer {mesh.uv_layers.active.name} as the primary UV map - it is otherwise unused")
             else:
                 error.recoverable(f"Tried to find the primary UV map for {mesh.name}, but couldn't. "
                                   f"The currently in-use UV map {mesh.uv_layers.active.name} is already used for a "
@@ -510,6 +513,7 @@ class AttribSetLayerNames:
             for spec in self.uv_layers
             if VecStorage.component_count(spec.storage) != 2
         ]
+
 
 @dataclass
 class AttribSetLayers_bpy:

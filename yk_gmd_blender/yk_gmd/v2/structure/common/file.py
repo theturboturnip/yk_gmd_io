@@ -78,21 +78,22 @@ class FilePacker(BaseUnpacker[FileData_Common]):
 
     def pack(self, big_endian: bool, value: FileData_Common, append_to: bytearray):
         # Packing phases
-            # 1. Pack contents (NOT HEADER) into bytes to get addresses and sizes
-                # Requires subclass intervention - subclass must be able to supply new data to be packed
-                # addresses also depend on the size of the actual header - subclass supplies that
-            # 2. Use these content addresses/sizes to fill the header
-                # Requires subclass intervention - subclass needs to supply content addrs/sizes and the fields to fill them in
-            # 3. Pack the header
-                # No intervention required as long as header_packer is set
-            # 4. Concatenate the bytes
-                # No intervention required
+        # 1. Pack contents (NOT HEADER) into bytes to get addresses and sizes
+        # Requires subclass intervention - subclass must be able to supply new data to be packed
+        # addresses also depend on the size of the actual header - subclass supplies that
+        # 2. Use these content addresses/sizes to fill the header
+        # Requires subclass intervention - subclass needs to supply content addrs/sizes and the fields to fill them in
+        # 3. Pack the header
+        # No intervention required as long as header_packer is set
+        # 4. Concatenate the bytes
+        # No intervention required
 
         # TODO: Pad header_size to a constant value like the games do
         header_size = self.header_packer.sizeof()
         collective_data = bytearray()
 
-        def pack_data(name: str, packer: Union[Type[bytes], BaseUnpacker], collective_data: bytearray) -> Union[SizedPointerStruct, ArrayPointerStruct]:
+        def pack_data(name: str, packer: Union[Type[bytes], BaseUnpacker], collective_data: bytearray) -> Union[
+            SizedPointerStruct, ArrayPointerStruct]:
             ptr = header_size + len(collective_data)
 
             attr: Union[bytes, list] = getattr(value, name)
@@ -107,7 +108,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
                 if not isinstance(attr, list):
                     raise TypeError(
                         f"Header field {name} was expected as list, because {self.python_type.__name__} specified it to be packed by {packer}")
-                for i,item in enumerate(attr):
+                for i, item in enumerate(attr):
                     try:
                         packer.pack(big_endian, item, collective_data)
                     except PackingValidationError as e:
@@ -138,12 +139,12 @@ class FilePacker(BaseUnpacker[FileData_Common]):
         self.header_packer.pack(big_endian, header, append_to)
         append_to += collective_data
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[FileData_Common, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[FileData_Common, int]:
         # Unpacking phases
-            # 1. Unpack the header
-                # No subclass intervention required as long as header_packer is set
-            # 2. Unpack each set of contents
-                # Requires subclass intervention - subclass needs to supply which fields to unpack
+        # 1. Unpack the header
+        # No subclass intervention required as long as header_packer is set
+        # 2. Unpack each set of contents
+        # Requires subclass intervention - subclass needs to supply which fields to unpack
 
         header, offset = self.header_packer.unpack(big_endian, data, offset)
 
@@ -151,15 +152,20 @@ class FilePacker(BaseUnpacker[FileData_Common]):
             attr = getattr(header, name)
             if unpacker is bytes:
                 if not isinstance(attr, SizedPointerStruct):
-                    raise TypeError(f"Header field {name} was expected as SizedPointer but was {attr}. Reason: {self.python_type.__name__} specified it to be byte-packed")
+                    raise TypeError(
+                        f"Header field {name} was expected as SizedPointer but was {attr}. "
+                        f"Reason: {self.python_type.__name__} specified it to be byte-packed")
                 return attr.extract_bytes(data)
             elif isinstance(unpacker, BaseUnpacker):
                 if not isinstance(attr, ArrayPointerStruct):
-                    raise TypeError(f"Header field {name} was expected as ArrayPointer but was {attr}. Reason: {self.python_type.__name__} specified it to be packed by {unpacker}")
+                    raise TypeError(
+                        f"Header field {name} was expected as ArrayPointer but was {attr}. "
+                        f"Reason: {self.python_type.__name__} specified it to be packed by {unpacker}")
                 try:
                     return attr.extract(unpacker, big_endian, data)
                 except Exception as e:
-                    raise FileUnpackError(f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
+                    raise FileUnpackError(
+                        f"Exception while unpacking field {name} from 0x{attr.ptr:x}[{attr.count}]: {e}")
             else:
                 raise TypeError(f"Unexpected unpacker type {unpacker}")
 
@@ -185,5 +191,3 @@ class FilePacker(BaseUnpacker[FileData_Common]):
     # TODO: Better way of doing this would be to have sizeof relegated to BaseConstantSizeUnpacker?
     def sizeof(self):
         raise NotImplementedError("The size of GMD Files is not constant")
-
-

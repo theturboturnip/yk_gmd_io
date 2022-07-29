@@ -14,8 +14,10 @@ __all__ = [
 T = TypeVar('T')
 TPackable = TypeVar('TPackable', bound='BaseUnpackable')
 
+
 class PackingValidationError(Exception):
     pass
+
 
 class BaseUnpacker(Generic[T]):
     """ Base class for every type of field that can be packed. """
@@ -26,7 +28,7 @@ class BaseUnpacker(Generic[T]):
             raise TypeError(f"python_type of Unpacker must be a type object, got {python_type}")
         self.python_type = python_type
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[T, int]:
         raise NotImplementedError()
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
@@ -44,18 +46,21 @@ class BaseUnpacker(Generic[T]):
 
 TFrom = TypeVar('TFrom')
 TTo = TypeVar('TTo')
+
+
 class ValueAdaptor(Generic[TFrom, TTo], BaseUnpacker[TTo]):
     base_unpacker: BaseUnpacker[TFrom]
     forwards: Callable[[TFrom], TTo]
     backwards: Callable[[TTo], TFrom]
 
-    def __init__(self, tto: Type[TTo], base_unpacker: BaseUnpacker[TFrom], forwards: Callable[[TFrom], TTo], backwards: Callable[[TTo], TFrom]):
+    def __init__(self, tto: Type[TTo], base_unpacker: BaseUnpacker[TFrom], forwards: Callable[[TFrom], TTo],
+                 backwards: Callable[[TTo], TFrom]):
         super().__init__(tto)
         self.base_unpacker = base_unpacker
         self.forwards = forwards
         self.backwards = backwards
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[TTo, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[TTo, int]:
         from_val, offset = self.base_unpacker.unpack(big_endian, data, offset)
         return self.forwards(from_val), offset
 
@@ -69,7 +74,8 @@ class ValueAdaptor(Generic[TFrom, TTo], BaseUnpacker[TTo]):
             self.base_unpacker.validate_value(self.backwards(value))
         except Exception as e:
             print(self.python_type, self.base_unpacker.python_type)
-            raise PackingValidationError(f"{self.python_type.__name__} adapted to {self.base_unpacker.python_type.__name__}: {e}")
+            raise PackingValidationError(
+                f"{self.python_type.__name__} adapted to {self.base_unpacker.python_type.__name__}: {e}")
 
     def sizeof(self):
         return self.base_unpacker.sizeof()
@@ -91,8 +97,9 @@ class BasePrimitive(BaseUnpacker[T]):
     # pack() -> take a value, pack into bytes
     #    a value may not always be packable (e.g. a string that's too long) so always validate_value() before packing.
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
-        return struct.unpack_from(self.be_struct_fmt if big_endian else self.le_struct_fmt, data, offset)[0], offset+self.sizeof()
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[T, int]:
+        return struct.unpack_from(self.be_struct_fmt if big_endian else self.le_struct_fmt, data, offset)[
+                   0], offset + self.sizeof()
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
         self.validate_value(value)
@@ -110,7 +117,7 @@ class BasePrimitive(BaseUnpacker[T]):
 class BoundedPrimitiveUnpacker(BasePrimitive[T]):
     range: Tuple[T, T]
 
-    def __init__(self, python_type: Type[T], struct_fmt: str, range: Tuple[T,T]):
+    def __init__(self, python_type: Type[T], struct_fmt: str, range: Tuple[T, T]):
         super().__init__(python_type, struct_fmt)
         self.range = range
 
@@ -129,8 +136,8 @@ class FixedSizeASCIIUnpacker(BaseUnpacker[str]):
         self.length = length
         self.encoding = encoding
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[T, int]:
-        str_data:bytes = data[offset:offset + self.length]
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[T, int]:
+        str_data: bytes = data[offset:offset + self.length]
         return str_data.decode(self.encoding).rstrip('\x00'), offset + self.length
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
@@ -158,7 +165,7 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
         self.elem_type = elem_type
         self.count = count
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset:int) -> Tuple[List[T],int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[List[T], int]:
         value = []
         while len(value) < self.count:
             next_val, offset = self.elem_type.unpack(big_endian, data, offset)
@@ -177,7 +184,7 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
         elem_type = self.elem_type
         if len(value) != self.count:
             raise PackingValidationError(f"List has {len(value)} items, expected {self.count}")
-        for i,item in enumerate(value):
+        for i, item in enumerate(value):
             # Type checking for whether item is supported by elem_type is done in elem_type
             try:
                 elem_type.validate_value(item)
@@ -195,12 +202,15 @@ def structure_data(**kwargs):
 
 MaybeOptionalBaseUnpacker = Union[Type[T], Type[Optional[T]]]
 
+
 class StructureUnpacker(BaseUnpacker[TDataclass]):
     _fields: List[Tuple[str, BaseUnpacker]]
     _exported_fields: Dict[str, BaseUnpacker]
     _load_validate: Optional[Callable[[TDataclass], None]]
 
-    def __init__(self, python_type: Type[TDataclass], fields: List[Tuple[str, BaseUnpacker]], base_class_unpackers: Dict[Type, 'StructureUnpacker'] = None, load_validate: Optional[Callable[[TDataclass], None]] = None):
+    def __init__(self, python_type: Type[TDataclass], fields: List[Tuple[str, BaseUnpacker]],
+                 base_class_unpackers: Dict[Type, 'StructureUnpacker'] = None,
+                 load_validate: Optional[Callable[[TDataclass], None]] = None):
         super().__init__(python_type)
 
         if base_class_unpackers is None:
@@ -212,15 +222,14 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
 
             # Check we don't have multiple inheritance from dataclasses
             if len(data_bases) > 1:
-                raise TypeError(f"Structure dataclass {current.__name__} inherits from multiple dataclass bases {[b.__name__ for b in data_bases]} at the same level. This is not supported.")
+                raise TypeError(
+                    f"Structure dataclass {current.__name__} inherits from multiple dataclass bases {[b.__name__ for b in data_bases]} at the same level. This is not supported.")
 
             for base in data_bases:
                 if base in base_class_unpackers:
                     # Add the base class fields first, as they come before the others
                     fields = base_class_unpackers[base]._fields + fields
                     fields = recursive_base_check(base, fields)
-                #else:
-                #    raise TypeError(f"{python_type.__name__} has a base class {base.__name__} with no corresponding unpacker")
 
             return fields
 
@@ -244,7 +253,8 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
                     # Name has a default value (assumes dataclass.field() always allows the field to be optional)
                     continue
                 else:
-                    raise TypeError(f"Field {python_type.__name__}.{field_name} doesn't have an unpacker and doesn't have a default value")
+                    raise TypeError(
+                        f"Field {python_type.__name__}.{field_name} doesn't have an unpacker and doesn't have a default value")
 
             unpacked_type = named_field_unpackers[field_name].python_type
             if field_type is not unpacked_type:
@@ -289,4 +299,4 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
         return True
 
     def sizeof(self):
-        return sum(unpacker.sizeof() for _,unpacker in self._fields)
+        return sum(unpacker.sizeof() for _, unpacker in self._fields)

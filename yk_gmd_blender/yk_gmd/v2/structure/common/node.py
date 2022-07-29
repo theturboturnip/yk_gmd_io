@@ -3,7 +3,6 @@ from enum import IntEnum
 from typing import List
 
 from mathutils import Vector, Quaternion
-
 from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_int32, c_uint32
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec4Unpacker, QuatUnpacker

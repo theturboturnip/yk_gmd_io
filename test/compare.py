@@ -32,18 +32,22 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
 
     for gmd_mesh in src:
         buf = gmd_mesh.vertices_data
-        verts: List[Tuple[Any,...]] = [nul_item] * len(buf)
+        verts: List[Tuple[Any, ...]] = [nul_item] * len(buf)
         for i in range(len(buf)):
             verts[i] = (
                 tuple(round(x, 1) for x in buf.pos[i]),
-                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
-                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
                 tuple(round(x, 1) for x in buf.col0[i]) if buf.col0 else nul_item,
                 tuple(round(x, 1) for x in buf.col1[i]) if buf.col1 else nul_item,
-                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
                 tuple(round(x, 1) for x in buf.unk[i]) if buf.unk else nul_item,
                 tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
+                "n",
+                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
+                "t",
+                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
+                "b",
+                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
+                "w",
+                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
             )
         src_vertices.update(verts)
 
@@ -53,14 +57,18 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
         for i in range(len(buf)):
             verts[i] = (
                 tuple(round(x, 1) for x in buf.pos[i]),
-                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
-                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
                 tuple(round(x, 1) for x in buf.col0[i]) if buf.col0 else nul_item,
                 tuple(round(x, 1) for x in buf.col1[i]) if buf.col1 else nul_item,
-                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
                 tuple(round(x, 1) for x in buf.unk[i]) if buf.unk else nul_item,
                 tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
+                "n",
+                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
+                "t",
+                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
+                "b",
+                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
+                "w",
+                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
             )
         dst_vertices.update(verts)
 
@@ -70,11 +78,12 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
     if src_but_not_dst or dst_but_not_src:
         src_but_not_dst_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_but_not_dst), 5))
         dst_but_not_src_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_but_not_src), 5))
-        error.recoverable(f"src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) differ\nt"
-                          f"{context} src meshes have {len(src_but_not_dst)} vertices missing in dst:\n\t"
-                          f"{src_but_not_dst_str}...\n\t"
-                          f"{context} dst meshes have {len(dst_but_not_src)} vertices not in src:\n\t"
-                          f"{dst_but_not_src_str}...")
+        error.fatal(
+            f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) differ\n\t"
+            f"src meshes have {len(src_but_not_dst)} vertices missing in dst:\n\t"
+            f"{src_but_not_dst_str}...\n\t"
+            f"dst meshes have {len(dst_but_not_src)} vertices not in src:\n\t"
+            f"{dst_but_not_src_str}...")
         return False
     return True
 
@@ -126,21 +135,23 @@ def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: 
                     if m.attribute_set not in unique_attr_sets:
                         unique_attr_sets.append(m.attribute_set)
                 if all(
-                    compare_same_layout_meshes(
-                        [m for m in src.mesh_list if m.attribute_set == attr],
-                        [m for m in dst.mesh_list if m.attribute_set == attr],
-                        error, f"{context}attr set {attr.texture_diffuse}"
-                    )
-                    for attr in unique_attr_sets
+                        compare_same_layout_meshes(
+                            [m for m in src.mesh_list if m.attribute_set == attr],
+                            [m for m in dst.mesh_list if m.attribute_set == attr],
+                            error, f"{context}attr set {attr.texture_diffuse}"
+                        )
+                        for attr in unique_attr_sets
                 ):
                     error.info(f"{context} meshes are functionally identical")
 
 
-def recursive_compare_node_lists(vertices: bool, src: List[GMDNode], dst: List[GMDNode], error: ErrorReporter, context: str):
+def recursive_compare_node_lists(vertices: bool, src: List[GMDNode], dst: List[GMDNode], error: ErrorReporter,
+                                 context: str):
     src_names_unordered = set(n.name for n in src)
     dst_names_unordered = set(n.name for n in dst)
     if src_names_unordered != dst_names_unordered:
-        error.fatal(f"{context} has different sets of children:\nsrc:\n\t{src_names_unordered}\ndst:{dst_names_unordered}\n\t")
+        error.fatal(
+            f"{context} has different sets of children:\nsrc:\n\t{src_names_unordered}\ndst:{dst_names_unordered}\n\t")
 
     src_names = [n.name for n in src]
     dst_names = [n.name for n in dst]
@@ -165,7 +176,8 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool)
 
     def compare_header_field(f: str):
         if getattr(header_src, f) != getattr(header_dst, f):
-            error.recoverable(f"header: field {f} differs:\nsrc:\n\t{getattr(header_src, f)}\ndst:\n\t{getattr(header_dst, f)}")
+            error.recoverable(
+                f"header: field {f} differs:\nsrc:\n\t{getattr(header_src, f)}\ndst:\n\t{getattr(header_dst, f)}")
 
     compare_header_field("magic")
     compare_header_field("vertex_endian_check")
@@ -190,7 +202,8 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool)
                                                          import_mode,
                                                          file_data_dst, error)
 
-    recursive_compare_node_lists(vertices, scene_src.overall_hierarchy.roots, scene_dst.overall_hierarchy.roots, error, "")
+    recursive_compare_node_lists(vertices, scene_src.overall_hierarchy.roots, scene_dst.overall_hierarchy.roots, error,
+                                 "")
 
 
 if __name__ == '__main__':
