@@ -439,7 +439,7 @@ class AttribSetLayerNames:
         weight_data_layer = retrieve_color_layer(self.weight_data_layer, "WeightData")
         bone_data_layer = retrieve_color_layer(self.bone_data_layer, "BoneData")
         normal_w_layer = retrieve_color_layer(self.normal_w_layer, "NormalW")
-        tangent_layer = retrieve_color_layer(self.tangent_w_layer, "Tangent")
+        tangent_layer = retrieve_color_layer(self.tangent_layer, "Tangent")
         tangent_w_layer = retrieve_color_layer(self.tangent_w_layer, "TangentW")
 
         if self.primary_uv_i is not None:
