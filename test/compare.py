@@ -1,9 +1,9 @@
 import argparse
 import itertools
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Any
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Any, Set
 
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -24,13 +24,10 @@ def sort_src_dest_lists(src: Iterable[T], dst: Iterable[T], key: Callable[[T], s
     return sorted_src, sorted_dst
 
 
-def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter, context: str) -> bool:
-    src_vertices = set()
-    dst_vertices = set()
-
+def get_unique_verts(ms: List[GMDMesh]) -> Set[Tuple]:
     nul_item = (0,)
-
-    for gmd_mesh in src:
+    all_verts = set()
+    for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
         verts: List[Tuple[Any, ...]] = [nul_item] * len(buf)
         for i in range(len(buf)):
@@ -49,28 +46,47 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
                 "w",
                 tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
             )
-        src_vertices.update(verts)
+        all_verts.update(verts)
+    return all_verts
 
-    for gmd_mesh in dst:
+
+def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> Set[Tuple]:
+    nul_item = (0,)
+    all_verts = set()
+    for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        verts = [nul_item] * len(buf)
+        verts: List[Tuple[Any, ...]] = [nul_item] * len(buf)
         for i in range(len(buf)):
+            assert buf.bone_data and buf.weight_data
             verts[i] = (
                 tuple(round(x, 1) for x in buf.pos[i]),
                 tuple(round(x, 1) for x in buf.col0[i]) if buf.col0 else nul_item,
                 tuple(round(x, 1) for x in buf.col1[i]) if buf.col1 else nul_item,
                 tuple(round(x, 1) for x in buf.unk[i]) if buf.unk else nul_item,
                 tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
+                "bw",
+                tuple(
+                    (gmd_mesh.relevant_bones[int(b)].name, round(w, 1))
+                    for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
+                    if w > 0
+                ) if buf.bone_data and buf.weight_data else nul_item,
                 "n",
                 tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
                 "t",
-                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
-                "b",
-                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                "w",
-                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item
             )
-        dst_vertices.update(verts)
+        all_verts.update(verts)
+    return all_verts
+
+
+def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter,
+                               context: str) -> bool:
+    if skinned:
+        src_vertices = get_unique_skinned_verts(src)
+        dst_vertices = get_unique_skinned_verts(dst)
+    else:
+        src_vertices = get_unique_verts(src)
+        dst_vertices = get_unique_verts(dst)
 
     src_but_not_dst = src_vertices.difference(dst_vertices)
     dst_but_not_src = dst_vertices.difference(src_vertices)
@@ -88,7 +104,8 @@ def compare_same_layout_meshes(src: List[GMDMesh], dst: List[GMDMesh], error: Er
     return True
 
 
-def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: ErrorReporter, context: str):
+def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: GMDNode, error: ErrorReporter,
+                             context: str):
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
             error.recoverable(f"{context}: field {f} differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
@@ -138,6 +155,7 @@ def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: 
                         unique_attr_sets.append(m.attribute_set)
                 if all(
                         compare_same_layout_meshes(
+                            skinned,
                             [m for m in src.mesh_list if m.attribute_set == attr],
                             [m for m in dst.mesh_list if m.attribute_set == attr],
                             error, f"{context}attr set {attr.texture_diffuse}"
@@ -147,8 +165,8 @@ def compare_single_node_pair(vertices: bool, src: GMDNode, dst: GMDNode, error: 
                     error.info(f"{context} meshes are functionally identical")
 
 
-def recursive_compare_node_lists(vertices: bool, src: List[GMDNode], dst: List[GMDNode], error: ErrorReporter,
-                                 context: str):
+def recursive_compare_node_lists(skinned: bool, vertices: bool, src: List[GMDNode], dst: List[GMDNode],
+                                 error: ErrorReporter, context: str):
     src_names_unordered = set(n.name for n in src)
     dst_names_unordered = set(n.name for n in dst)
     if src_names_unordered != dst_names_unordered:
@@ -162,8 +180,8 @@ def recursive_compare_node_lists(vertices: bool, src: List[GMDNode], dst: List[G
 
     for child_src, child_dst in zip(src, dst):
         child_context = f"{context}{child_src.name} > "
-        compare_single_node_pair(vertices, child_src, child_dst, error, child_context)
-        recursive_compare_node_lists(vertices, child_src.children, child_dst.children, error, child_context)
+        compare_single_node_pair(skinned, vertices, child_src, child_dst, error, child_context)
+        recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, error, child_context)
 
 
 def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool):
@@ -204,8 +222,8 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool)
                                                          import_mode,
                                                          file_data_dst, error)
 
-    recursive_compare_node_lists(vertices, scene_src.overall_hierarchy.roots, scene_dst.overall_hierarchy.roots, error,
-                                 "")
+    recursive_compare_node_lists(skinned, vertices, scene_src.overall_hierarchy.roots,
+                                 scene_dst.overall_hierarchy.roots, error, "")
 
 
 if __name__ == '__main__':
