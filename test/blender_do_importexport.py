@@ -23,9 +23,9 @@ try:
         # Import the file
         print(f"Loading from {YKGMDIO_TEST_SRC}")
         if YKGMDIO_SKINNED:
-            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="")
+            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
         else:
-            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="")
+            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
 
         # Select the top-level object in the first collection
         toplevel_collection = next(k for k in bpy.data.collections.keys() if k != "Collection")
