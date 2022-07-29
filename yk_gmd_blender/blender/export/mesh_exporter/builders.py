@@ -68,7 +68,8 @@ class VertexFetcher:
 
     def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
         if self.layers.tangent_layer:
-            tangent = (self.layers.tangent_layer.data[loop.loops[tri_index]].color * 2) - 1
+            encoded_tangent = self.layers.tangent_layer.data[loop.loops[tri_index]].color
+            tangent = (Vector(encoded_tangent) * 2) - Vector((1, 1, 1, 1))
         else:
             tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent))
             tangent = tangent.resized(4)
