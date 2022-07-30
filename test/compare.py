@@ -1,8 +1,11 @@
 import argparse
 import itertools
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Any, Set
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional
 
+from mathutils import Vector
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
@@ -24,58 +27,154 @@ def sort_src_dest_lists(src: Iterable[T], dst: Iterable[T], key: Callable[[T], s
     return sorted_src, sorted_dst
 
 
-def get_unique_verts(ms: List[GMDMesh]) -> Set[Tuple]:
+@dataclass(frozen=True)
+class VertApproxData:
+    normal: Optional[Tuple]
+    tangent: Optional[Tuple]
+
+    @staticmethod
+    def new(normal: Optional[Vector], tangent: Optional[Vector]):
+        return VertApproxData(
+            normal=tuple(round(x, 2) for x in normal.resized(4)) if normal is not None else None,
+            tangent=tuple(round(x, 2) for x in tangent.resized(4)) if tangent is not None else None
+        )
+
+    def approx_eq(self, other: 'VertApproxData') -> bool:
+        t = 0.9  # equality threshold
+        if self.normal is None:
+            if other.normal is not None:
+                return False
+        else:
+            if other.normal is None or Vector(self.normal).dot(Vector(other.normal)) < t:
+                return False
+
+        if self.tangent is None:
+            if other.tangent is not None:
+                return False
+        else:
+            if other.tangent is None or Vector(self.tangent).dot(Vector(other.tangent)) < t:
+                return False
+
+        return True
+
+    def __lt__(self, other) -> bool:
+        return (self.normal, self.tangent) < (other.normal, other.tangent)
+
+    def __gt__(self, other) -> bool:
+        return (self.normal, self.tangent) > (other.normal, other.tangent)
+
+
+class VertSet:
+    """
+    Class for storing sets of vertex data, split into "exact" and "approximate" data.
+    When computing the difference of two sets, first compares exact parts then
+    sees if the approximate parts are close enough.
+    """
+    verts: DefaultDict[Tuple, Set[VertApproxData]]
+    len: int
+
+    def __init__(self):
+        self.verts = defaultdict(lambda: set())
+        self.len = 0
+
+    def add(self, vert_exact: Tuple, vert_approx: VertApproxData):
+        self.verts[vert_exact].add(vert_approx)
+        self.len += 1
+
+    def difference(self, other: 'VertSet') -> Set[Tuple[Tuple, VertApproxData]]:
+        """
+        Return the difference of two vert-sets as a set.
+        (i.e. all elements that are in this set but not the others.)
+
+        Returns a set of tuples: (vert_exact, vert_approx) not found in the other set,
+        i.e. for which there does not exist a vert_approx_alt in other.verts[vert_exact]
+        where vert_approx.approx_eq(vert_approx_alt)
+
+        :param other: The other set
+        :return: Set of (vert_exact, vert_approx) tuples not found in the other set
+        """
+
+        verts: Set[Tuple[Tuple, VertApproxData]] = set()
+
+        key_set = set(self.verts.keys())
+
+        # 1. Find vert_exacts that don't match
+        for vert_exact in key_set.difference(other.verts.keys()):
+            # foreach vert_exact that doesn't exist in the other verts
+            # add all (vert_exact, vert_approx) pairs to the set
+            verts.update((vert_exact, v_a) for v_a in self.verts[vert_exact])
+
+        # 2. Find vert_approx that don't match within vert_exacts that do match
+        for vert_exact in key_set.intersection(other.verts.keys()):
+            # foreach vert_exact that is in both sets
+            # check the vert_approx lists
+            self_approx = self.verts[vert_exact]
+            other_approx = other.verts[vert_exact]
+            # O(n^2), but there shouldn't be many items in either list
+            verts.update(
+                (vert_exact, v_a)
+                for v_a in self_approx
+                if not any(v_a.approx_eq(v_a_alt) for v_a_alt in other_approx)
+            )
+
+        return verts
+
+    def __len__(self):
+        return self.len
+
+
+def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
     nul_item = (0,)
-    all_verts = set()
+    all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        verts: List[Tuple[Any, ...]] = [nul_item] * len(buf)
         for i in range(len(buf)):
-            verts[i] = (
-                tuple(round(x, 1) for x in buf.pos[i]),
-                tuple(round(x, 1) for x in buf.col0[i]) if buf.col0 else nul_item,
-                tuple(round(x, 1) for x in buf.col1[i]) if buf.col1 else nul_item,
-                tuple(round(x, 1) for x in buf.unk[i]) if buf.unk else nul_item,
-                tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
-                "n",
-                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
-                "t",
-                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item,
-                "b",
-                tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                "w",
-                tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+            all_verts.add(
+                (
+                    tuple(round(x, 2) for x in buf.pos[i]),
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
+                    "b",
+                    tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
+                    "w",
+                    tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                ),
+                VertApproxData.new(
+                    normal=buf.normal[i] if buf.normal else None,
+                    tangent=buf.tangent[i] if buf.tangent else None
+                )
             )
-        all_verts.update(verts)
     return all_verts
 
 
-def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> Set[Tuple]:
+def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     nul_item = (0,)
-    all_verts = set()
+    all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        verts: List[Tuple[Any, ...]] = [nul_item] * len(buf)
         for i in range(len(buf)):
             assert buf.bone_data and buf.weight_data
-            verts[i] = (
-                tuple(round(x, 1) for x in buf.pos[i]),
-                tuple(round(x, 1) for x in buf.col0[i]) if buf.col0 else nul_item,
-                tuple(round(x, 1) for x in buf.col1[i]) if buf.col1 else nul_item,
-                tuple(round(x, 1) for x in buf.unk[i]) if buf.unk else nul_item,
-                tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
-                "bw",
-                tuple(
-                    (gmd_mesh.relevant_bones[int(b)].name, round(w, 1))
-                    for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
-                    if w > 0
-                ) if buf.bone_data and buf.weight_data else nul_item,
-                "n",
-                tuple(round(x, 1) for x in buf.normal[i]) if buf.normal else nul_item,
-                "t",
-                tuple(round(x, 1) for x in buf.tangent[i]) if buf.tangent else nul_item
+            all_verts.add(
+                (
+                    tuple(round(x, 2) for x in buf.pos[i]),
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
+                    "bw",
+                    tuple(
+                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 1))
+                        for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
+                        if w > 0
+                    ) if buf.bone_data and buf.weight_data else nul_item,
+                ),
+                VertApproxData.new(
+                    normal=buf.normal[i] if buf.normal else None,
+                    tangent=buf.tangent[i] if buf.tangent else None
+                )
             )
-        all_verts.update(verts)
     return all_verts
 
 
@@ -170,7 +269,7 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
                             skinned,
                             [m for m in src.mesh_list if m.attribute_set == attr],
                             [m for m in dst.mesh_list if m.attribute_set == attr],
-                            error, f"{context}attr set {attr.texture_diffuse}"
+                            error, f"{context}attr set {attr.texture_diffuse} "
                         )
                         for attr in unique_attr_sets
                 ):
