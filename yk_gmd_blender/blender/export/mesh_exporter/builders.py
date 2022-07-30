@@ -167,19 +167,8 @@ class VertexFetcher:
         pos_vec = (self.transformation_position @ self.mesh.vertices[i].co).resized(4)
         pos_vec.freeze()
         vertex_buffer.pos.append(pos_vec)
-        from math import isclose
-        is_special = (
-                isclose(vertex_buffer.pos[-1].x, -0.106, rel_tol=0, abs_tol=0.005) and
-                isclose(vertex_buffer.pos[-1].y, 1.508, rel_tol=0, abs_tol=0.005) and
-                isclose(vertex_buffer.pos[-1].z, 0.05, rel_tol=0, abs_tol=0.005)
-        )
         # TODO refactor boneweights functionality - on an unskinned object extracting boneweights will be different
         boneweights = self.boneweights_for(i)
-        if is_special:
-            print(f"DEBUG extract_vertex special export {vertex_buffer.pos[-1]}")
-            for i_bw, bw in enumerate(boneweights):
-                print(f"DEBUG extract_vertex special export {i_bw} {bw.bone}")
-
         if vertex_buffer.bone_data is not None:
             bone_vec = Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone))
             bone_vec.freeze()
@@ -409,18 +398,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         old_relevant_bones = self.relevant_gmd_bones
         self.relevant_gmd_bones = new_relevant_bones
         self.weighted_bone_verts = collections.defaultdict(list)
-        from math import isclose
         for i in range(len(self.vertices)):
-            is_special = (
-                    isclose(self.vertices.pos[i].x, -0.106, rel_tol=0, abs_tol=0.005) and
-                    isclose(self.vertices.pos[i].y, 1.508, rel_tol=0, abs_tol=0.005) and
-                    isclose(self.vertices.pos[i].z, 0.05, rel_tol=0, abs_tol=0.005)
-            )
-            if is_special:
-                print(f"DEBUG {self} special export {self.vertices.pos[i]}")
-                print(f"DEBUG rewriting {id(self.vertices.bone_data)} bone_data")
-                print(f"DEBUG old_relevant_bones {id(old_relevant_bones)}")
-                print(f"DEBUG new_relevant_bones {id(new_relevant_bones)}")
             # Copy the bone_data, modify it, then freeze it
             self.vertices.bone_data[i] = Vector(self.vertices.bone_data[i])
             for i_weight in range(4):
@@ -428,10 +406,6 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
                 if weight != 0:
                     old_bone = int(self.vertices.bone_data[i][i_weight])
                     new_bone = bone_index_mapping[old_bone]
-                    if is_special:
-                        print(
-                            f"DEBUG special export idx {i} w {i_weight} {old_bone} [{old_relevant_bones[old_bone].name}] "
-                            f"-> {new_bone} [{self.relevant_gmd_bones[new_bone].name}]")
                     self.vertices.bone_data[i][i_weight] = new_bone
                     self.weighted_bone_verts[new_bone].append(i)
             self.vertices.bone_data[i].freeze()
@@ -487,11 +461,6 @@ class SkinnedSubmeshBuilderSubset:
         # TODO - This should remap bones in skinned submeshes, instead of making the base SkinnedSubmeshBuilder remap them later?
         sm = SkinnedSubmeshBuilder(self.base.vertices.layout, self.base.material_index, self.base.relevant_gmd_bones)
         vertex_remap = {}
-
-        print(
-            f"DEBUG convert {self} -> SkinnedSubmeshBuilder {sm}\ncopying bone_data from {id(self.base.vertices.bone_data)}\nrelevant_gmd_bones: {id(self.base.relevant_gmd_bones)}")
-        print(
-            f"DEBUG convert base = {self.base}")
 
         # TODO: Detect continuous ranges and copy those ranges across?
         # Copying each vertex individually will use more memory/take more time
