@@ -145,10 +145,11 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
     # TODO: Check if it's even worth it
     report = f"A submesh on {object_name} had >{bone_limit} bone references " \
              f"({len(skinned_submesh_builder.relevant_gmd_bones)}) and was split into {len(split_meshes)} chunks\n"
+    error.debug("MESH", report)
 
     split_submeshes = []
     for split_mesh in split_meshes:
-        report += "\nSplitSubmeshSubset\n"
+        report = "\nSplitSubmeshSubset\n"
         report += f"ref-verts: {len(split_mesh.referenced_verts)} ref-tris: {len(split_mesh.referenced_triangles)}\n"
         split_submesh_builder = split_mesh.convert_to_submesh_builder()
         report += "SplitSubmesh pre-reduce\n"
@@ -159,9 +160,10 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
         report += f"ref-verts: {len(split_submesh_builder.vertices)} ref-tris: {len(split_submesh_builder.triangles)} " \
                   f"ref-bones: {len(split_submesh_builder.relevant_gmd_bones)}\n"
         report += f"{split_submesh_builder.total_referenced_bones()}\n"
+        error.debug("MESH", report)
+        assert len(split_submesh_builder.relevant_gmd_bones) < bone_limit
+        assert len(split_submesh_builder.total_referenced_bones()) < bone_limit
         split_submeshes.append(split_submesh_builder)
-
-    error.debug("MESH", report)
 
     return split_submeshes
 
