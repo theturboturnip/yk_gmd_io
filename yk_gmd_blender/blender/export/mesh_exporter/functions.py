@@ -52,14 +52,16 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
     for attribute_set in attribute_sets:
         layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout, skinned)
         layers = layer_names.try_retrieve_from(mesh, error)
-        vertex_fetcher = VertexFetcher(mesh_name,
-                                       attribute_set.shader.vertex_buffer_layout,
-                                       transformation_position=transformation_position,
-                                       transformation_direction=transformation_direction,
-                                       vertex_group_bone_index_map=vertex_group_bone_index_map,
-                                       mesh=mesh,
-                                       layers=layers,
-                                       error=error)
+        vertex_fetcher = VertexFetcher(
+            skinned=skinned,
+            vertex_layout=attribute_set.shader.vertex_buffer_layout,
+            transformation_position=transformation_position,
+            transformation_direction=transformation_direction,
+            vertex_group_bone_index_map=vertex_group_bone_index_map,
+            mesh=mesh,
+            layers=layers,
+            error=error
+        )
         vertex_fetchers.append(vertex_fetcher)
 
     # foreach triangle, add triangle to respective submesh builder
