@@ -4,11 +4,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 import compare
 from conftest import GMDTest
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
 
 
-def test_gmd_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+@pytest.mark.order(1)
+def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     # Create subfolder in output for directory
     gmdtest.dst.parent.mkdir(parents=True, exist_ok=True)
     # Copy the file into the output - this should be overwritten by blender
@@ -42,4 +46,11 @@ def test_gmd_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool
         ], check=True, env=env)
 
     # Compare the import/export
-    compare.compare_files(gmdtest.src, gmdtest.dst, gmdtest.skinned, vertices=True)
+    compare.compare_files(gmdtest.src, gmdtest.dst, gmdtest.skinned, vertices=True,
+                          error=LenientErrorReporter(allowed_categories=set()))
+
+
+@pytest.mark.order(2)
+def test_gmd_compare_strict(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+    compare.compare_files(gmdtest.src, gmdtest.dst, gmdtest.skinned, vertices=True,
+                          error=StrictErrorReporter(allowed_categories=set()))
