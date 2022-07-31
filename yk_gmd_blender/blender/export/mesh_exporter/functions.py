@@ -187,7 +187,6 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object):
     mesh.calc_normals_split()
     mesh.calc_tangents()
     mesh.calc_loop_triangles()
-    mesh.transform(object.matrix_world)
 
     return mesh
 
@@ -199,6 +198,8 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
     mesh = prepare_mesh(context, object)
+    # Apply all transformations - skinned objects are always located at (0,0,0)
+    mesh.transform(object.matrix_world)
 
     vertex_group_mapping = {
         i: bone_name_map[group.name]
