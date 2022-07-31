@@ -139,7 +139,7 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
                     "b",
                     tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
                     "w",
-                    tuple(round(x, 1) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                    tuple(round(x, 2) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
                 ),
                 VertApproxData.new(
                     normal=buf.normal[i] if buf.normal else None,
@@ -165,7 +165,7 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "bw",
                     tuple(
-                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 1))
+                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 3))
                         for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
                         if w > 0
                     ) if buf.bone_data and buf.weight_data else nul_item,

@@ -118,6 +118,7 @@ class VertexFetcher:
             if weight_pair.group in self.vertex_group_bone_index_map
         ]
         if len(b_weights) > 4:
+            # TODO warning for vertices with significant boneweights for >4 bones?
             b_weights = b_weights[:4]
         elif len(b_weights) < 4:
             # Add zeroed elements to b_weights so it's 4 elements long
@@ -126,7 +127,7 @@ class VertexFetcher:
         if weight_sum < 0.0:
             self.error.fatal(f"Weights {b_weights} summed to negative number!")
         if weight_sum > 0:
-            b_weights = [(vtx_group, weight / weight_sum) for (vtx_group, weight) in b_weights]
+            b_weights = [(vtx_group, weight) for (vtx_group, weight) in b_weights]
             # Convert the weights to the yk_gmd abstract BoneWeight format
             weights_list = [
                 BoneWeight(
