@@ -15,7 +15,8 @@ class GMDBone(GMDNode):
                  anim_axis: Vector,
                  matrix: Matrix,
 
-                 parent: Optional['GMDBone'],
+                 # Empties in unskinned objects have non-bone parents
+                 parent: Optional[GMDNode],
                  flags: List[int]):
         super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, parent, flags)
 

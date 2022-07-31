@@ -664,43 +664,59 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
             self.error.fatal(f"bone {object.name} has invalid flags - must be a list of 4 integers")
 
-        gmd_object = GMDUnskinnedObject(
-            name=remove_blender_duplicate(object.name),
-            node_type=NodeType.UnskinnedMesh,
+        gmd_object: GMDNode
+        if object.type == "MESH":  # and object.data.vertices:
+            gmd_object = GMDUnskinnedObject(
+                name=remove_blender_duplicate(object.name),
+                node_type=NodeType.UnskinnedMesh,
 
-            pos=adjusted_pos,
-            rot=adjusted_rot,
-            scale=adjusted_scale,
-            parent=parent,
+                pos=adjusted_pos,
+                rot=adjusted_rot,
+                scale=adjusted_scale,
+                parent=parent,
 
-            world_pos=world_pos,
-            anim_axis=anim_axis,
-            flags=flags,
+                world_pos=world_pos,
+                anim_axis=anim_axis,
+                flags=flags,
 
-            matrix=adjusted_matrix
-        )
+                matrix=adjusted_matrix
+            )
+            if object.data.vertices:
+                if not object.material_slots:
+                    self.error.fatal(f"Object {object.name} has no materials")
+                attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for
+                                  material_slot in object.material_slots]
+                if any(attr.shader.assume_skinned for attr in attribute_sets):
+                    self.error.fatal(f"Object {object.name} uses a material which *may* require it to be skinned.\n"
+                                     f"Try parenting it to the skeleton using Ctrl P > Empty Weights, "
+                                     f"or changing to a different material.\n"
+                                     f"If you're absolutely sure that this material works for unskinned meshes,"
+                                     f"uncheck the 'Assume Skinned' box in the Yakuza Material Properties.")
+                gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
+                for gmd_mesh in gmd_meshes:
+                    gmd_object.add_mesh(gmd_mesh)
+            else:
+                self.error.info(f"Object {object.name} is a mesh with no vertices - exporting as GMDUnskinnedObject")
+        else:
+            self.error.debug("MESH", f"Object {object.name} of type {object.type} has no mesh, exporting as empty")
+            gmd_object = GMDBone(
+                name=remove_blender_duplicate(object.name),
+                node_type=NodeType.MatrixTransform,
+
+                pos=adjusted_pos,
+                rot=adjusted_rot,
+                scale=adjusted_scale,
+                parent=parent,
+
+                world_pos=world_pos,
+                anim_axis=anim_axis,
+                flags=flags,
+
+                matrix=adjusted_matrix
+            )
+
         if not parent:
             self.node_roots.append(gmd_object)
-
-        # Add meshes to gmd_object
-        if object.type == "EMPTY" or (object.type == "MESH" and not object.data.vertices):
-            self.error.debug("MESH", f"Object {object.name} has no mesh")
-        elif object.type == "MESH":
-            if not object.material_slots:
-                self.error.fatal(f"Object {object.name} has no materials")
-            attribute_sets = [self.blender_material_to_gmd_attribute_set(material_slot.material, object) for
-                              material_slot in object.material_slots]
-            if any(attr.shader.assume_skinned for attr in attribute_sets):
-                self.error.fatal(f"Object {object.name} uses a material which *may* require it to be skinned.\n"
-                                 f"Try parenting it to the skeleton using Ctrl P > Empty Weights, "
-                                 f"or changing to a different material.\n"
-                                 f"If you're absolutely sure that this material works for unskinned meshes,"
-                                 f"uncheck the 'Assume Skinned' box in the Yakuza Material Properties.")
-            gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
-            for gmd_mesh in gmd_meshes:
-                gmd_object.add_mesh(gmd_mesh)
-        else:
-            self.error.recoverable(f"Object {object.name} has unexpected type {object.type} - not exporting")
 
         # Object.children returns all children, not just direct descendants.
         direct_children = [o for o in collection.objects if o.parent == object]
