@@ -156,6 +156,13 @@ def gmd_meshes_to_bmesh(
 
     for m_i, gmd_mesh in enumerate(gmd_meshes):
         layers = attr_set_layers[gmd_mesh.vertices_data.layout.packing_flags]
+        # Check the layers
+        if not layers.tangent_layer and gmd_mesh.vertices_data.layout.tangent_storage and layers.primary_uv_i is None:
+            error.recoverable(f"Material/shader {gmd_mesh.attribute_set.shader} requires tangents to be calculated, "
+                              f"but doesn't have a primary UV map."
+                              f"This will fail if you try to export it, because Blender calculates tangents from UV maps."
+                              f"If you're OK with this, disable Strict Import and try again")
+
         attr_idx = attr_set_material_idx_mapping[id(gmd_mesh.attribute_set)]
 
         # For face in mesh
@@ -216,7 +223,7 @@ def gmd_meshes_to_bmesh(
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
                     loop[layers.tangent_layer] = (
-                    (tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3] + 1) / 2)
+                        (tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3] + 1) / 2)
 
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None

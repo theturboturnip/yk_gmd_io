@@ -389,6 +389,7 @@ class AttribSetLayerNames:
             tangent_layer=tangent_layer,
             tangent_w_layer=tangent_w_layer,
             uv_layers=uv_layers,
+            primary_uv_i=self.primary_uv_i,
         )
 
     def try_retrieve_from(self, mesh: bpy.types.Mesh, error: ErrorReporter) -> 'AttribSetLayers_bpy':
@@ -477,6 +478,7 @@ class AttribSetLayerNames:
             tangent_layer=tangent_layer,
             tangent_w_layer=tangent_w_layer,
             uv_layers=uv_layers,
+            primary_uv_i=self.primary_uv_i,
         )
 
     def get_blender_uv_layers(self) -> List[str]:
@@ -529,6 +531,7 @@ class AttribSetLayers_bpy:
     tangent_w_layer: Optional[bpy.types.FloatColorAttribute]
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, Optional[Union[bpy.types.FloatColorAttribute, bpy.types.MeshUVLoopLayer]]]]
+    primary_uv_i: Optional[int]
 
 
 @dataclass
@@ -545,3 +548,4 @@ class AttribSetLayers_bmesh:
     tangent_w_layer: Optional[BMLayerCollection]
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, BMLayerCollection]]
+    primary_uv_i: Optional[int]

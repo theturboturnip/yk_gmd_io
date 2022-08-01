@@ -52,14 +52,16 @@ def split_mesh_by_material(mesh_name: str, mesh: bpy.types.Mesh, object_blender_
     for attribute_set in attribute_sets:
         layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout, skinned)
         layers = layer_names.try_retrieve_from(mesh, error)
-        vertex_fetcher = VertexFetcher(mesh_name,
-                                       attribute_set.shader.vertex_buffer_layout,
-                                       transformation_position=transformation_position,
-                                       transformation_direction=transformation_direction,
-                                       vertex_group_bone_index_map=vertex_group_bone_index_map,
-                                       mesh=mesh,
-                                       layers=layers,
-                                       error=error)
+        vertex_fetcher = VertexFetcher(
+            skinned=skinned,
+            vertex_layout=attribute_set.shader.vertex_buffer_layout,
+            transformation_position=transformation_position,
+            transformation_direction=transformation_direction,
+            vertex_group_bone_index_map=vertex_group_bone_index_map,
+            mesh=mesh,
+            layers=layers,
+            error=error
+        )
         vertex_fetchers.append(vertex_fetcher)
 
     # foreach triangle, add triangle to respective submesh builder
@@ -168,7 +170,7 @@ def split_submesh_builder_by_bones(skinned_submesh_builder: SkinnedSubmeshBuilde
     return split_submeshes
 
 
-def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object):
+def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tangent: bool):
     dg = context.evaluated_depsgraph_get()
 
     mesh = object.evaluated_get(dg).data
@@ -185,11 +187,15 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object):
 
     # Now it's triangulated we can calculate tangents (TODO calc_normals_split may not be necessary anymore)
     mesh.calc_normals_split()
-    mesh.calc_tangents()
+    if needs_tangent:
+        mesh.calc_tangents()
     mesh.calc_loop_triangles()
-    mesh.transform(object.matrix_world)
 
     return mesh
+
+
+def check_needs_tangent(materials: List[GMDAttributeSet]) -> bool:
+    return any(m.shader.vertex_buffer_layout.tangent_storage for m in materials)
 
 
 def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,
@@ -198,7 +204,9 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
                                       error: ErrorReporter) -> List[GMDSkinnedMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
-    mesh = prepare_mesh(context, object)
+    mesh = prepare_mesh(context, object, check_needs_tangent(materials))
+    # Apply all transformations - skinned objects are always located at (0,0,0)
+    mesh.transform(object.matrix_world)
 
     vertex_group_mapping = {
         i: bone_name_map[group.name]
@@ -225,7 +233,7 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
                                         materials: List[GMDAttributeSet], error: ErrorReporter) -> List[GMDMesh]:
     # Apply the dependency graph to the mesh
     # https://blender.stackexchange.com/a/146911
-    mesh = prepare_mesh(context, object)
+    mesh = prepare_mesh(context, object, check_needs_tangent(materials))
 
     error.debug("MESH", f"Exporting unskinned meshes for {object.name}")
     submesh_builders = split_mesh_by_material(object.name, mesh, Matrix.Identity(4), materials, False,

@@ -1,10 +1,9 @@
 import array
 import collections
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Set, Optional, Generic, TypeVar
+from typing import List, Tuple, Dict, Callable, Set, Generic, TypeVar
 
 import bpy
-from bmesh.types import BMVert
 from mathutils import Vector, Matrix
 from yk_gmd_blender.blender.common import AttribSetLayers_bpy
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
@@ -16,26 +15,27 @@ from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 @dataclass(frozen=True)
 class PerLoopVertexData:
-    normal: Optional[Vector]
-    tangent: Optional[Vector]
-    col0: Optional[Vector]
-    col1: Optional[Vector]
+    normal: Vector
+    tangent: Vector
+    col0: Vector
+    col1: Vector
+    unskinned_bone: Vector
+    unskinned_weight: Vector
     uvs: Tuple
 
 
 class VertexFetcher:
-    bm_vertices: List[BMVert]
+    skinned: bool
     vertex_layout: GMDVertexBufferLayout
     transformation_position: Matrix
     transformation_direction: Matrix
-    vertex_group_bone_index_map: Dict[int, int]
     mesh: bpy.types.Mesh
-
+    vertex_group_bone_index_map: Dict[int, int]
     layers: AttribSetLayers_bpy
     error: ErrorReporter
 
     def __init__(self,
-                 mesh_name: str,
+                 skinned: bool,
                  vertex_layout: GMDVertexBufferLayout,
                  transformation_position: Matrix,
                  transformation_direction: Matrix,
@@ -44,6 +44,7 @@ class VertexFetcher:
                  layers: AttribSetLayers_bpy,
                  error: ErrorReporter
                  ):
+        self.skinned = skinned
         self.vertex_layout = vertex_layout
         self.transformation_position = transformation_position
         self.transformation_direction = transformation_direction
@@ -52,7 +53,7 @@ class VertexFetcher:
         self.layers = layers
         self.error = error
 
-    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         normal = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].normal)).resized(4)
 
         normal.w = 0
@@ -65,7 +66,7 @@ class VertexFetcher:
 
         return normal
 
-    def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         if self.layers.tangent_layer:
             encoded_tangent = self.layers.tangent_layer.data[loop.loops[tri_index]].color
             tangent = (Vector(encoded_tangent) * 2) - Vector((1, 1, 1, 1))
@@ -78,19 +79,19 @@ class VertexFetcher:
                 tangent.w = 1
         return tangent
 
-    def col0_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def col0_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         if self.layers.col0_layer:
             return Vector(self.layers.col0_layer.data[loop.loops[tri_index]].color)
         else:
             return Vector((1, 1, 1, 1))
 
-    def col1_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def col1_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         if self.layers.col1_layer:
             return Vector(self.layers.col1_layer.data[loop.loops[tri_index]].color)
         else:
             return Vector((1, 1, 1, 1))
 
-    def uv_for(self, uv_idx: int, loop: bpy.types.MeshLoopTriangle, tri_index: int):
+    def uv_for(self, uv_idx: int, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         component_count, layer = self.layers.uv_layers[uv_idx]
         if layer:
             # If component_count == 2 then we should be storing it in a UV layer.
@@ -107,7 +108,21 @@ class VertexFetcher:
         else:
             return Vector([0] * component_count)
 
-    def boneweights_for(self, i: int):
+    def unskinned_bone_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
+        if self.layers.bone_data_layer:
+            # TODO this is a hack. This assumes the bonedata is always a byte-value.
+            # We should change this so that self.layers actually looks at the associated storage and decides how to encode/decode to 0.1.
+            return Vector(self.layers.bone_data_layer.data[loop.loops[tri_index]].color) * 255
+        else:
+            return Vector((0, 0, 0, 0))
+
+    def unskinned_weight_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
+        if self.layers.weight_data_layer:
+            return Vector(self.layers.weight_data_layer.data[loop.loops[tri_index]].color)
+        else:
+            return Vector((0, 0, 0, 0))
+
+    def skinned_boneweights_for(self, i: int) -> Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]:
         # Get a list of (vertex group ID, weight) items sorted in descending order of weight
         # Take the top 4 elements, for the top 4 most deforming bones
         # Normalize the weights so they sum to 1
@@ -149,15 +164,40 @@ class VertexFetcher:
                 BoneWeight(bone=0, weight=0.0),
             )
 
+    def boneweights_for(self, i: int, per_loop_data: PerLoopVertexData) -> Tuple[Vector, Vector]:
+        """
+        Returns a (bone, weight) tuple of vectors containing data for vertex i in the Blender mesh.
+        If the mesh is unskinned, and doesn't have data for bones/weights, that respective vector is None.
+
+        :param i:
+        :return:
+        """
+
+        if self.skinned:
+            bws = self.skinned_boneweights_for(i)
+            bone_vec = Vector((bws[0].bone, bws[1].bone, bws[2].bone, bws[3].bone))
+            bone_vec.freeze()
+            weight_vec = Vector((bws[0].weight, bws[1].weight, bws[2].weight, bws[3].weight))
+            weight_vec.freeze()
+
+            return bone_vec, weight_vec
+        else:
+            return per_loop_data.unskinned_bone, per_loop_data.unskinned_weight
+
     def get_per_loop_data(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
         # The importer merges vertices with the same (position, boneweights, normal)
         # The position and boneweights should match exactly the GMD, so they will always be the same for fused vertices
         # However because Blender recalculates the normal it is also per-loop, so it might be different between fused vertices
         return PerLoopVertexData(
+            # Note - .freeze() returns "an instance of this object"
+            # [https://docs.blender.org/api/current/mathutils.html#mathutils.Vector.freeze]
+            # but the type hints don't pick this up
             normal=self.normal_for(loop, tri_index).freeze(),
             tangent=self.tangent_for(loop, tri_index).freeze(),
             col0=self.col0_for(loop, tri_index).freeze(),
             col1=self.col1_for(loop, tri_index).freeze(),
+            unskinned_bone=self.unskinned_bone_for(loop, tri_index).freeze(),
+            unskinned_weight=self.unskinned_weight_for(loop, tri_index).freeze(),
             uvs=tuple([self.uv_for(uv_idx, loop, tri_index).freeze() for uv_idx in range(len(self.layers.uv_layers))])
         )
 
@@ -168,16 +208,13 @@ class VertexFetcher:
         pos_vec = (self.transformation_position @ self.mesh.vertices[i].co).resized(4)
         pos_vec.freeze()
         vertex_buffer.pos.append(pos_vec)
-        # TODO refactor boneweights functionality - on an unskinned object extracting boneweights will be different
-        boneweights = self.boneweights_for(i)
+        # Get the bone, weight vectors - if unskinned will pull from per-loop-data, if skinned uses vertex groups
+        # TODO if we can assume bone data is always integer, why not use numbered vertex groups for this instead?
+        # Would be easier to edit
+        bone_vec, weight_vec = self.boneweights_for(i, per_loop_data)
         if vertex_buffer.bone_data is not None:
-            bone_vec = Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone))
-            bone_vec.freeze()
             vertex_buffer.bone_data.append(bone_vec)
         if vertex_buffer.weight_data is not None:
-            weight_vec = Vector(
-                (boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight))
-            weight_vec.freeze()
             vertex_buffer.weight_data.append(weight_vec)
         if vertex_buffer.normal is not None:
             vertex_buffer.normal.append(per_loop_data.normal)
@@ -199,9 +236,9 @@ class SubmeshBuilder:
 
     vertices: GMDVertexBuffer_Generic
     triangles: List[Tuple[int, int, int]]
-    blender_vid_to_this_vid: Dict[Tuple[int, 'PerLoopData'], int]
+    blender_vid_to_this_vid: Dict[Tuple[int, 'PerLoopVertexData'], int]
     # This could use a Set with hashing, but Vectors aren't hashable by default and there's at most like 5 per list
-    per_loop_data_for_blender_vid: Dict[int, List['PerLoopData']]
+    per_loop_data_for_blender_vid: Dict[int, List['PerLoopVertexData']]
     material_index: int
 
     def __init__(self, layout: GMDVertexBufferLayout, material_index: int):

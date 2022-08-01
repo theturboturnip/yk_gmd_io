@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional
 
 from mathutils import Vector
+from yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
@@ -80,6 +81,16 @@ class VertSet:
     def add(self, vert_exact: Tuple, vert_approx: VertApproxData):
         self.verts[vert_exact].add(vert_approx)
         self.len += 1
+
+    def exact_difference(self, other: 'VertSet') -> Set[Tuple]:
+        """
+        Returns the difference in exact data of two vert-sets as a set
+        (i.e. all exact data elements that are in this set but not the others)
+
+        :param other: The other set
+        :return: Set of vert_exact tuples not found in the other set
+        """
+        return set(self.verts.keys()).difference(other.verts.keys())
 
     def difference(self, other: 'VertSet') -> Set[Tuple[Tuple, VertApproxData]]:
         """
@@ -187,14 +198,28 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
         src_vertices = get_unique_verts(src)
         dst_vertices = get_unique_verts(dst)
 
+    src_but_not_dst_exact = src_vertices.exact_difference(dst_vertices)
+    dst_but_not_src_exact = dst_vertices.exact_difference(src_vertices)
+
+    if src_but_not_dst_exact or dst_but_not_src_exact:
+        src_but_not_dst_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_but_not_dst_exact), 5))
+        dst_but_not_src_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_but_not_src_exact), 5))
+        error.fatal(
+            f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) exact data differs\n\t"
+            f"src meshes have {len(src_but_not_dst_exact)} vertices missing in dst:\n\t"
+            f"{src_but_not_dst_str}...\n\t"
+            f"dst meshes have {len(dst_but_not_src_exact)} vertices not in src:\n\t"
+            f"{dst_but_not_src_str}...")
+        return False
+
     src_but_not_dst = src_vertices.difference(dst_vertices)
     dst_but_not_src = dst_vertices.difference(src_vertices)
 
     if src_but_not_dst or dst_but_not_src:
         src_but_not_dst_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_but_not_dst), 5))
         dst_but_not_src_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_but_not_src), 5))
-        error.fatal(
-            f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) differ\n\t"
+        error.recoverable(
+            f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) APPROX data differs\n\t"
             f"src meshes have {len(src_but_not_dst)} vertices missing in dst:\n\t"
             f"{src_but_not_dst_str}...\n\t"
             f"dst meshes have {len(dst_but_not_src)} vertices not in src:\n\t"
@@ -295,9 +320,7 @@ def recursive_compare_node_lists(skinned: bool, vertices: bool, src: List[GMDNod
         recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, error, child_context)
 
 
-def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool):
-    error = LenientErrorReporter(allowed_categories=set())
-
+def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool, error: ErrorReporter):
     # Load and compare basic information - GMD version, headers
     version_props_src, header_src, file_data_src = read_gmd_structures(file_src, error)
     version_props_dst, header_dst, file_data_dst = read_gmd_structures(file_dst, error)
@@ -311,8 +334,19 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool)
                 f"header: field {f} differs:\nsrc:\n\t{getattr(header_src, f)}\ndst:\n\t{getattr(header_dst, f)}")
 
     compare_header_field("magic")
-    compare_header_field("vertex_endian_check")
-    compare_header_field("file_endian_check")
+    # Compare endianness
+    if check_are_vertices_big_endian(header_src.vertex_endian_check) != \
+            check_are_vertices_big_endian(header_dst.vertex_endian_check):
+        error.recoverable(
+            f"header: vertex endian differs:\nsrc:\n\t"
+            f"{header_src.vertex_endian_check} {check_are_vertices_big_endian(header_src.vertex_endian_check)}\n"
+            f"dst:\n\t{header_dst.vertex_endian_check} {check_are_vertices_big_endian(header_dst.vertex_endian_check)}")
+    if check_is_file_big_endian(header_src.file_endian_check) != \
+            check_is_file_big_endian(header_dst.file_endian_check):
+        error.recoverable(
+            f"header: file endian differs:\nsrc:\n\t"
+            f"{header_src.file_endian_check} {check_is_file_big_endian(header_src.file_endian_check)}\n"
+            f"dst:\n\t{header_dst.file_endian_check} {check_is_file_big_endian(header_dst.file_endian_check)}")
     compare_header_field("version_combined")
     compare_header_field("name")
     compare_header_field("padding")
@@ -347,4 +381,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    compare_files(args.file_src, args.file_dst, args.skinned, args.vertices)
+    error = LenientErrorReporter(allowed_categories=set())
+
+    compare_files(args.file_src, args.file_dst, args.skinned, args.vertices, error)
