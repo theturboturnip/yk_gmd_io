@@ -377,12 +377,6 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             if skinned_object.children:
                 self.error.recoverable(
                     f"Mesh {skinned_object.name} is skinned, but it has children. These children will not be exported.")
-
-        # Then go through the rest of the scene, and check?
-        # Not for now
-        # if object has child-of for our armature => warning??
-
-        for skinned_object in root_skinned_objects:
             self.export_skinned_object(context, skinned_object)
 
         self.error.debug("GATHER", f"NODE REPORT")

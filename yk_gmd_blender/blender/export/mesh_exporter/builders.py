@@ -9,8 +9,7 @@ from mathutils import Vector, Matrix
 from yk_gmd_blender.blender.common import AttribSetLayers_bpy
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, BoneWeight4, \
-    BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
@@ -68,7 +67,8 @@ class VertexFetcher:
 
     def tangent_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int):
         if self.layers.tangent_layer:
-            tangent = (self.layers.tangent_layer.data[loop.loops[tri_index]].color * 2) - 1
+            encoded_tangent = self.layers.tangent_layer.data[loop.loops[tri_index]].color
+            tangent = (Vector(encoded_tangent) * 2) - Vector((1, 1, 1, 1))
         else:
             tangent = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].tangent))
             tangent = tangent.resized(4)
@@ -112,22 +112,29 @@ class VertexFetcher:
         # Take the top 4 elements, for the top 4 most deforming bones
         # Normalize the weights so they sum to 1
         b_weights = sorted(list(self.mesh.vertices[i].groups), key=lambda i: i.weight, reverse=True)
-        b_weights = [(weight_pair.group, weight_pair.weight) for weight_pair in b_weights if
-                     weight_pair.group in self.vertex_group_bone_index_map]
+        b_weights = [
+            (weight_pair.group, weight_pair.weight)
+            for weight_pair in b_weights
+            if weight_pair.group in self.vertex_group_bone_index_map
+        ]
         if len(b_weights) > 4:
+            # TODO warning for vertices with significant boneweights for >4 bones?
             b_weights = b_weights[:4]
         elif len(b_weights) < 4:
             # Add zeroed elements to b_weights so it's 4 elements long
             b_weights += [(0, 0.0)] * (4 - len(b_weights))
-        weight_sum = sum(weight for (vtx, weight) in b_weights)
+        weight_sum = sum(weight for (b, weight) in b_weights)
         if weight_sum < 0.0:
             self.error.fatal(f"Weights {b_weights} summed to negative number!")
         if weight_sum > 0:
-            b_weights = [(vtx_group, weight / weight_sum) for (vtx_group, weight) in b_weights]
+            b_weights = [(vtx_group, weight) for (vtx_group, weight) in b_weights]
             # Convert the weights to the yk_gmd abstract BoneWeight format
-            weights_list = [BoneWeight(bone=self.vertex_group_bone_index_map[vtx] if weight else 0, weight=weight) for
-                            vtx, weight in
-                            b_weights]
+            weights_list = [
+                BoneWeight(
+                    bone=self.vertex_group_bone_index_map[vtx] if weight else 0,
+                    weight=weight
+                ) for vtx, weight in b_weights
+            ]
             return (
                 weights_list[0],
                 weights_list[1],
@@ -158,15 +165,20 @@ class VertexFetcher:
         if vertex_buffer.layout != self.vertex_layout:
             self.error.fatal(f"VertexFetcher told to fetch vertex for a buffer with a different layout")
 
-        vertex_buffer.pos.append((self.transformation_position @ self.mesh.vertices[i].co).resized(4))
+        pos_vec = (self.transformation_position @ self.mesh.vertices[i].co).resized(4)
+        pos_vec.freeze()
+        vertex_buffer.pos.append(pos_vec)
         # TODO refactor boneweights functionality - on an unskinned object extracting boneweights will be different
         boneweights = self.boneweights_for(i)
         if vertex_buffer.bone_data is not None:
-            vertex_buffer.bone_data.append(
-                Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone)))
+            bone_vec = Vector((boneweights[0].bone, boneweights[1].bone, boneweights[2].bone, boneweights[3].bone))
+            bone_vec.freeze()
+            vertex_buffer.bone_data.append(bone_vec)
         if vertex_buffer.weight_data is not None:
-            vertex_buffer.weight_data.append(
-                Vector((boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight)))
+            weight_vec = Vector(
+                (boneweights[0].weight, boneweights[1].weight, boneweights[2].weight, boneweights[3].weight))
+            weight_vec.freeze()
+            vertex_buffer.weight_data.append(weight_vec)
         if vertex_buffer.normal is not None:
             vertex_buffer.normal.append(per_loop_data.normal)
         if vertex_buffer.tangent is not None:
@@ -359,20 +371,14 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
         for bone in self.triangle_referenced_bones(triangle_index):
             self.weighted_bone_faces[bone].append(triangle_index)
 
-    # TODO should be moved into add_anonymous_vertex, but I think it gets changed in v0.4 so won't do it now
-    def update_bone_vtx_lists(self, new_vtx_weights: BoneWeight4, new_vtx_idx):
-        for weight in new_vtx_weights:
-            if weight.weight != 0:
-                self.weighted_bone_verts[weight.bone].append(new_vtx_idx)
-
     def total_referenced_bones(self):
         return set(bone_id for bone_id, vs in self.weighted_bone_verts.items() if len(vs) > 0)
 
     def triangle_referenced_bones(self, tri_idx) -> Set[int]:
         return {
             int(self.vertices.bone_data[vtx_idx][i_weight])
-            for vtx_idx in self.triangles[tri_idx]
             for i_weight in range(4)
+            for vtx_idx in self.triangles[tri_idx]
             if self.vertices.weight_data[vtx_idx][i_weight] > 0
         }
 
@@ -390,9 +396,12 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
             new_relevant_bones.append(self.relevant_gmd_bones[old_bone_idx])
             bone_index_mapping[old_bone_idx] = new_bone_idx
 
+        old_relevant_bones = self.relevant_gmd_bones
         self.relevant_gmd_bones = new_relevant_bones
         self.weighted_bone_verts = collections.defaultdict(list)
         for i in range(len(self.vertices)):
+            # Copy the bone_data, modify it, then freeze it
+            self.vertices.bone_data[i] = Vector(self.vertices.bone_data[i])
             for i_weight in range(4):
                 weight = self.vertices.weight_data[i][i_weight]
                 if weight != 0:
@@ -400,6 +409,7 @@ class SkinnedSubmeshBuilder(SubmeshBuilder):
                     new_bone = bone_index_mapping[old_bone]
                     self.vertices.bone_data[i][i_weight] = new_bone
                     self.weighted_bone_verts[new_bone].append(i)
+            self.vertices.bone_data[i].freeze()
 
         self.weighted_bone_faces = collections.defaultdict(list)
         for triangle_index in range(len(self.triangles)):
@@ -442,7 +452,7 @@ class SkinnedSubmeshBuilderSubset:
 
     @staticmethod
     def empty(base: SkinnedSubmeshBuilder):
-        return SkinnedSubmeshBuilderSubset(base, set([]), set([]))
+        return SkinnedSubmeshBuilderSubset(base, set(), set())
 
     @staticmethod
     def complete(base: SkinnedSubmeshBuilder):

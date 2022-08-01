@@ -81,6 +81,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # Set custom GMD data
             node_obj.yakuza_hierarchy_node_data.inited = True
             node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            # gmd_node is an unskinned object, guaranteed to have a matrix
             node_obj.yakuza_hierarchy_node_data.imported_matrix = \
                 list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
                     gmd_node.matrix[3])

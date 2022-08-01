@@ -3,7 +3,7 @@ from typing import List, Optional
 
 # TODO: I don't like depending on this
 # Create a set of read-only dataclasses for Vector etc?
-from mathutils import Vector, Quaternion, Matrix
+from mathutils import Vector, Quaternion
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
@@ -22,15 +22,13 @@ class GMDNode:
 
     flags: List[int]
 
-    matrix: Optional[Matrix]
-
     parent: Optional['GMDNode']
     children: List['GMDNode']
 
     def __init__(self, name: str, node_type: NodeType,
                  pos: Vector, rot: Quaternion, scale: Vector,
                  world_pos: Vector, anim_axis: Vector,
-                 matrix: Optional[Matrix], parent: Optional['GMDNode'],
+                 parent: Optional['GMDNode'],
                  flags: List[int]):
         self.name = name
         self.node_type = node_type
@@ -45,12 +43,6 @@ class GMDNode:
         self.flags = flags
         if len(self.flags) != 4:
             raise TypeError(f"GMDNode passed flags list {flags} which doesn't have 4 elements")
-
-        if matrix:
-            self.matrix = matrix.copy()
-            self.matrix.resize_4x4()
-        else:
-            self.matrix = None
 
         self.parent = parent
         self.children = []

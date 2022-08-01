@@ -23,9 +23,9 @@ try:
         # Import the file
         print(f"Loading from {YKGMDIO_TEST_SRC}")
         if YKGMDIO_SKINNED:
-            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="")
+            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
         else:
-            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="")
+            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
 
         # Select the top-level object in the first collection
         toplevel_collection = next(k for k in bpy.data.collections.keys() if k != "Collection")
@@ -34,9 +34,9 @@ try:
 
         # Export to the destination
         if YKGMDIO_SKINNED:
-            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories="")
+            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH")
         else:
-            bpy.ops.export_scene.gmd_unskinned(filepath=YKGMDIO_TEST_DST, logging_categories="")
+            bpy.ops.export_scene.gmd_unskinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH")
 finally:
     # Disable the addon
     # USe a context temp_override to set context.area

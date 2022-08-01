@@ -8,6 +8,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 @dataclass(repr=False)
 class GMDBone(GMDNode):
+    matrix: Matrix
 
     def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector,
                  world_pos: Vector,
@@ -16,7 +17,10 @@ class GMDBone(GMDNode):
 
                  parent: Optional['GMDBone'],
                  flags: List[int]):
-        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, matrix, parent, flags)
+        super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, parent, flags)
+
+        self.matrix = matrix.copy()
+        self.matrix.resize_4x4()
 
         if self.node_type != NodeType.MatrixTransform:
             raise TypeError(f"GMDBone expected NodeType.MatrixTransform, got {self.node_type}")

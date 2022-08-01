@@ -58,7 +58,8 @@ def pytest_generate_tests(metafunc):
             ))
     metafunc.parametrize("blender", [blender], ids=[""])
     metafunc.parametrize("isolate_blender", [isolate_blender], ids=[""])
-    metafunc.parametrize("gmdtest", gmdtests, ids=lambda gmdtest: gmdtest.src.name)
+    metafunc.parametrize("gmdtest", gmdtests,
+                         ids=lambda gmdtest: f"{gmdtest.src.name}{'-skinned' if gmdtest.skinned else ''}")
 
 
 def pytest_sessionstart(session):
