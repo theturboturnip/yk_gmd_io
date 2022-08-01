@@ -65,6 +65,60 @@ def make_bone_indices_consistent(
     return relevant_bones
 
 
+def vertex_fusion(vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[int]], List[List[bool]]]:
+    """
+    Applies "vertex fusion" to a set of vertex buffers, returning a list of which vertices were "fused"
+    and a mapping of (i_buf, i_vertex_in_buf) to fused index.
+
+    Fuses "adjacent" vertices, where adjacent vertices have the same
+    - position
+    - normal
+    - bone mapping
+    - weight mapping
+
+    :param vertices:
+    :return:
+    """
+
+    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
+    # fused_idx_to_buf_idx[i] contains (i_buf, i_vertex_in_buf) indices that are all fused into vertex [i]
+    # each element of this list defines an adjacency relation - all vertices in fused_idx_to_buf_idx[i] are "adjacent"
+    fused_idx_to_buf_idx: List[List[Tuple[int, int]]] = []
+    # buf_idx_to_fused_idx[i_buf][i_vertex_in_buf] contains the fused index
+    buf_idx_to_fused_idx: List[List[int]] = [
+        [-1] * len(buf)
+        for buf in vertices
+    ]
+    # is_fused[i_buf][i_vertex_in_buf] = was that vertex fused, or did it create a new one.
+    is_fused: List[List[bool]] = [
+        [False] * len(buf)
+        for buf in vertices
+    ]
+
+    for i_buf, buf in enumerate(vertices):
+        for i in range(len(buf)):
+            vert_info = (
+                buf.pos[i].xyz.copy().freeze(),
+                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
+                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
+                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
+            )
+            if vert_info in vert_indices:
+                # Fuse this into a previous vertex
+                fusion_idx = vert_indices[vert_info]
+                fused_idx_to_buf_idx[fusion_idx].append((i_buf, i))
+                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
+                is_fused[i_buf][i] = True
+            else:
+                fusion_idx = len(fused_idx_to_buf_idx)
+                vert_indices[vert_info] = fusion_idx
+                fused_idx_to_buf_idx.append([(i_buf, i)])
+                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
+                is_fused[i_buf][i] = False
+
+    return buf_idx_to_fused_idx, is_fused
+
+
 def gmd_meshes_to_bmesh(
         gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]],
         vertex_group_indices: Dict[str, int],
@@ -82,6 +136,7 @@ def gmd_meshes_to_bmesh(
     error.debug("MESH", f"make_merged_gmd_mesh called with {gmd_meshes} skinned={is_skinned} fusing={fuse_vertices}")
     error.debug("MESH", f"vertex layout: {str(gmd_meshes[0].vertices_data.layout)}")
 
+    # If necessary, rewrite bone indices to be consistent
     vertices: Union[List[GMDVertexBuffer_Generic], List[GMDVertexBuffer_Skinned]] = [
         m.vertices_data
         for m in gmd_meshes
@@ -101,13 +156,13 @@ def gmd_meshes_to_bmesh(
         gmd_meshes = cast(List[GMDMesh], gmd_meshes)
         relevant_bones = None
 
-    # Maps an index (x, y) for vertices[x][y] to a vertex index in the actual BMesh
-    mesh_vtx_idx_to_bmesh_idx: Dict[Tuple[int, int], int] = {}
+    # Create the mesh and deform layer (if necessary)
     bm = bmesh.new()
     deform = bm.verts.layers.deform.new("Vertex Weights") if is_skinned else None
     if deform and (relevant_bones is None):
         error.fatal(f"Mismatch between deform/is_skinned, and the existence of relevant_bones")
 
+    # Add a single vertex's (position, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
         vert = bm.verts.new(gmd_to_blender_world @ buf.pos[i].xyz)
         if buf.normal:
@@ -124,32 +179,27 @@ def gmd_meshes_to_bmesh(
                     vertex_group_index = vertex_group_indices[relevant_bones[bone_weight.bone].name]
                     vert[deform][vertex_group_index] = bone_weight.weight
 
-    # Put the raw vertices - i.e. positions - into the BMesh
+    # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
+    # before adding all vertices in order
     if fuse_vertices:
-        # Find unique (position, normal, boneweight) pairs, assign to BMesh vertex indices
-        vert_indices: Dict[Tuple[Vector, Vector, BoneWeight], int] = {}
+        mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion(vertices)
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
-                vert_info = (
-                    buf.pos[i].xyz.copy().freeze(),
-                    buf.normal[i].xyz.copy().freeze() if buf.normal else None,
-                    buf.bone_weights[i] if is_skinned else None
-                )
-                if vert_info in vert_indices:
-                    # TODO check if merging this set of verts will create a degenerate triangle somehow?
-                    mesh_vtx_idx_to_bmesh_idx[(i_buf, i)] = vert_indices[vert_info]
-                else:
-                    next_idx = len(bm.verts)
-                    vert_indices[vert_info] = next_idx
-                    mesh_vtx_idx_to_bmesh_idx[(i_buf, i)] = next_idx
+                if not is_fused[i_buf][i]:
+                    assert len(bm.verts) == mesh_vtx_idx_to_bmesh_idx[i_buf][i]
                     add_vertex_to_bmesh(buf, i)
     else:
+        mesh_vtx_idx_to_bmesh_idx = [
+            [-1] * len(buf)
+            for buf in vertices
+        ]
         # Assign each vertex in each mesh to the bmesh
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 add_vertex_to_bmesh(buf, i)
-                mesh_vtx_idx_to_bmesh_idx[(i_buf, i)] = len(bm.verts)
+                mesh_vtx_idx_to_bmesh_idx[i_buf][i] = len(bm.verts)
 
+    # Now we've added the vertices, update bmesh internal structures
     bm.verts.ensure_lookup_table()
     bm.verts.index_update()
 
@@ -201,7 +251,7 @@ def gmd_meshes_to_bmesh(
                 error.recoverable(f"Found an 0xFFFF index inside a triangle_indices list! That shouldn't happen.")
                 continue
 
-            remapped_tri_idxs = tuple(mesh_vtx_idx_to_bmesh_idx[(m_i, v_i)] for v_i in tri_idxs)
+            remapped_tri_idxs = tuple(mesh_vtx_idx_to_bmesh_idx[m_i][v_i] for v_i in tri_idxs)
             # If face doesn't already exist, and is valid
             if len(set(remapped_tri_idxs)) != 3:
                 continue
