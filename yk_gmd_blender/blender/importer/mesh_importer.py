@@ -1,11 +1,68 @@
 from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, GMDVertexBuffer_Skinned
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, GMDVertexBuffer_Skinned, GMDVertexBuffer_Generic
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+
+
+def make_bone_indices_consistent(
+        gmd_meshes: List[GMDSkinnedMesh],
+        vertices: List[GMDVertexBuffer_Skinned]
+) -> List[GMDBone]:
+    """
+    Mutate a list of vertex buffers, so that all of the bone indices are consistent
+    i.e. vertices in different buffers use the same indices to refer to the same bones.
+    Mutates the list of vertex buffers, but makes copies of the buffers themselves before changing them.
+    Returns the overall list of bones.
+
+    :param gmd_meshes:
+    :param vertices:
+    :return:
+    """
+
+    # Fix up bone mappings if the meshes are skinned
+
+    # Build a list of references bones
+    # All vertex buffers will have their data remapped to indexes into this list.
+    # Start from the first mesh's bone list, then grow from there
+    relevant_bones = gmd_meshes[0].relevant_bones[:]
+    # The first mesh doesn't need remapping, because we start from its bone list, but subsequent ones do
+    for i_mesh in range(1, len(gmd_meshes)):
+        gmd_mesh = gmd_meshes[i_mesh]
+
+        # Mapping of gmd_meshes[i] bone indices to relevant_bones indices
+        bone_index_mapping = {}
+        for i, bone in enumerate(gmd_mesh.relevant_bones):
+            if bone not in relevant_bones:
+                relevant_bones.append(bone)
+            bone_index_mapping[i] = relevant_bones.index(bone)
+
+        def remap_weight(bone_weight: BoneWeight):
+            # If the weight is 0 the bone is unused, so map it to a consistent 0.
+            if bone_weight.weight == 0:
+                return BoneWeight(0, weight=0.0)
+            else:
+                return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
+
+        # Turn the vertices into a copy instead of a reference
+        vertices[i_mesh] = vertices[i_mesh][:]
+        verts_to_remap = vertices[i_mesh]
+        # Remap the bones in the vertices
+        for i_vtx in range(len(verts_to_remap)):
+            old_weights = verts_to_remap.bone_weights[i_vtx]
+            verts_to_remap.bone_weights[i_vtx] = (
+                remap_weight(old_weights[0]),
+                remap_weight(old_weights[1]),
+                remap_weight(old_weights[2]),
+                remap_weight(old_weights[3]),
+            )
+
+    # Done, return the full list of relevant bones.
+    return relevant_bones
 
 
 def gmd_meshes_to_bmesh(
@@ -25,54 +82,26 @@ def gmd_meshes_to_bmesh(
     error.debug("MESH", f"make_merged_gmd_mesh called with {gmd_meshes} skinned={is_skinned} fusing={fuse_vertices}")
     error.debug("MESH", f"vertex layout: {str(gmd_meshes[0].vertices_data.layout)}")
 
-    # Fix up bone mappings if the meshes are skinned
-    remapped_vertices = [m.vertices_data for m in gmd_meshes]
+    vertices: Union[List[GMDVertexBuffer_Generic], List[GMDVertexBuffer_Skinned]] = [
+        m.vertices_data
+        for m in gmd_meshes
+    ]
     if is_skinned:
         if not all(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")
 
         gmd_meshes = cast(List[GMDSkinnedMesh], gmd_meshes)
-
-        # Skinned meshes are more complicated because vertices reference bones using a *per-mesh* index into that "relevant_bones" list
-        # These indices have to be merged into a single relevant bones list,
-        # for each GMD mesh, because each mesh will usually have a different "relevant_bones" list
-        relevant_bones = gmd_meshes[0].relevant_bones[:]
-        # merged_vertex_buffer = gmd_meshes[0].vertices_data[:]
-        for i_mesh in range(1, len(gmd_meshes)):
-            gmd_mesh = gmd_meshes[i_mesh]
-
-            bone_index_mapping = {}
-            for i, bone in enumerate(gmd_mesh.relevant_bones):
-                if bone not in relevant_bones:
-                    relevant_bones.append(bone)
-                bone_index_mapping[i] = relevant_bones.index(bone)
-
-            def remap_weight(bone_weight: BoneWeight):
-                # If the weight is 0 the bone is unused, so map it to a consistent 0.
-                if bone_weight.weight == 0:
-                    return BoneWeight(0, weight=0.0)
-                else:
-                    return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
-
-            # Turn the remapped_vertices into a copy instead of a reference
-            remapped_vertices[i_mesh] = remapped_vertices[i_mesh][:]
-            verts_to_remap = cast(GMDVertexBuffer_Skinned, remapped_vertices[i_mesh])
-            # Remap the bones in the vertices
-            for i_vtx in range(len(verts_to_remap)):
-                old_weights = verts_to_remap.bone_weights[i_vtx]
-                verts_to_remap.bone_weights[i_vtx] = (
-                    remap_weight(old_weights[0]),
-                    remap_weight(old_weights[1]),
-                    remap_weight(old_weights[2]),
-                    remap_weight(old_weights[3]),
-                )
+        vertices = cast(List[GMDVertexBuffer_Skinned], vertices)
+        # Rewrite vertices data to use consistent bone indices throughout
+        relevant_bones = make_bone_indices_consistent(gmd_meshes, vertices)
     else:
         if any(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")
 
+        gmd_meshes = cast(List[GMDMesh], gmd_meshes)
         relevant_bones = None
 
-    # Maps an index (x, y) for remapped_vertices[x][y] to a vertex index in the actual BMesh
+    # Maps an index (x, y) for vertices[x][y] to a vertex index in the actual BMesh
     mesh_vtx_idx_to_bmesh_idx: Dict[Tuple[int, int], int] = {}
     bm = bmesh.new()
     deform = bm.verts.layers.deform.new("Vertex Weights") if is_skinned else None
@@ -98,8 +127,8 @@ def gmd_meshes_to_bmesh(
     # Put the raw vertices - i.e. positions - into the BMesh
     if fuse_vertices:
         # Find unique (position, normal, boneweight) pairs, assign to BMesh vertex indices
-        vert_indices: Dict[Tuple[Vector, Vector, BoneWeight]] = {}
-        for i_buf, buf in enumerate(remapped_vertices):
+        vert_indices: Dict[Tuple[Vector, Vector, BoneWeight], int] = {}
+        for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 vert_info = (
                     buf.pos[i].xyz.copy().freeze(),
@@ -116,7 +145,7 @@ def gmd_meshes_to_bmesh(
                     add_vertex_to_bmesh(buf, i)
     else:
         # Assign each vertex in each mesh to the bmesh
-        for i_buf, buf in enumerate(remapped_vertices):
+        for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 add_vertex_to_bmesh(buf, i)
                 mesh_vtx_idx_to_bmesh_idx[(i_buf, i)] = len(bm.verts)
@@ -126,7 +155,7 @@ def gmd_meshes_to_bmesh(
 
     # The GMD meshes may have different vertex layouts -> may need to send vertex data to different layers
     # => for each unique vertex layout in our meshes, find the layers they need and create/reuse them
-    unique_vertex_layouts = set([buf.layout for buf in remapped_vertices])
+    unique_vertex_layouts = set([buf.layout for buf in vertices])
     # Map the "packing flags" to the set of layers to use (packing flags are essentially the hash of the attribute set)
     attr_set_layers: Dict[int, AttribSetLayers_bmesh] = {
         layout.packing_flags: AttribSetLayerNames.build_from(layout, is_skinned).create_on(bm, error)
