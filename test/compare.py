@@ -235,16 +235,16 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             error.fatal(f"{context}: field {f} differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
 
     def compare_vec_field(f: str):
-        src_f = tuple(round(x, 1) for x in getattr(src, f))
-        dst_f = tuple(round(x, 1) for x in getattr(dst, f))
+        src_f = tuple(round(x, 3) for x in getattr(src, f))
+        dst_f = tuple(round(x, 3) for x in getattr(dst, f))
         if src_f != dst_f:
-            error.recoverable(f"{context}: vector {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            error.fatal(f"{context}: vector {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     def compare_mat_field(f: str):
-        src_f = tuple(tuple(round(x, 1) for x in v) for v in getattr(src, f))
-        dst_f = tuple(tuple(round(x, 1) for x in v) for v in getattr(dst, f))
+        src_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(src, f))
+        dst_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(dst, f))
         if src_f != dst_f:
-            error.recoverable(f"{context}: matrix {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            error.fatal(f"{context}: matrix {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
