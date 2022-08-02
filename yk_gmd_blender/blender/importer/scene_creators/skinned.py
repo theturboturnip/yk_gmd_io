@@ -66,8 +66,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             self.error.recoverable(
                 f"This import method cannot import unskinnned objects. Please use the [Unskinned] variant")
 
-    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection,
-                            anim_skeleton: bool) -> bpy.types.Object:
+    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection) -> bpy.types.Object:
         """
         Make an Armature representing all of the GMDBones in the imported scene hierarchy.
         :param context: The context used by the import process.
@@ -153,23 +152,20 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             bone.use_deform = True
             if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
                 tail_delta = Vector((0, 0, 0.5))
-            if not anim_skeleton:
-                bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
-                bone.tail = self.gmd_to_blender_world @ tail_delta
-                if gmd_node.anim_axis.w < 0.00001:
-                    bone.length = 0.0001
-                else:
-                    bone.length = gmd_node.anim_axis.w
-            else:
-                bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 0))
-                bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 1))
+
+            bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
+            bone.tail = self.gmd_to_blender_world @ tail_delta
+            if gmd_node.anim_axis.w < 0.00001:
                 bone.length = 0.0001
+            else:
+                bone.length = gmd_node.anim_axis.w
+
             if tail_delta.length < 0.00001:
                 self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.00001 and not anim_skeleton:
+                if (bone.head - bone.parent.tail).length < 0.00001:
                     bone.use_connect = True
                 else:
                     bone.use_connect = False
