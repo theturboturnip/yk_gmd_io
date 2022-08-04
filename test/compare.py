@@ -230,21 +230,31 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
 
 def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: GMDNode, error: ErrorReporter,
                              context: str):
+    from math import fabs
+
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
-            error.fatal(f"{context}: field {f} differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+            error.fatal(f"{context}: field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
 
     def compare_vec_field(f: str):
         src_f = tuple(round(x, 3) for x in getattr(src, f))
         dst_f = tuple(round(x, 3) for x in getattr(dst, f))
         if src_f != dst_f:
-            error.fatal(f"{context}: vector {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            if sum(fabs(s - r) for (s, r) in zip(src_f, dst_f)) > 0.05:
+                error.fatal(f"{context}: vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            else:
+                error.recoverable(f"{context}: vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     def compare_mat_field(f: str):
         src_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(src, f))
         dst_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(dst, f))
         if src_f != dst_f:
-            error.fatal(f"{context}: matrix {f} differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            src_floats = tuple(x for v in src_f for x in v)
+            dst_floats = tuple(x for v in dst_f for x in v)
+            if sum(fabs(s - r) for (s, r) in zip(src_floats, dst_floats)) > 0.05:
+                error.fatal(f"{context}: matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+            else:
+                error.recoverable(f"{context}: matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
