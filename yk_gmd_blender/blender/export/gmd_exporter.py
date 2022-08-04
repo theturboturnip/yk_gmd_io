@@ -80,16 +80,18 @@ class ExportSkinnedGMD(BaseExportGMD):
     bone_matrix_origin: EnumProperty(name="Bone Matrices",
                                      description="How the addon should calculate a bone's animation matrices.",
                                      items=[
-                                         ("CALCULATE", "Calculated",
-                                          "Calculate animation matrices from current bone orientations."),
+                                         ("CALCULATE", "Arbitrary Skeleton [ADVANCED]",
+                                          "Export the skeleton with any changes made in Blender.\n"
+                                          "May break in-game animations or crash the game.\n"
+                                          "Only use this if you know what you are doing."),
                                          ("FROM_TARGET_FILE", "Keep Target Skeleton",
-                                          "Keep the skeleton in the target file."
+                                          "Keep the skeleton in the target file.\n"
                                           "The current skeleton must match the skeleton you're exporting over."),
-                                         ("FROM_CURRENT_SKELETON", "Keep Imported Skeleton",
-                                          "Keep the values originally imported for this skeleton."
+                                         ("FROM_ORIGINAL_GMD_IMPORT", "Keep Original Imported Skeleton",
+                                          "Keep the values originally imported for this skeleton.\n"
                                           "The current skeleton must have been imported from a GMD file.")
                                      ],
-                                     default="FROM_CURRENT_SKELETON")
+                                     default="FROM_TARGET_FILE")
 
     # TODO - dry run feature
     #  when set, instead of exporting it will open a window with a report on what would be exported
@@ -126,7 +128,7 @@ class ExportSkinnedGMD(BaseExportGMD):
             bone_matrix_origin = {
                 "CALCULATE": SkinnedBoneMatrixOrigin.Calculate,
                 "FROM_TARGET_FILE": SkinnedBoneMatrixOrigin.FromTargetFile,
-                "FROM_CURRENT_SKELETON": SkinnedBoneMatrixOrigin.FromCurrentSkeleton,
+                "FROM_ORIGINAL_GMD_IMPORT": SkinnedBoneMatrixOrigin.FromOriginalGMDImport,
             }[self.bone_matrix_origin]
 
             try:

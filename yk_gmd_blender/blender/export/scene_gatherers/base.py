@@ -256,7 +256,7 @@ class SkinnedBoneMatrixOrigin(Enum):
     FromTargetFile = 1
     # Take the bone matrices from the per-bone Yakuza Hierarchy Node Data
     # (the entire skeleton must have been imported from another GMD!)
-    FromCurrentSkeleton = 2
+    FromOriginalGMDImport = 2
 
 
 class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
@@ -302,10 +302,10 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
             self.copy_bones_from_target(armature_data)
-        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromCurrentSkeleton:
-            self.load_bones_from_blender(armature_data, False)
-        else:
-            self.load_bones_from_blender(armature_data, True)
+        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromOriginalGMDImport:
+            self.load_bones_from_blender(armature_data, use_previously_imported_matrix=True)
+        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.Calculate:
+            self.load_bones_from_blender(armature_data, use_previously_imported_matrix=False)
 
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
