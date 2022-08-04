@@ -98,6 +98,9 @@ class YakuzaHierarchyNodeData(PropertyGroup):
 
     # The animation axis for the node imported from the GMD
     anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0] * 4, size=4, subtype="QUATERNION")
+    # The local rotation of the bone imported from the GMD
+    bone_local_rot: FloatVectorProperty(name="Bone Local Rot (Quaternion)", default=[0.0] * 4, size=4,
+                                        subtype="QUATERNION")
     # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
     flags_json: StringProperty(name="Imported Node Flags (JSON)", default="[0,0,0,0]")
 
@@ -142,7 +145,10 @@ class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
 
             matrix_prop(ob.yakuza_hierarchy_node_data, "imported_matrix", 16)
         else:
-            layout.label(text=f"No original matrix, this object wasn't imported from a GMD")
+            if any(m.type == "ARMATURE" for m in ob.modifiers):
+                layout.label(text="Skinned objects don't have the imported_matrix property")
+            else:
+                layout.label(text=f"This object wasn't imported from a GMD, doesn't have a imported_matrix property")
 
 
 class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
@@ -164,6 +170,7 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
             return
 
         layout.prop(bone.yakuza_hierarchy_node_data, "anim_axis")
+        layout.prop(bone.yakuza_hierarchy_node_data, "bone_local_rot")
         layout.prop(bone.yakuza_hierarchy_node_data, "flags_json")
         layout.prop(bone.yakuza_hierarchy_node_data, "sort_order")
 
