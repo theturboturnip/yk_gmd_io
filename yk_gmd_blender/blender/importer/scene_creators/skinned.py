@@ -124,10 +124,6 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.00001:
-                    bone.use_connect = True
-                else:
-                    bone.use_connect = False
             else:
                 bone.parent = None
 
