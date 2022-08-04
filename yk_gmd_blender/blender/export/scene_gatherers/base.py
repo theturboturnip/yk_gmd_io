@@ -405,9 +405,13 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
             # Blender is bad at naming things
             # blender_bone.head_local = local to *armature*, not parent bone
-            # blender_bone.head = local to parent
-            gmd_bone_pos = transform_position_gmd_to_blender(Vector(blender_bone.head))
-            gmd_bone_world_pos = transform_position_gmd_to_blender(Vector(blender_bone.head_local))
+            # blender_bone.head = local to parent, but doesn't seem to work correctly
+            # Work out the local position from the parent bone's matrix instead
+            armature_rel_head = transform_position_gmd_to_blender(Vector(blender_bone.head_local))
+            if parent_gmd_bone:
+                parent_local_head = parent_gmd_bone.matrix @ armature_rel_head
+            else:
+                parent_local_head = armature_rel_head
 
             if use_previously_imported_matrix:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
@@ -425,13 +429,11 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 bone_matrix = Matrix(rows)
             else:
                 # Calculate from scratch
-                inv_t = Matrix.Translation(-gmd_bone_pos)
+                inv_t = Matrix.Translation(-parent_local_head)
                 inv_r = Matrix.Identity(4)  # node.rot.inverted().to_matrix().to_4x4()
                 # Bones cannot be scaled
-                # inv_s = Matrix.Diagonal(Vector((1 / node.scale.x, 1 / node.scale.y, 1 / node.scale.z))).to_4x4()
                 parent_mat = parent_gmd_bone.matrix if parent_gmd_bone else Matrix.Identity(4)
                 bone_matrix = (inv_r @ inv_t @ parent_mat)
-                print(bone_matrix)
 
             # TODO - try to extract this mathematically instead of copying the one from the last import
             anim_axis = blender_bone.yakuza_hierarchy_node_data.anim_axis
@@ -443,11 +445,11 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 node_type=NodeType.MatrixTransform,
                 parent=parent_gmd_bone,
 
-                pos=gmd_bone_pos,
+                pos=parent_local_head,
                 rot=Quaternion(),  # TODO - Is there a better way to handle this? Does the game react to this at all?
                 scale=Vector((1, 1, 1)),
 
-                world_pos=Vector((gmd_bone_world_pos.x, gmd_bone_world_pos.y, gmd_bone_world_pos.z, 1)),
+                world_pos=Vector((armature_rel_head.x, armature_rel_head.y, armature_rel_head.z, 1)),
                 anim_axis=anim_axis,
                 flags=flags,
                 matrix=bone_matrix
