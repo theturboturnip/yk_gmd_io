@@ -12,13 +12,18 @@ bl_info = {
 }
 
 # Check if we're in Blender by seeing if bpy.app.version exists.
-# We can't just check for the presence of bpy, because the type library
+# We can't just check for the presence of bpy, because the type library sets that.
+
 try:
     import bpy.app
 
-    if getattr(bpy.app, "version", None) is not None:
-        # If we're in Blender, add the rest of the addon
-        from .blender.addon import *
+    bpy_app_present = True
 except ImportError:
-    # Must not be running inside Blender
+    bpy_app_present = False
     pass
+
+if bpy_app_present:
+    if getattr(bpy.app, "version", None) is not None:
+        # We must be in Blender => bpy types will exist => we can import .blender.addon safely.
+        # noinspection PyUnresolvedReferences
+        from .blender.addon import *
