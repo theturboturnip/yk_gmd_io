@@ -9,8 +9,8 @@ import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData, yakuza_hierarchy_node_data_sort_key
-from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, \
-    transform_position_gmd_to_blender
+from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, transform_position_blender_to_gmd, \
+    transform_rotation_blender_to_gmd
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
     split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
@@ -303,9 +303,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
             self.copy_bones_from_target(armature_data)
         elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromCurrentSkeleton:
-            self.load_bones_from_blender(armature_data, True)
-        else:
             self.load_bones_from_blender(armature_data, False)
+        else:
+            self.load_bones_from_blender(armature_data, True)
 
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
@@ -404,21 +404,45 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             # the blender matrix changes from the GMD version
             # matrix_local is relative to the armature, not the parent
 
+            # Blender is bad at naming things
+            # blender_bone.head_local = local to *armature*, not parent bone
+            # blender_bone.head = local to parent, but doesn't seem to work correctly
+            # Work out the local position from the parent bone's matrix instead
+            armature_rel_head = transform_position_blender_to_gmd(Vector(blender_bone.head_local))
+            if parent_gmd_bone:
+                parent_local_head = parent_gmd_bone.matrix @ armature_rel_head
+            else:
+                parent_local_head = armature_rel_head
+
+            if blender_bone.yakuza_hierarchy_node_data.inited:
+                gmd_local_rot = transform_rotation_blender_to_gmd(
+                    blender_bone.yakuza_hierarchy_node_data.bone_local_rot
+                )
+            else:
+                gmd_local_rot = Quaternion()
+
             if use_previously_imported_matrix:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
                     self.error.fatal(
                         f"Blender bone {blender_bone.name} was not imported from a GMD, "
                         f"so I can't reuse an imported matrix."
                         f"Try rerunning with Bone Matrices = Calculated")
-                bone_matrix = blender_bone.yakuza_hierarchy_node_data.imported_matrix
+                matrix_columns = list(blender_bone.yakuza_hierarchy_node_data.imported_matrix)
+                rows = (
+                    (matrix_columns[0].x, matrix_columns[1].x, matrix_columns[2].x, matrix_columns[3].x),
+                    (matrix_columns[0].y, matrix_columns[1].y, matrix_columns[2].y, matrix_columns[3].y),
+                    (matrix_columns[0].z, matrix_columns[1].z, matrix_columns[2].z, matrix_columns[3].z),
+                    (matrix_columns[0].w, matrix_columns[1].w, matrix_columns[2].w, matrix_columns[3].w),
+                )
+                bone_matrix = Matrix(rows)
             else:
                 # Calculate from scratch
-                # TODO - calculate this better
-                bone_matrix = Matrix.Translation(transform_position_gmd_to_blender(blender_bone.head_local))
-                bone_matrix.resize_4x4()
+                inv_t = Matrix.Translation(-parent_local_head)
+                inv_r = gmd_local_rot.inverted().to_matrix().to_4x4()
+                # Bones cannot be scaled
+                parent_mat = parent_gmd_bone.matrix if parent_gmd_bone else Matrix.Identity(4)
+                bone_matrix = (inv_r @ inv_t @ parent_mat)
 
-            gmd_bone_pos, gmd_bone_axis, gmd_bone_scale = transform_blender_to_gmd(
-                *blender_bone.matrix_local.decompose())
             # TODO - try to extract this mathematically instead of copying the one from the last import
             anim_axis = blender_bone.yakuza_hierarchy_node_data.anim_axis
             flags = json.loads(blender_bone.yakuza_hierarchy_node_data.flags_json)
@@ -429,14 +453,14 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 node_type=NodeType.MatrixTransform,
                 parent=parent_gmd_bone,
 
-                pos=gmd_bone_pos,
-                rot=Quaternion(),  # TODO - Is there a better way to handle this? Does the game react to this at all?
+                pos=parent_local_head,
+                rot=gmd_local_rot,
                 scale=Vector((1, 1, 1)),
 
-                world_pos=Vector((gmd_bone_pos.x, gmd_bone_pos.y, gmd_bone_pos.z, 1)),
+                world_pos=Vector((armature_rel_head.x, armature_rel_head.y, armature_rel_head.z, 1)),
                 anim_axis=anim_axis,
                 flags=flags,
-                matrix=bone_matrix.inverted()
+                matrix=bone_matrix
             )
 
             if not parent_gmd_bone:

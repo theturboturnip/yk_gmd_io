@@ -124,10 +124,6 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
                                  description="If True, will import the full object hierarchy. "
                                              "This is required if you want to export the scene later.",
                                  default=True)
-    anim_skeleton: BoolProperty(name="Load Animation Skeleton",
-                                description="If True, will modify skeleton before importing to allow for "
-                                            "proper animation imports",
-                                default=False)
 
     def draw(self, context):
         layout = self.layout
@@ -146,7 +142,6 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
         layout.prop(self, 'import_hierarchy')
         layout.prop(self, 'import_objects')
-        layout.prop(self, 'anim_skeleton')
 
     def execute(self, context):
         error = self.create_logger()
@@ -199,8 +194,7 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
         if self.import_hierarchy:
             self.report({"INFO"}, "Importing bone hierarchy...")
-            gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection,
-                                                             anim_skeleton=self.anim_skeleton)
+            gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
 
         if self.import_objects:
             self.report({"INFO"}, "Importing objects...")

@@ -2,14 +2,12 @@ import argparse
 import math
 from pathlib import Path
 
+from mathutils import Quaternion, Matrix, Vector
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
-    pack_abstract_scene, pack_file_data
-from mathutils import Quaternion, Matrix, Vector
-
+from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
@@ -32,8 +30,10 @@ def quaternion_to_euler_angle(q: Quaternion):
 
     return X, Y, Z
 
+
 def csv_str(iter):
     return ", ".join(str(x) for x in iter)
+
 
 def print_each(iter):
     for x in iter:
@@ -52,6 +52,17 @@ def unpack_drawlist_bytes(file_data: FileData_Common, obj):
         data.append(material_idx)
         data.append(mesh_idx)
     return data
+
+
+def round_vec(v, n=2):
+    return tuple(round(x, n) for x in v)
+
+
+def round_mat(m, n=2):
+    s = f"Matrix\n"
+    for r in m.row:
+        s += f"\t{round_vec(r, n)}\n"
+    return s
 
 
 if __name__ == '__main__':
@@ -76,12 +87,14 @@ if __name__ == '__main__':
     for node in scene.overall_hierarchy.depth_first_iterate():
         node: GMDBone = node
         print(f" ---- BONE {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
-        print("pos", node.pos)
-        print("rot", node.rot)
-        print("scale", node.scale)
+        print("pos", round_vec(node.pos))
+        print("rot", f"Quat({round_vec(node.rot)})")
+        print("rot angle/axis", node.rot.angle, round_vec(node.rot.axis))
+        print("scale", round_vec(node.scale))
         if node.node_type == NodeType.MatrixTransform:
-            print("world pos", node.world_pos)
-            print("bone axis", node.anim_axis)
+            print("world pos", round_vec(node.world_pos))
+            print("anim axis", round_vec(node.anim_axis))
+            print(f"anim axis deconstructed? {round_vec(node.anim_axis.xyz.normalized())} / {node.anim_axis.w}")
         parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
 
         # pos = node.world_pos.to_3d()
@@ -91,61 +104,26 @@ if __name__ == '__main__':
         if node.node_type == NodeType.MatrixTransform:
             expected_world = parent_mat.inverted_safe() @ node.pos.to_3d()
             gmd_world = node.world_pos.to_3d()
-            print("world pos comparison", expected_world, gmd_world)
+            print("world pos comparison", round_vec(expected_world), round_vec(gmd_world))
             if (expected_world - gmd_world).magnitude > 0.1:
                 print("mismatching world pos")
                 break
 
-        # if not node.parent:
-        #     anim_axis = Vector((0,0,0,0))
-        # else:
-        #     # TODO
+        has_matrix = node.node_type != NodeType.SkinnedMesh
+        if has_matrix:
+            inv_t = Matrix.Translation(-pos)
+            inv_r = node.rot.inverted().to_matrix().to_4x4()
+            r = node.rot.to_matrix().to_4x4()
+            inv_s = Matrix.Diagonal(Vector((1 / node.scale.x, 1 / node.scale.y, 1 / node.scale.z))).to_4x4()
+            overall_mat = inv_s @ inv_r @ inv_t @ parent_mat
 
-        # parent_chain = []
-        # p = node.parent
-        # while p is not None:
-        #     parent_chain.append(p)
-        #     p = p.parent
-        # # Traverse parents downwards
-        # expected_world_rot = Quaternion()
-        # for p in reversed(parent_chain):
-        #     expected_world_rot = expected_world_rot @ p.rot
-        # expected_world_rot = expected_world_rot @ node.rot
-        # gmd_world_rot = Quaternion((node.anim_axis.w, node.anim_axis.x, node.anim_axis.y, node.anim_axis.z))
-        # print("world rot comparison", expected_world_rot, gmd_world_rot)
-        # if (expected_world_rot - gmd_world_rot).magnitude > 0.01:
-        #     print("mismatching world rot")
-        #     break
+            print("mat real", round_mat(node.matrix))
+            print("mat calc", round_mat(overall_mat))
+            if sum([x * x for v in (overall_mat - node.matrix) for x in v]) > 0.1:
+                print("DIFFERENCE")
+                break
 
-        inv_t = Matrix.Translation(-pos)
-        t = Matrix.Translation(pos)
-        inv_r = node.rot.inverted().to_matrix().to_4x4()
-        r = node.rot.to_matrix().to_4x4()
-        inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
-        overall_mat = (parent_mat @ inv_s @ inv_r @ inv_t)
-        # print(inv_t)
-        # print(inv_r)
-        print("mat real", node.matrix)
-        print("mat calc",overall_mat)
-        if sum([x*x for v in (overall_mat - node.matrix) for x in v]) > 0.1:
-            print("DIFFERENCE")
-            break
-    # else:
-    #     for node in scene.overall_hierarchy.depth_first_iterate():
-    #         print(f" ---- OBJECT {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
-    #         print(node.pos)
-    #         print(node.rot)
-    #         print(node.scale)
-    #         print(node.matrix)
-    #         inv_t = Matrix.Translation(-node.pos)
-    #         inv_r = node.rot.inverted().to_matrix().to_4x4()
-    #         inv_s = Matrix.Diagonal(Vector((1/node.scale.x, 1/node.scale.y, 1/node.scale.z))).to_4x4()
-    #         parent_mat = node.parent.matrix if node.parent is not None else Matrix.Identity(4)
-    #         print(inv_s @ inv_r @ inv_t @ parent_mat)
+        if args.skinned and node.node_type == NodeType.MatrixTransform:
+            # Attempt to calculate rot from bone_axis??
 
-
-    # unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
-    # new_file_bytearray = pack_file_data(version_props, unabstracted_file_data, error_reporter)
-
-    # new_version_props, new_header, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
-    # new_scene = read_abstract_scene_from_filedata_object(new_version_props, args, new_file_data, error_reporter)
+            pass

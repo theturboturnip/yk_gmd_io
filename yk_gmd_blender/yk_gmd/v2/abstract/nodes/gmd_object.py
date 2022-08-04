@@ -10,7 +10,7 @@ from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 @dataclass(repr=False)
 class GMDUnskinnedObject(GMDNode):
     mesh_list: List[GMDMesh]
-    matrix: Matrix
+    matrix: Matrix  # World-to-local-space
 
     def __init__(self, name: str, node_type: NodeType,
                  pos: Vector, rot: Quaternion, scale: Vector,

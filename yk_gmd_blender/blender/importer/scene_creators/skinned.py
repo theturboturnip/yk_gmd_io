@@ -1,5 +1,4 @@
 import json
-import re
 from typing import Dict, Optional, Union, cast
 
 import bpy
@@ -66,8 +65,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             self.error.recoverable(
                 f"This import method cannot import unskinnned objects. Please use the [Unskinned] variant")
 
-    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection,
-                            anim_skeleton: bool) -> bpy.types.Object:
+    def make_bone_hierarchy(self, context: bpy.types.Context, collection: bpy.types.Collection) -> bpy.types.Object:
         """
         Make an Armature representing all of the GMDBones in the imported scene hierarchy.
         :param context: The context used by the import process.
@@ -88,45 +86,14 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         context.view_layer.objects.active = armature_obj
         bpy.ops.object.mode_set(mode='EDIT')
 
-        # Idea for regex taken from https://github.com/johnzero7/XNALaraMesh/blob/eaccfddf39aef8d3cb60a50c05f2585398fe26ca/import_xnalara_model.py#L356
-        # The actual regex has been changed tho
-        twist_regex = re.compile(r'[-_](twist|adj|sup)\d*([-_\s]|$)')
-
         self.bone_world_yakuza_space_matrices: Dict[str, Matrix] = {}
-
-        def generate_perpendicular_bone_direction(this_bone_matrix: Matrix, parent_dir: Vector):
-            # Pick a vector that's sort of in the same direction we want the bone to point in
-            # (i.e. we don't want the bone to go in/out, so don't pick (0, 0, 1))
-            target_dir = Vector((0, 1, 0))
-            if abs(parent_dir.dot(target_dir)) > 0.99:
-                # Parent and proposed perpendicular direction are basically the same axis, cross product won't work
-                # Choose a different one
-                target_dir = Vector((1, 0, 0))
-
-            # parent_dir cross target_dir creates a vector that's guaranteed to be perpendicular to both of them.
-            perp_dir = parent_dir.cross(target_dir).normalized()
-            self.error.debug("BONES", f"{parent_dir} X {target_dir} = {perp_dir}")
-
-            # Then, parent_dir cross perp_dir will create a vector that is both
-            #   1) perpendicular to parent_dir
-            #   2) in the same sort of direction as target_dir
-            # use this vector as our tail_delta
-            tail_delta_dir = parent_dir.cross(perp_dir).normalized()
-            self.error.debug("BONES", f"{parent_dir} X {perp_dir} = {tail_delta_dir}")
-
-            # Cross product can have bad symmetry - bones on opposite sides of the skeleton can get deltas that look weird
-            # Fix this by picking the delta which moves the tail the farthest possible distance from the origin
-            # This will choose consistent directions regardless of which side of the vertical axis you are on
-            distance_from_origin_with_positive = (this_bone_matrix @ (tail_delta_dir * 0.1)).length
-            distance_from_origin_with_negative = (this_bone_matrix @ (-tail_delta_dir * 0.1)).length
-            if distance_from_origin_with_negative > distance_from_origin_with_positive:
-                tail_delta_dir = -tail_delta_dir
-
-            return tail_delta_dir
 
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
+
+            self.error.debug("BONES", f"bone {gmd_node.name}")
+            self.error.debug("BONES", f"Actual Data\n{gmd_node.pos}\t{gmd_node.rot}\t{gmd_node.scale}")
 
             # Find the local->world matrix for the parent bone, and use this to find the local->world matrix for the current bone
             if gmd_node.parent:
@@ -134,42 +101,30 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             else:
                 parent_matrix_unrotated = Matrix.Identity(4)
 
-            self.error.debug("BONES", f"bone {gmd_node.name}")
-            gmd_bone_pos, gmd_bone_axis_maybe, gmd_bone_scale = gmd_node.matrix.inverted().decompose()
-            self.error.debug("BONES", f"Decomposed Data\n{gmd_bone_pos},\t{gmd_bone_axis_maybe},\t{gmd_bone_scale}")
-            self.error.debug("BONES", f"Actual Data\n{gmd_node.pos},\t{gmd_node.rot},\t{gmd_node.scale}")
-
-            # TODO - this produces an uninvertible matrix - why?
-            #   this_bone_matrix = parent_matrix @ transform_to_matrix(gmd_node.pos, gmd_node.rot, gmd_node.scale)
-            this_bone_matrix_unrotated = parent_matrix_unrotated @ Matrix.Translation(
-                gmd_node.pos.xyz)  # @ Matrix.Diagonal(gmd_node.scale.xyz).resize_4x4())
+            this_bone_matrix_unrotated = parent_matrix_unrotated @ Matrix.Translation(gmd_node.pos.xyz)
             head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0, 0, 0))
             self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix_unrotated
 
             tail_delta = gmd_node.world_pos.xyz + gmd_node.anim_axis.xyz
+            if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
+                tail_delta = Vector((0, 0, 0.5))
+            if tail_delta.length < 0.00001:
+                self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
 
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
-                tail_delta = Vector((0, 0, 0.5))
-            if not anim_skeleton:
-                bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
-                bone.tail = self.gmd_to_blender_world @ tail_delta
-                if gmd_node.anim_axis.w < 0.00001:
-                    bone.length = 0.0001
-                else:
-                    bone.length = gmd_node.anim_axis.w
-            else:
-                bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 0))
-                bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 1))
+            bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
+            bone.tail = self.gmd_to_blender_world @ tail_delta
+            if gmd_node.anim_axis.w < 0.00001:
                 bone.length = 0.0001
-            if tail_delta.length < 0.00001:
-                self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
+            else:
+                bone.length = gmd_node.anim_axis.w
+
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.00001 and not anim_skeleton:
+                if (bone.head - bone.parent.tail).length < 0.00001:
                     bone.use_connect = True
                 else:
                     bone.use_connect = False
@@ -212,6 +167,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
                     gmd_node.matrix[3])
             bone.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
             bone.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
+            bone.yakuza_hierarchy_node_data.bone_local_rot = transform_rotation_gmd_to_blender(gmd_node.rot)
 
         return armature_obj
 
