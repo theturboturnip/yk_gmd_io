@@ -325,23 +325,31 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             return data
 
         # Take a range, look up that range in the index buffer, return normalized indices from 0 to vertex_count
-        def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0xFFFF,
-                            max_index: int = -1) -> Tuple[array.ArrayType, int, int]:
+        def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0x1_0000,
+                            max_index: int = -1, ignore_FFFF: bool = True) -> Tuple[array.ArrayType, int, int]:
             index_ptr_min = indices_range.index_offset
             index_ptr_max = index_ptr_min + indices_range.index_count
 
             if file_uses_relative_indices:
                 index_offset = 0
             else:
+                # Look through the range and find the smallest index, take everything relative to that.
+                smallest_index = min(index_buffer[i] for i in range(index_ptr_min, index_ptr_max))
                 if file_uses_min_index:
                     index_offset = mesh_struct.min_index
+                    if mesh_struct.min_index > smallest_index:
+                        self.error.recoverable(
+                            f"File claims the smallest index in this buffer is {mesh_struct.min_index}, but the lowest is actually {smallest_index}.\n"
+                            f"The file may be broken/corrupt, or it may be doing something clever we don't know about yet.\n"
+                            f"Disable Strict Import to try loading the file anyway.")
+                        index_offset = smallest_index
                 else:
-                    # Look through the range and find the smallest index, take everything relative to that.
-                    index_offset = min(index_buffer[i] for i in range(index_ptr_min, index_ptr_max))
+                    index_offset = smallest_index
+
             indices = array.array("H")
             for i in range(index_ptr_min, index_ptr_max):
                 index = index_buffer[i]
-                if index != 0xFFFF:
+                if not (ignore_FFFF and index == 0xFFFF):
                     # Update min/max absolute index values
                     min_index = min(min_index, index)
                     max_index = max(max_index, index)
@@ -363,25 +371,31 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 self.error.debug("MESH_PROPS", "index props: none, because importing with NO_VERTICES")
             else:
                 # Actually import data
-                triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices)
+                triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices,
+                                                                         ignore_FFFF=False)
                 triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                        mesh_struct.noreset_strip_indices,
-                                                                                       min_index, max_index)
+                                                                                       min_index, max_index,
+                                                                                       ignore_FFFF=False)
                 triangle_strip_reset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                      mesh_struct.reset_strip_indices,
                                                                                      min_index,
-                                                                                     max_index)
+                                                                                     max_index, ignore_FFFF=True)
 
                 if file_uses_min_index and (not file_uses_relative_indices) and mesh_struct.min_index != min_index:
-                    self.error.fatal(
-                        f"Mesh uses a minimum absolute index of {min_index}, but file specifies a minimum index of {mesh_struct.min_index}")
+                    self.error.recoverable(
+                        f"Mesh uses a minimum absolute index of {min_index}, \n"
+                        f"but file specifies a minimum index of {mesh_struct.min_index}."
+                        f"Disable Strict Import to try and keep going anyway")
+
+                # Decide which of the *declared* minimum index and the *found* minimum index are correct
+                actual_min_index = (min(mesh_struct.min_index, min_index) if file_uses_min_index else min_index)
 
                 # Define the range of vertices that are referenced by the indices.
                 # This is shifted up by the vertex_offset_from_index field.
                 # This means if a single vertex buffer has >65535 elements, and a mesh wants to index into it with 16-bit unsigned,
                 # it can shift its indices down by a set amount to prevent exceeding the limit.
-                vertex_start = (mesh_struct.min_index if file_uses_min_index else min_index) + \
-                               mesh_struct.vertex_offset_from_index
+                vertex_start = actual_min_index + mesh_struct.vertex_offset_from_index
                 vertex_end = vertex_start + mesh_struct.vertex_count
 
                 if vertex_start < 0 or vertex_end < 0 or vertex_end <= vertex_start:
