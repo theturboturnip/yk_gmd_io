@@ -33,7 +33,11 @@ def pytest_addoption(parser):
 class GMDTest:
     src: Path
     dst: Path
-    skinned: bool
+    skinned_method: str
+
+    def __str__(self):
+        return f"{self.src.parent.name}/{self.src.name}" + (
+            f"-skin{self.skinned_method}" if self.skinned_method else "")
 
 
 def pytest_generate_tests(metafunc):
@@ -51,15 +55,35 @@ def pytest_generate_tests(metafunc):
         for model in model_dir.iterdir():
             if not model.name.endswith(".gmd"):
                 continue
-            gmdtests.append(GMDTest(
-                src=model,
-                dst=output_dir / model_dir.name / model.name,
-                skinned=skinned
-            ))
+            if skinned:
+                gmdtests.append(GMDTest(
+                    src=model,
+                    dst=output_dir / model_dir.name / model.name,
+                    skinned_method="CALCULATE"
+                ))
+                gmdtests.append(GMDTest(
+                    src=model,
+                    dst=output_dir / model_dir.name / model.name,
+                    skinned_method="FROM_TARGET_FILE"
+                ))
+                gmdtests.append(GMDTest(
+                    src=model,
+                    dst=output_dir / model_dir.name / model.name,
+                    skinned_method="FROM_ORIGINAL_GMD_IMPORT"
+                ))
+            else:
+                gmdtests.append(GMDTest(
+                    src=model,
+                    dst=output_dir / model_dir.name / model.name,
+                    skinned_method=""
+                ))
+
+    # Sort by filesize, to get quick files out of the way first
+    gmdtests.sort(key=lambda gmdtest: os.path.getsize(gmdtest.src))
+
     metafunc.parametrize("blender", [blender], ids=[""])
     metafunc.parametrize("isolate_blender", [isolate_blender], ids=[""])
-    metafunc.parametrize("gmdtest", gmdtests,
-                         ids=lambda gmdtest: f"{gmdtest.src.name}{'-skinned' if gmdtest.skinned else ''}")
+    metafunc.parametrize("gmdtest", gmdtests, ids=str)
 
 
 def pytest_sessionstart(session):

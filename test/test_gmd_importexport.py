@@ -23,7 +23,7 @@ def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolat
     env.update({
         "YKGMDIO_TEST_SRC": str(gmdtest.src),
         "YKGMDIO_TEST_DST": str(gmdtest.dst),
-        "YKGMDIO_SKINNED": str(gmdtest.skinned),
+        "YKGMDIO_SKINNED": str(gmdtest.skinned_method),
     })
 
     SCRIPTLOC = os.path.dirname(__file__)
@@ -46,11 +46,11 @@ def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolat
         ], check=True, env=env)
 
     # Compare the import/export
-    compare.compare_files(gmdtest.src, gmdtest.dst, gmdtest.skinned, vertices=True,
+    compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=LenientErrorReporter(allowed_categories=set()))
 
 
 @pytest.mark.order(2)
 def test_gmd_compare_strict(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
-    compare.compare_files(gmdtest.src, gmdtest.dst, gmdtest.skinned, vertices=True,
+    compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=StrictErrorReporter(allowed_categories=set()))
