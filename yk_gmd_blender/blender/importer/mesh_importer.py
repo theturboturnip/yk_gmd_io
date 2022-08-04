@@ -268,10 +268,12 @@ def gmd_meshes_to_bmesh(
             for buf in vertices
         ]
         # Assign each vertex in each mesh to the bmesh
+        i_vert = 0
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 add_vertex_to_bmesh(buf, i)
-                mesh_vtx_idx_to_bmesh_idx[i_buf][i] = len(bm.verts)
+                mesh_vtx_idx_to_bmesh_idx[i_buf][i] = i_vert
+                i_vert += 1
 
     # Now we've added the vertices, update bmesh internal structures
     bm.verts.ensure_lookup_table()
