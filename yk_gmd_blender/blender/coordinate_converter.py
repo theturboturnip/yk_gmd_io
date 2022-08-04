@@ -7,7 +7,15 @@ def transform_position_gmd_to_blender(pos: Vector) -> Vector:
     return Vector((-pos.x, pos.z, pos.y))
 
 
+def transform_position_blender_to_gmd(pos: Vector) -> Vector:
+    return Vector((-pos.x, pos.z, pos.y))
+
+
 def transform_rotation_gmd_to_blender(rot: Quaternion) -> Quaternion:
+    return Quaternion((rot.w, -rot.x, rot.z, rot.y))
+
+
+def transform_rotation_blender_to_gmd(rot: Quaternion) -> Quaternion:
     return Quaternion((rot.w, -rot.x, rot.z, rot.y))
 
 

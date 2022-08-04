@@ -9,7 +9,8 @@ import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData, yakuza_hierarchy_node_data_sort_key
-from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, transform_position_gmd_to_blender
+from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd, transform_position_blender_to_gmd, \
+    transform_rotation_blender_to_gmd
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object, \
     split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
@@ -407,11 +408,18 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             # blender_bone.head_local = local to *armature*, not parent bone
             # blender_bone.head = local to parent, but doesn't seem to work correctly
             # Work out the local position from the parent bone's matrix instead
-            armature_rel_head = transform_position_gmd_to_blender(Vector(blender_bone.head_local))
+            armature_rel_head = transform_position_blender_to_gmd(Vector(blender_bone.head_local))
             if parent_gmd_bone:
                 parent_local_head = parent_gmd_bone.matrix @ armature_rel_head
             else:
                 parent_local_head = armature_rel_head
+
+            if blender_bone.yakuza_hierarchy_node_data.inited:
+                gmd_local_rot = transform_rotation_blender_to_gmd(
+                    blender_bone.yakuza_hierarchy_node_data.bone_local_rot
+                )
+            else:
+                gmd_local_rot = Quaternion()
 
             if use_previously_imported_matrix:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
@@ -430,7 +438,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             else:
                 # Calculate from scratch
                 inv_t = Matrix.Translation(-parent_local_head)
-                inv_r = Matrix.Identity(4)  # node.rot.inverted().to_matrix().to_4x4()
+                inv_r = gmd_local_rot.inverted().to_matrix().to_4x4()
                 # Bones cannot be scaled
                 parent_mat = parent_gmd_bone.matrix if parent_gmd_bone else Matrix.Identity(4)
                 bone_matrix = (inv_r @ inv_t @ parent_mat)
@@ -446,7 +454,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 parent=parent_gmd_bone,
 
                 pos=parent_local_head,
-                rot=Quaternion(),  # TODO - Is there a better way to handle this? Does the game react to this at all?
+                rot=gmd_local_rot,
                 scale=Vector((1, 1, 1)),
 
                 world_pos=Vector((armature_rel_head.x, armature_rel_head.y, armature_rel_head.z, 1)),
