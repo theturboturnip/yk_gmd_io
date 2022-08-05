@@ -105,17 +105,11 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0, 0, 0))
             self.bone_world_yakuza_space_matrices[gmd_node.name] = this_bone_matrix_unrotated
 
-            tail_delta = gmd_node.world_pos.xyz + gmd_node.anim_axis.xyz
-            if tail_delta.xyz == (0, 0, 0) or gmd_node.anim_axis.w < 0.00001:
-                tail_delta = Vector((0, 0, 0.5))
-            if tail_delta.length < 0.00001:
-                self.error.recoverable(f"Bone {bone.name} generated a tail_delta of 0 and will be deleted by Blender.")
-
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
             bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
-            bone.tail = self.gmd_to_blender_world @ tail_delta
+            bone.tail = self.gmd_to_blender_world @ (gmd_node.world_pos.xyz + gmd_node.anim_axis.xyz)
             if gmd_node.anim_axis.w < 0.00001:
                 bone.length = 0.0001
             else:
@@ -124,10 +118,6 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             # If your head is close to your parent's tail, turn on "connected to parent"
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
-                if (bone.head - bone.parent.tail).length < 0.00001:
-                    bone.use_connect = True
-                else:
-                    bone.use_connect = False
             else:
                 bone.parent = None
 
