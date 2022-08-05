@@ -4,7 +4,7 @@ import bpy
 
 YKGMDIO_TEST_SRC = os.environ["YKGMDIO_TEST_SRC"].replace("\\", "/")
 YKGMDIO_TEST_DST = os.environ["YKGMDIO_TEST_DST"].replace("\\", "/")
-YKGMDIO_SKINNED = (os.environ["YKGMDIO_SKINNED"] == "True")
+YKGMDIO_SKINNED_METHOD = os.environ["YKGMDIO_SKINNED"]
 
 bpy.ops.preferences.addon_enable(module='yk_gmd_blender')
 
@@ -22,7 +22,7 @@ try:
 
         # Import the file
         print(f"Loading from {YKGMDIO_TEST_SRC}")
-        if YKGMDIO_SKINNED:
+        if YKGMDIO_SKINNED_METHOD:
             bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
         else:
             bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
@@ -33,8 +33,9 @@ try:
         bpy.context.view_layer.objects.active = toplevel_object
 
         # Export to the destination
-        if YKGMDIO_SKINNED:
-            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH")
+        if YKGMDIO_SKINNED_METHOD:
+            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH",
+                                             bone_matrix_origin=YKGMDIO_SKINNED_METHOD)
         else:
             bpy.ops.export_scene.gmd_unskinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH")
 finally:
