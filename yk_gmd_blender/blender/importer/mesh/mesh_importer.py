@@ -129,7 +129,7 @@ def gmd_meshes_to_bmesh(
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
     if fuse_vertices:
-        mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion(gmd_meshes, vertices)
+        mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangle_indices for m in gmd_meshes], vertices)
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 if not is_fused[i_buf][i]:

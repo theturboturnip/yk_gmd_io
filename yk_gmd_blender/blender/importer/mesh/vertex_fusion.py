@@ -1,8 +1,8 @@
+import array
 from collections import defaultdict
 from typing import List, Dict, Tuple, Set, DefaultDict
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic
 
 # Type Aliases
@@ -13,7 +13,7 @@ NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 
 def detect_fully_fused_triangles(
-        gmd_meshes: List[GMDMesh],
+        idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]]
 ) -> DefaultDict[Tri, List[NotRemappedTri]]:
@@ -25,7 +25,7 @@ def detect_fully_fused_triangles(
     Fully fused dupe triangles cannot be represented in Blender, because it cannot represent
     two triangles between the same three vertices.
 
-    :param gmd_meshes: List of meshes the vertices came from
+    :param idx_bufs: Index buffers in triangle format (not triangle strips) for the meshes.
     :param fused_idx_to_buf_idx: Mapping of (fused vertex index) to list(raw indices that were fused)
     :param buf_idx_to_fused_idx: Mapping of (raw vertex index) to (index in overall fused buffer). Should be inverse of fused_idx_to_buf_idx.
     :return: Mapping of (triangle with fused indices T) to (triangles of raw indices which result in T after fusion).
@@ -37,13 +37,13 @@ def detect_fully_fused_triangles(
     def was_fused_to_anything(fused_idx: int) -> bool:
         return len(fused_idx_to_buf_idx[fused_idx]) > 1
 
-    for i_buf, gmd_mesh in enumerate(gmd_meshes):
+    for i_buf, tri_idxs in enumerate(idx_bufs):
         buf_idx_to_fused_idx_for_mesh = buf_idx_to_fused_idx[i_buf]
-        for i_tri_start in range(0, len(gmd_mesh.triangle_indices), 3):
+        for i_tri_start in range(0, len(tri_idxs), 3):
             non_remapped_tri: Tuple[int, int, int] = (
-                gmd_mesh.triangle_indices[i_tri_start + 0],
-                gmd_mesh.triangle_indices[i_tri_start + 1],
-                gmd_mesh.triangle_indices[i_tri_start + 2],
+                tri_idxs[i_tri_start + 0],
+                tri_idxs[i_tri_start + 1],
+                tri_idxs[i_tri_start + 2],
             )
             remapped_tri = (
                 buf_idx_to_fused_idx_for_mesh[non_remapped_tri[0]],
@@ -61,7 +61,7 @@ def detect_fully_fused_triangles(
 
 
 def decide_on_unfusions(
-        gmd_meshes: List[GMDMesh],
+        idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]],
         fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
@@ -70,7 +70,7 @@ def decide_on_unfusions(
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
     i.e. impossible to represent in Blender, decide which vertices to *un*-fuse to resolve the issue.
 
-    :param gmd_meshes: List of meshes the vertices came from
+    :param idx_bufs: Index buffers in triangle format (not triangle strips) for the meshes.
     :param fused_idx_to_buf_idx: Mapping of (fused vertex index) to list(raw indices that were fused)
     :param buf_idx_to_fused_idx: Mapping of (raw vertex index) to (index in overall fused buffer). Should be inverse of fused_idx_to_buf_idx.
     :param fully_fused_tri_set: Mapping of (triangle with fused indices T) to (triangles of raw indices which result in T after fusion).
@@ -96,13 +96,13 @@ def decide_on_unfusions(
 
     # scan through all triangles again, to see if any of them have connections to non-remapped-verts
     non_remapped_tris_connected_to_verts_in_dupe_tris = set(
-        (i_buf, tuple(gmd_mesh.triangle_indices[i_tri_start:i_tri_start + 3]))
-        for i_buf, gmd_mesh in enumerate(gmd_meshes)  # foreach mesh
-        for i_tri_start in range(0, len(gmd_mesh.triangle_indices), 3)  # foreach triangle in mesh
+        (i_buf, tuple(tri_idxs[i_tri_start:i_tri_start + 3]))
+        for i_buf, tri_idxs in enumerate(idx_bufs)  # foreach mesh
+        for i_tri_start in range(0, len(tri_idxs), 3)  # foreach triangle in mesh
         # if any vertex in this triangle is included in a dupe triangle, include the triangle in the set
         if any(
             (i_buf, i_vtx) in non_remapped_verts_in_dupe_tris
-            for i_vtx in gmd_mesh.triangle_indices[i_tri_start:i_tri_start + 3]
+            for i_vtx in tri_idxs[i_tri_start:i_tri_start + 3]
         )
     )
 
@@ -162,11 +162,11 @@ def decide_on_unfusions(
     return unfuse_verts_with
 
 
-def vertex_fusion(gmd_meshes: List[GMDMesh],
-                  vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[int]], List[List[bool]]]:
+def vertex_fusion(idx_bufs: List[array.ArrayType],
+                  vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[VertIdx]], List[List[bool]]]:
     """
-    Applies "vertex fusion" to a set of vertex buffers, returning a list of which vertices were "fused"
-    and a mapping of (i_buf, i_vertex_in_buf) to fused index.
+    Calculates "vertex fusion" for a set of vertex buffers which will result in a single contiguous list of vertices.
+    Returns a list of which vertices were "fused" and a mapping of (i_buf, i_vertex_in_buf) to fused index.
 
     Fuses "adjacent" vertices, where adjacent vertices have the same
     - position
@@ -174,8 +174,9 @@ def vertex_fusion(gmd_meshes: List[GMDMesh],
     - bone mapping
     - weight mapping
 
-    :param vertices:
-    :return:
+    :param idx_bufs: Index buffers in triangle format (not triangle strips) for the meshes.
+    :param vertices: Vertex buffers mapping to the index buffers.
+    :return: Tuple of (mapping of [i_buf][i_vtx] to fused vertex index, mapping of [i_buf][i_vtx] to whether it was fused with a previous vertex).
     """
 
     vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
@@ -216,7 +217,7 @@ def vertex_fusion(gmd_meshes: List[GMDMesh],
                 buf_idx_to_fused_idx[i_buf][i] = fusion_idx
                 is_fused[i_buf][i] = False
 
-    fully_fused_tri_set = detect_fully_fused_triangles(gmd_meshes, fused_idx_to_buf_idx, buf_idx_to_fused_idx)
+    fully_fused_tri_set = detect_fully_fused_triangles(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx)
     has_fully_fused_dupe_tris = any(len(fused_tris) > 1 for fused_tris in fully_fused_tri_set.values())
 
     if has_fully_fused_dupe_tris:
@@ -262,6 +263,6 @@ def vertex_fusion(gmd_meshes: List[GMDMesh],
         #    The above code outputs a set of constraints like (vertex v may not be fused with vertices vs').
         #    We want to solve this while maximizing the amount of fusions we still do?
 
-        decide_on_unfusions(gmd_meshes, fused_idx_to_buf_idx, buf_idx_to_fused_idx, fully_fused_tri_set)
+        decide_on_unfusions(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx, fully_fused_tri_set)
 
     return buf_idx_to_fused_idx, is_fused
