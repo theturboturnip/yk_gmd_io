@@ -58,7 +58,7 @@ class FilteredErrorReporter(ErrorReporter):
         return self.error.debug(category, msg)
 
 
-@pytest.mark.order(1)
+@pytest.mark.order(10)
 def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     # Create subfolder in output for directory
     gmdtest.dst.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +98,7 @@ def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolat
                                                       COMPARE_FILTER.get(gmdtest.src.name)))
 
 
-@pytest.mark.order(2)
+@pytest.mark.order(20)
 def test_gmd_compare_strict(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=FilteredErrorReporter(StrictErrorReporter(allowed_categories=set()),

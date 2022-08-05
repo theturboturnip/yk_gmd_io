@@ -4,6 +4,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -40,50 +42,59 @@ class GMDTest:
             f"-skin{self.skinned_method}" if self.skinned_method else "")
 
 
+@pytest.fixture
+def blender(request):
+    return Path(request.config.getoption("blender"))
+
+
+@pytest.fixture
+def isolate_blender(request):
+    return bool(request.config.getoption("--isolate-blender"))
+
+
 def pytest_generate_tests(metafunc):
-    assert metafunc.config.getoption("blender")
-    blender = Path(metafunc.config.getoption("blender"))
-    isolate_blender = bool(metafunc.config.getoption("--isolate-blender"))
-    model_root_dir = Path(metafunc.config.getoption("model_root_dir"))
-    output_dir = Path(metafunc.config.getoption("output_dir"))
+    if "gmdtest" in metafunc.fixturenames:
+        model_root_dir = Path(metafunc.config.getoption("model_root_dir"))
+        output_dir = Path(metafunc.config.getoption("output_dir"))
 
-    gmdtests = []
-    for model_dir in model_root_dir.iterdir():
-        if not model_dir.is_dir():
-            continue
-        skinned = "-Skinned" in model_dir.name
-        for model in model_dir.iterdir():
-            if not model.name.endswith(".gmd"):
+        assert model_root_dir
+        assert output_dir
+
+        gmdtests = []
+        for model_dir in model_root_dir.iterdir():
+            if not model_dir.is_dir():
                 continue
-            if skinned:
-                gmdtests.append(GMDTest(
-                    src=model,
-                    dst=output_dir / model_dir.name / model.name,
-                    skinned_method="CALCULATE"
-                ))
-                gmdtests.append(GMDTest(
-                    src=model,
-                    dst=output_dir / model_dir.name / model.name,
-                    skinned_method="FROM_TARGET_FILE"
-                ))
-                gmdtests.append(GMDTest(
-                    src=model,
-                    dst=output_dir / model_dir.name / model.name,
-                    skinned_method="FROM_ORIGINAL_GMD_IMPORT"
-                ))
-            else:
-                gmdtests.append(GMDTest(
-                    src=model,
-                    dst=output_dir / model_dir.name / model.name,
-                    skinned_method=""
-                ))
+            skinned = "-Skinned" in model_dir.name
+            for model in model_dir.iterdir():
+                if not model.name.endswith(".gmd"):
+                    continue
+                if skinned:
+                    gmdtests.append(GMDTest(
+                        src=model,
+                        dst=output_dir / model_dir.name / model.name,
+                        skinned_method="CALCULATE"
+                    ))
+                    gmdtests.append(GMDTest(
+                        src=model,
+                        dst=output_dir / model_dir.name / model.name,
+                        skinned_method="FROM_TARGET_FILE"
+                    ))
+                    gmdtests.append(GMDTest(
+                        src=model,
+                        dst=output_dir / model_dir.name / model.name,
+                        skinned_method="FROM_ORIGINAL_GMD_IMPORT"
+                    ))
+                else:
+                    gmdtests.append(GMDTest(
+                        src=model,
+                        dst=output_dir / model_dir.name / model.name,
+                        skinned_method=""
+                    ))
 
-    # Sort by filesize, to get quick files out of the way first
-    gmdtests.sort(key=lambda gmdtest: os.path.getsize(gmdtest.src))
+        # Sort by filesize, to get quick files out of the way first
+        gmdtests.sort(key=lambda gmdtest: os.path.getsize(gmdtest.src))
 
-    metafunc.parametrize("blender", [blender], ids=[""])
-    metafunc.parametrize("isolate_blender", [isolate_blender], ids=[""])
-    metafunc.parametrize("gmdtest", gmdtests, ids=str)
+        metafunc.parametrize("gmdtest", gmdtests, ids=str)
 
 
 def pytest_sessionstart(session):
