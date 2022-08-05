@@ -117,7 +117,7 @@ def decide_on_unfusions(
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]],
         fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
-) -> Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
+) -> Dict[NotRemappedVertIdx, Tuple[NotRemappedVertIdx, ...]]:
     """
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
     i.e. impossible to represent in Blender, decide which vertices to *un*-fuse to resolve the issue.
@@ -161,6 +161,8 @@ def decide_on_unfusions(
     # safety - all non-remapped-dupe-triangles are connected to verts in dupe tris
     assert non_remapped_tris_connected_to_verts_in_dupe_tris.issuperset(non_remapped_dupe_tris)
 
+    # TODO - if the fusion target of vertex X gets included in other not-fully-fused-triangles,
+    #  the vertex itself should not be counted as interior
     interior_non_remapped_verts = set()
     for i_buf, i_vtx in non_remapped_verts_in_dupe_tris:
         connected_non_remapped_tris = set(
@@ -201,16 +203,16 @@ def decide_on_unfusions(
             unfuse_verts_with[(i_buf, i_unfuse_vtx)].update(non_remapped_verts_in_fusions_with_this_tri)
 
     # Reduce each unfuse_verts_with list to just things that are already fused with the vert
-    for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
-        fused_into = buf_idx_to_fused_idx[i_buf][i_vtx]
-        new_to_unfuse_with = tuple(
+    reduced_unfuse_verts_with = {
+        (i_buf, i_vtx): tuple(
             x
             for x in to_unfuse_with
-            if x in fused_idx_to_buf_idx[fused_into] and x != (i_buf, i_vtx)
+            if x in fused_idx_to_buf_idx[buf_idx_to_fused_idx[i_buf][i_vtx]] and x != (i_buf, i_vtx)
         )
-        print(f"unfuse {(i_buf, i_vtx)} from {new_to_unfuse_with}")
+        for (i_buf, i_vtx), to_unfuse_with in unfuse_verts_with.items()
+    }
 
-    return unfuse_verts_with
+    return reduced_unfuse_verts_with
 
 
 def vertex_fusion(idx_bufs: List[array.ArrayType],
@@ -280,6 +282,9 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
         #    The above code outputs a set of constraints like (vertex v may not be fused with vertices vs').
         #    We want to solve this while maximizing the amount of fusions we still do?
 
-        decide_on_unfusions(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx, fully_fused_tri_set)
+        unfuse_verts_with = decide_on_unfusions(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx,
+                                                fully_fused_tri_set)
+        for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
+            print(f"unfuse {(i_buf, i_vtx)} from {to_unfuse_with}")
 
     return buf_idx_to_fused_idx, is_fused
