@@ -12,6 +12,54 @@ Tri = Tuple[VertIdx, VertIdx, VertIdx]  # 3 vertex indices
 NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 
+def detect_fully_fused_triangles(
+        gmd_meshes: List[GMDMesh],
+        fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
+        buf_idx_to_fused_idx: List[List[VertIdx]]
+) -> DefaultDict[Tri, List[NotRemappedTri]]:
+    """
+    Given a set of fused vertices and the meshes they came from, determine which triangles are "fully fused"
+    i.e. each of their indices are fully fused.
+
+    These are only important in the case of dupes (two fully fused triangles which result in the same fused triangle).
+    Fully fused dupe triangles cannot be represented in Blender, because it cannot represent
+    two triangles between the same three vertices.
+
+    :param gmd_meshes: List of meshes the vertices came from
+    :param fused_idx_to_buf_idx: Mapping of (fused vertex index) to list(raw indices that were fused)
+    :param buf_idx_to_fused_idx: Mapping of (raw vertex index) to (index in overall fused buffer). Should be inverse of fused_idx_to_buf_idx.
+    :return: Mapping of (triangle with fused indices T) to (triangles of raw indices which result in T after fusion).
+    """
+
+    # Maps each (remapped triangle indices) to a list of their (i_buf, (i_vtx0, i_vtx1, i_vtx2)) non-remapped triangles
+    fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]] = defaultdict(list)
+
+    def was_fused_to_anything(fused_idx: int) -> bool:
+        return len(fused_idx_to_buf_idx[fused_idx]) > 1
+
+    for i_buf, gmd_mesh in enumerate(gmd_meshes):
+        buf_idx_to_fused_idx_for_mesh = buf_idx_to_fused_idx[i_buf]
+        for i_tri_start in range(0, len(gmd_mesh.triangle_indices), 3):
+            non_remapped_tri: Tuple[int, int, int] = (
+                gmd_mesh.triangle_indices[i_tri_start + 0],
+                gmd_mesh.triangle_indices[i_tri_start + 1],
+                gmd_mesh.triangle_indices[i_tri_start + 2],
+            )
+            remapped_tri = (
+                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[0]],
+                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[1]],
+                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[2]],
+            )
+            remapped_tri = tuple(sorted(remapped_tri))
+
+            if (was_fused_to_anything(remapped_tri[0]) and
+                    was_fused_to_anything(remapped_tri[1]) and
+                    was_fused_to_anything(remapped_tri[2])):
+                fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
+
+    return fully_fused_tri_set
+
+
 def decide_on_unfusions(
         gmd_meshes: List[GMDMesh],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
@@ -30,6 +78,7 @@ def decide_on_unfusions(
     """
 
     # Mapping of all fully-fused non-remapped triangles to the triangle they were fused into
+    # TODO non-dupes - full fusions are common, but fully fused dupes are not
     non_remapped_dupe_tris_to_fused_tris: Dict[NotRemappedTri, Tri] = {
         non_remapped_tri: fused_tri
         for fused_tri, fused_non_remapped_tris in fully_fused_tri_set.items()
@@ -167,32 +216,7 @@ def vertex_fusion(gmd_meshes: List[GMDMesh],
                 buf_idx_to_fused_idx[i_buf][i] = fusion_idx
                 is_fused[i_buf][i] = False
 
-    # Maps each (remapped triangle indices) to a list of their (i_buf, (i_vtx0, i_vtx1, i_vtx2)) non-remapped triangles
-    fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]] = defaultdict(list)
-
-    def was_fused_to_anything(fused_idx: int) -> bool:
-        return len(fused_idx_to_buf_idx[fused_idx]) > 1
-
-    for i_buf, gmd_mesh in enumerate(gmd_meshes):
-        buf_idx_to_fused_idx_for_mesh = buf_idx_to_fused_idx[i_buf]
-        for i_tri_start in range(0, len(gmd_mesh.triangle_indices), 3):
-            non_remapped_tri: Tuple[int, int, int] = (
-                gmd_mesh.triangle_indices[i_tri_start + 0],
-                gmd_mesh.triangle_indices[i_tri_start + 1],
-                gmd_mesh.triangle_indices[i_tri_start + 2],
-            )
-            remapped_tri = (
-                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[0]],
-                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[1]],
-                buf_idx_to_fused_idx_for_mesh[non_remapped_tri[2]],
-            )
-            remapped_tri = tuple(sorted(remapped_tri))
-
-            if (was_fused_to_anything(remapped_tri[0]) and
-                    was_fused_to_anything(remapped_tri[1]) and
-                    was_fused_to_anything(remapped_tri[2])):
-                fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
-
+    fully_fused_tri_set = detect_fully_fused_triangles(gmd_meshes, fused_idx_to_buf_idx, buf_idx_to_fused_idx)
     has_fully_fused_dupe_tris = any(len(fused_tris) > 1 for fused_tris in fully_fused_tri_set.values())
 
     if has_fully_fused_dupe_tris:
