@@ -12,6 +12,58 @@ Tri = Tuple[VertIdx, VertIdx, VertIdx]  # 3 vertex indices
 NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 
+def fuse_adjacent_vertices(
+        vertices: List[GMDVertexBuffer_Generic]
+) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
+    """
+    Given a set of vertices, fuse those that are "adjacent" (see vertex_fusion() docs for definition).
+    Returns data on the vertices that need to be fused.
+
+    :param vertices: Vertex buffers
+    :return: (fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused)
+    """
+
+    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
+    # fused_idx_to_buf_idx[i] contains (i_buf, i_vertex_in_buf) indices that are all fused into vertex [i]
+    # each element of this list defines an adjacency relation - all vertices in fused_idx_to_buf_idx[i] are "adjacent"
+    fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]] = []
+    # buf_idx_to_fused_idx[i_buf][i_vertex_in_buf] contains the fused index
+    buf_idx_to_fused_idx: List[List[VertIdx]] = [
+        [-1] * len(buf)
+        for buf in vertices
+    ]
+    # is_fused[i_buf][i_vertex_in_buf] = was that vertex fused into a previous vertex, or did it create a new one.
+    # NOTE: is_fused will be FALSE for the first vertex in a fusion
+    # i.e. if vertices [0, 1, 2] are fused into a single vertex, is_fused[0] will be FALSE because vertex 0 was not fused into anything before it.
+    is_fused: List[List[bool]] = [
+        [False] * len(buf)
+        for buf in vertices
+    ]
+
+    for i_buf, buf in enumerate(vertices):
+        for i in range(len(buf)):
+            vert_info = (
+                buf.pos[i].xyz.copy().freeze(),
+                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
+                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
+                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
+            )
+            if vert_info in vert_indices:
+                # Fuse this into a previous vertex
+                fusion_idx = vert_indices[vert_info]
+                fused_idx_to_buf_idx[fusion_idx].append((i_buf, i))
+                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
+                is_fused[i_buf][i] = True
+            else:
+                fusion_idx = len(fused_idx_to_buf_idx)
+                vert_indices[vert_info] = fusion_idx
+                fused_idx_to_buf_idx.append([(i_buf, i)])
+                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
+                is_fused[i_buf][i] = False
+
+    return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused
+
+
 def detect_fully_fused_triangles(
         idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
@@ -148,7 +200,6 @@ def decide_on_unfusions(
         for i_unfuse_vtx in to_unfuse:
             unfuse_verts_with[(i_buf, i_unfuse_vtx)].update(non_remapped_verts_in_fusions_with_this_tri)
 
-    # Last step - this is just for printing purposes
     # Reduce each unfuse_verts_with list to just things that are already fused with the vert
     for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
         fused_into = buf_idx_to_fused_idx[i_buf][i_vtx]
@@ -179,44 +230,10 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
     :return: Tuple of (mapping of [i_buf][i_vtx] to fused vertex index, mapping of [i_buf][i_vtx] to whether it was fused with a previous vertex).
     """
 
-    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
-    # fused_idx_to_buf_idx[i] contains (i_buf, i_vertex_in_buf) indices that are all fused into vertex [i]
-    # each element of this list defines an adjacency relation - all vertices in fused_idx_to_buf_idx[i] are "adjacent"
-    fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]] = []
-    # buf_idx_to_fused_idx[i_buf][i_vertex_in_buf] contains the fused index
-    buf_idx_to_fused_idx: List[List[VertIdx]] = [
-        [-1] * len(buf)
-        for buf in vertices
-    ]
-    # is_fused[i_buf][i_vertex_in_buf] = was that vertex fused into a previous vertex, or did it create a new one.
-    # NOTE: is_fused will be FALSE for the first vertex in a fusion
-    # i.e. if vertices [0, 1, 2] are fused into a single vertex, is_fused[0] will be FALSE because vertex 0 was not fused into anything before it.
-    is_fused: List[List[bool]] = [
-        [False] * len(buf)
-        for buf in vertices
-    ]
+    # First pass of simple fusion
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = fuse_adjacent_vertices(vertices)
 
-    for i_buf, buf in enumerate(vertices):
-        for i in range(len(buf)):
-            vert_info = (
-                buf.pos[i].xyz.copy().freeze(),
-                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
-                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
-                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
-            )
-            if vert_info in vert_indices:
-                # Fuse this into a previous vertex
-                fusion_idx = vert_indices[vert_info]
-                fused_idx_to_buf_idx[fusion_idx].append((i_buf, i))
-                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
-                is_fused[i_buf][i] = True
-            else:
-                fusion_idx = len(fused_idx_to_buf_idx)
-                vert_indices[vert_info] = fusion_idx
-                fused_idx_to_buf_idx.append([(i_buf, i)])
-                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
-                is_fused[i_buf][i] = False
-
+    # Detect fully fused triangles, and therefore fully fused duplicate triangles
     fully_fused_tri_set = detect_fully_fused_triangles(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx)
     has_fully_fused_dupe_tris = any(len(fused_tris) > 1 for fused_tris in fully_fused_tri_set.values())
 
