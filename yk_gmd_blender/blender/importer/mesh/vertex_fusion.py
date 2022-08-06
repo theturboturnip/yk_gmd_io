@@ -129,14 +129,13 @@ def decide_on_unfusions(
     :return: A dictionary mapping x -> ys, representing "x should not be merged with vertices ys".
     """
 
-    # Mapping of all fully-fused non-remapped triangles to the triangle they were fused into
-    # TODO non-dupes - full fusions are common, but fully fused dupes are not
-    non_remapped_dupe_tris_to_fused_tris: Dict[NotRemappedTri, Tri] = {
-        non_remapped_tri: fused_tri
+    # Mapping of all fully-fused non-remapped dupe triangles to the triangle they were fused into
+    non_remapped_dupe_tris: Set[NotRemappedTri] = {
+        non_remapped_tri
         for fused_tri, fused_non_remapped_tris in fully_fused_tri_set.items()
         for non_remapped_tri in fused_non_remapped_tris
+        if len(fused_non_remapped_tris) > 1
     }
-    non_remapped_dupe_tris = set(non_remapped_dupe_tris_to_fused_tris.keys())
 
     # Set of all non-remapped vertices that are present in any entirely-fused triangle
     # These vertices will all be fused with at least one other vertex
@@ -161,8 +160,8 @@ def decide_on_unfusions(
     # safety - all non-remapped-dupe-triangles are connected to verts in dupe tris
     assert non_remapped_tris_connected_to_verts_in_dupe_tris.issuperset(non_remapped_dupe_tris)
 
-    # TODO - if the fusion target of vertex X gets included in other not-fully-fused-triangles,
-    #  the vertex itself should not be counted as interior
+    # Decide which vertices are "interior" vs. "exterior" - interior vertices are only connected to other
+    # fully-fused-dupe-triangles
     interior_non_remapped_verts = set()
     for i_buf, i_vtx in non_remapped_verts_in_dupe_tris:
         connected_non_remapped_tris = set(
