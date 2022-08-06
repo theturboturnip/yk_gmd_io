@@ -280,7 +280,7 @@ def test_detect_fully_fused_triangles_fusion():
 
 
 @pytest.mark.order(1)
-def test_decide_on_unfusions_twolayerinterior():
+def test_decide_on_unfusions_twolayer_interior():
     # Create a large mesh, where the starred verts are duplicated (two layers).
     #   A  B  C
     #  D E* F* G
@@ -404,4 +404,124 @@ def test_decide_on_unfusions_twolayerinterior():
         (0, 22): {(0, 9)},
     }
 
-# TODO test unfusion where one of the layers has a split vertex
+
+# Test unfusion where one of the layers has a split vertex
+@pytest.mark.order(1)
+def test_decide_on_unfusions_twolayer_splitvtx():
+    # Create a mesh like the final example in the decode_on_unfusions documentation
+    #         -A---E
+    #        B---CD--F
+    #        | | | | |
+    # 1|  -X-|-A'|-E'|
+    # 0| Y---B'--C'--F'
+    #   --------------
+    #    0 1 2 3 4 5 6
+    # Triangles: ABC, ACE, DEF, A'B'C', A'C'E', C'E'F', XYB', XA'B'
+    # Fully fused triangles: ABC/A'B'C', ACE/A'C'E', DEF/C'E'F'
+    # The triangles between ABCDEF should all be fused dupes.
+    # The unfusion process should unfuse {C, C'}, {D, C'}, {E, E'}, {F, F'}
+
+    vtx_buf = mock_vertex_buffer([
+        # Top layer - 0..5 incl
+        v(3, 1, 0),  # A  0
+        v(2, 0, 0),  # B  1
+        v(4, 0, 0),  # C  2
+        v(4, 0, 0),  # D  3
+        v(5, 1, 0),  # E  4
+        v(6, 0, 0),  # F  5
+
+        # Bottom layer - 6..10 incl
+        v(3, 1, 0),  # A' 6
+        v(2, 0, 0),  # B' 7
+        v(4, 0, 0),  # C' 8
+        v(5, 1, 0),  # E' 9
+        v(6, 0, 0),  # F' 10
+
+        # XY - 11, 12
+        v(1, 1, 0),  # X  11
+        v(0, 0, 0),  # Y  12
+    ])
+    idx_buf = mock_idx_buffer([
+        0, 1, 2,  # ABC
+        0, 2, 4,  # ACE
+        3, 4, 5,  # DEF
+
+        6, 7, 8,  # A'B'C'
+        6, 8, 9,  # A'C'E'
+        8, 9, 10,  # C'E'F'
+
+        11, 12, 7,  # XYB'
+        11, 6, 7,  # XA'B'
+    ])
+
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = fuse_adjacent_vertices([vtx_buf])
+    # original indices of duplicate verts: 19..25 inclusive
+    # These should be fused with their counterparts
+    assert fused_idx_to_buf_idx[0] == [(0, 0), (0, 6)]
+    assert fused_idx_to_buf_idx[1] == [(0, 1), (0, 7)]
+    assert sorted(fused_idx_to_buf_idx[2]) == [(0, 2), (0, 3), (0, 8)]  # C, D, C' are adjacent
+    assert fused_idx_to_buf_idx[3] == [(0, 4), (0, 9)]
+    assert fused_idx_to_buf_idx[4] == [(0, 5), (0, 10)]
+    # All others should not be fused with anything
+    assert len(fused_idx_to_buf_idx) == 7
+    for i, fused_verts in enumerate(fused_idx_to_buf_idx):
+        if i not in range(5):
+            assert len(fused_verts) == 1
+
+    assert buf_idx_to_fused_idx == [[
+        0,  # A
+        1,  # B
+        2,  # C
+        2,  # D -> C
+        3,  # E
+        4,  # F
+
+        0, 1, 2, 3, 4,  # A'..F' -> A..F
+
+        5, 6  # X, Y
+    ]]
+
+    assert is_fused == [[
+        False,  # A
+        False,  # B
+        False,  # C
+        True,  # D -> C
+        False,  # E
+        False,  # F
+
+        True, True, True, True, True,  # A'..F' -> A..F
+
+        False, False  # X, Y
+    ]]
+
+    fully_fused_tri_set = detect_fully_fused_triangles(
+        [idx_buf],
+        fused_idx_to_buf_idx,
+        buf_idx_to_fused_idx
+    )
+    # Fully fused triangles: ABC/A'B'C', ACE/A'C'E', DEF/C'E'F'
+    assert fully_fused_tri_set == {
+        # Fused ABC
+        (0, 1, 2): [(0, (0, 1, 2)), (0, (6, 7, 8))],
+        # Fused ACE
+        (0, 2, 3): [(0, (0, 2, 4)), (0, (6, 8, 9))],
+        # Fused CEF
+        (2, 3, 4): [(0, (3, 4, 5)), (0, (8, 9, 10))],
+    }
+
+    unfusions = decide_on_unfusions(
+        [idx_buf],
+        fused_idx_to_buf_idx,
+        buf_idx_to_fused_idx,
+        fully_fused_tri_set
+    )
+    # The unfusion process should unfuse {C, C'}, {D, C'}, {E, E'}, {F, F'}
+    assert unfusions == {
+        (0, 2): {(0, 8)},  # C from C'
+        (0, 3): {(0, 8)},  # D from C'
+        (0, 4): {(0, 9)},  # E from E'
+        (0, 5): {(0, 10)},  # F from F'
+        (0, 8): {(0, 2), (0, 3)},  # C' from C, D
+        (0, 9): {(0, 4)},  # E' from E
+        (0, 10): {(0, 5)},  # F' from F
+    }
