@@ -23,7 +23,7 @@ def fuse_adjacent_vertices(
     :return: (fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused)
     """
 
-    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
+    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], VertIdx] = {}
     # fused_idx_to_buf_idx[i] contains (i_buf, i_vertex_in_buf) indices that are all fused into vertex [i]
     # each element of this list defines an adjacency relation - all vertices in fused_idx_to_buf_idx[i] are "adjacent"
     fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]] = []
@@ -117,7 +117,7 @@ def decide_on_unfusions(
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]],
         fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
-) -> DefaultDict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
+) -> Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
     """
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
     i.e. impossible to represent in Blender, decide which vertices to *un*-fuse to resolve the issue.
@@ -282,6 +282,74 @@ def decide_on_unfusions(
     return unfuse_verts_with
 
 
+def solve_unfusion(
+        vert_bufs: List[GMDVertexBuffer_Generic],
+        old_fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
+        unfuse_verts_with: Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]
+) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
+    """
+    Given a set of previous vertex fusions F and a set of vertex *un*fusions U,
+    return a new set of fusions F' taking all fusions in F except for those prevented by U
+
+    :return:
+    """
+
+    # Create a set of "vertices this is fused with" for each vertex
+    # fusion_group_for[v] always contains v
+    fusion_group_for: Dict[NotRemappedVertIdx, Tuple[NotRemappedVertIdx, ...]] = {}
+    for fused_verts in old_fused_idx_to_buf_idx:
+        # Each not-remapped vert appears exactly once in fused_idx_to_buf_idx
+        for vert in fused_verts:
+            # Each vertex should be in a fusion group with
+            # (1) the vertices F said they should be fused with
+            # (2) except the vertices U says it *shouldn't* be fused with
+
+            # This is guaranteed to be "consistent" i.e. for all v' in fusion_group_for[v], fusion_group_for[v'] contains v
+            # IF AND ONLY IF unfuse_verts_with is consistent, i.e. for all v' in unfuse_verts_with[v], unfuse_verts_with[v'] contains v
+            # TODO i need to make sure that's legit lol
+            # TODO do I need to sort this?
+            fusion_group_for[vert] = tuple(
+                v for v in fused_verts  # (1)
+                if v not in unfuse_verts_with[vert]  # (2)
+            )
+
+    # TODO - consistency check?
+
+    # We can now turn "vertices this is fused with" into a full definition of the fusions
+
+    # Map a fusion group to the fused vertex index it has
+    encountered_fusion_groups: Dict[Tuple[NotRemappedVertIdx, ...], int] = {}
+    fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]] = []
+    buf_idx_to_fused_idx: List[List[VertIdx]] = [
+        [-1] * len(buf)
+        for buf in vert_bufs
+    ]
+    is_fused: List[List[bool]] = [
+        [False] * len(buf)
+        for buf in vert_bufs
+    ]
+
+    for i_buf, buf in enumerate(vert_bufs):
+        for i_vtx in range(len(buf)):
+            vert = (i_buf, i_vtx)
+            fusion_group = fusion_group_for[vert]
+
+            # If we should be fused to a previous vertex,
+            if fusion_group in encountered_fusion_groups:
+                # This has been fused into a previous vertex (fused_idx_to_buf_idx has already been set to the full group)
+                fusion_idx = encountered_fusion_groups[fusion_group]
+                buf_idx_to_fused_idx[i_buf][i_vtx] = fusion_idx
+                is_fused[i_buf][i_vtx] = True
+            else:
+                fusion_idx = len(fused_idx_to_buf_idx)
+                encountered_fusion_groups[fusion_group] = fusion_idx
+                fused_idx_to_buf_idx.append(sorted(fusion_group))
+                buf_idx_to_fused_idx[i_buf][i_vtx] = fusion_idx
+                is_fused[i_buf][i_vtx] = False
+
+    return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused
+
+
 def vertex_fusion(idx_bufs: List[array.ArrayType],
                   vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[VertIdx]], List[List[bool]]]:
     """
@@ -349,9 +417,13 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
         #    The above code outputs a set of constraints like (vertex v may not be fused with vertices vs').
         #    We want to solve this while maximizing the amount of fusions we still do?
 
+        # TODO clean up comments
+
         unfuse_verts_with = decide_on_unfusions(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx,
                                                 fully_fused_tri_set)
-        for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
-            print(f"unfuse {(i_buf, i_vtx)} from {to_unfuse_with}")
+        # for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
+        #     print(f"unfuse {(i_buf, i_vtx)} from {to_unfuse_with}")
+        fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = solve_unfusion(vertices, fused_idx_to_buf_idx,
+                                                                              unfuse_verts_with)
 
     return buf_idx_to_fused_idx, is_fused
