@@ -400,8 +400,8 @@ def test_decide_on_unfusions_twolayerinterior():
         fully_fused_tri_set
     )
     assert unfusions == {
-        (0, 9): ((0, 22),),
-        (0, 22): ((0, 9),),
+        (0, 9): {(0, 22)},
+        (0, 22): {(0, 9)},
     }
 
 # TODO test unfusion where one of the layers has a split vertex

@@ -1,6 +1,6 @@
 import array
 from collections import defaultdict
-from typing import List, Dict, Tuple, Set, DefaultDict
+from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
 
 from mathutils import Vector
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic
@@ -117,7 +117,7 @@ def decide_on_unfusions(
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]],
         fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
-) -> Dict[NotRemappedVertIdx, Tuple[NotRemappedVertIdx, ...]]:
+) -> DefaultDict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
     """
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
     i.e. impossible to represent in Blender, decide which vertices to *un*-fuse to resolve the issue.
@@ -173,46 +173,114 @@ def decide_on_unfusions(
         if connected_non_remapped_tris.issubset(non_remapped_dupe_tris):
             interior_non_remapped_verts.add((i_buf, i_vtx))
 
+    # Decide on the actual unfusions
+    # This unfusion algorithm is targeting "layers" - where the same mesh and the same triangles are overlaid on each
+    # other multiple times.
+    # The reason we calculate "interior" vertices above, is we need to handle the case where only a subset of one mesh
+    # is overlaid - the vertices on the "outside" of the copy can still be fused, and we want to fuse as many
+    # as possible so that the output normals are most accurate.
+    # Consider the below example:
+    #      ---A--E
+    #     B-----C---F
+    #     |   | | | |
+    #  -X-|---A'|-E'|
+    # Y---B'----C'--F'
+    # Here the triangles ABC, ACE, CEF have overlays with A',B',C',E',F'.
+    # We *could* unfuse all of them from their counterparts, but it is more ideal to keep A/A' and B/B' fused for the sake of normals.
+    # Here A' and B' are "exterior" vertices while the others are "interior".
+    # We define this relationship by whether the vertices are connected to other not-fully-fused-dupe-triangles.
+    # This is based on the fact that those other triangles may change the normals of the vertices A, B.
+    # If vertices X and Y were not present, clearly A'/B' will have the same normals as A/B even if they aren't fused.
+    #
+    # So! We need to come up with an algorithm that decides to unfuse the B/B' pair, and the A/A' pair.
+    # We also need to make sure this algorithm doesn't unfuse intra-layer split vertices, i.e.
+    #      ---A---E
+    #     B-----CD--F
+    #     |   | | | |
+    #  -X-|---A'|-E'|
+    # Y---B'----C'--F'
+    # Here the triangles are (ignoring XY) ABC, ACE, DEF, A'B'C', A'C'E', C'E'F'.
+    # We should keep C and D merged, but the algorithm should still decide to unfuse C/C' AND D/C'.
+    #
+    # We handle these problem by considering unfusions per-fully-fused-dupe-triangle.
+    #
+    #       --A     A---E     E
+    #     B-----C   | C |   D---F
+    #     | --A'|   A'|-E'  | E'|
+    #     B'----C'    C'    C'--F'
+    #
+    # For ABC/A'B'C', we know that A' and B' are exterior, so we don't unfuse A/A', B/B' and just unfuse C from C'.
+    # For ACE/A'C'E', we know that A' is exterior, so we don't unfuse A/A' but do unfuse C/C' and E/E'.
+    # For DEF/C'E'F', there are no exterior vertices, so we unfuse all of D/C', E/E', F/F'.
+    # The result is unfusing C/C', D/C', E/E', F/F', which is exactly what we want.
+    # Also, if we ever have a situation where all vertices are exterior
+    #      --G--
+    #     H-----I
+    #   x-|--G'-|-x
+    # x---H'----I'-x
+    # Unfuse all of them. Technically you could only unfuse one, but then we'd have to decide which one.
+    #
+    # The algorithm pseudocode:
+    # for each fully-fused-dupe-triangle
+    #     for each corner set (i.e. {A, A'}, {B, B'}, {C, C'})
+    #         if any element in the corner set is exterior
+    #              mark corner set as exterior
+    #     if all corner sets exterior:
+    #         unfuse all corner sets
+    #     else:
+    #         unfuse not-exterior corner sets
+
     unfuse_verts_with: DefaultDict[NotRemappedVertIdx, Set[NotRemappedVertIdx]] = defaultdict(set)
-    # TODO this can just iterate over fully_fused_tri_set, and avoid creating non_remapped_dupe_tris_to_fused_tris
-    for i_buf, i_vtxs in non_remapped_dupe_tris:
-        interior_verts = tuple(
-            i_vtx
+    for fused_tri, not_remapped_tris in fully_fused_tri_set.items():
+        # If this isn't a dupe, ignore it
+        if len(not_remapped_tris) < 2:
+            continue
+
+        not_remapped_vtxs = [
+            (i_buf, i_vtx)
+            for i_buf, i_vtxs in not_remapped_tris
             for i_vtx in i_vtxs
-            if (i_buf, i_vtx) in interior_non_remapped_verts
-        )
+        ]
 
-        to_unfuse: Tuple[int, ...]
-        if not interior_verts:
-            # Mark all three as not-fused?
-            to_unfuse = i_vtxs
+        # First, build the corner sets
+        # Three sets, each mapping to a corner of the fused triangle,
+        # containing the un-remapped vtxs that map to that corner
+        corner_sets = (
+            [vtx for vtx in fused_idx_to_buf_idx[fused_tri[0]] if vtx in not_remapped_vtxs],
+            [vtx for vtx in fused_idx_to_buf_idx[fused_tri[1]] if vtx in not_remapped_vtxs],
+            [vtx for vtx in fused_idx_to_buf_idx[fused_tri[2]] if vtx in not_remapped_vtxs],
+        )
+        # Decide which corner sets are exterior
+        is_exterior = (
+            any((vtx not in interior_non_remapped_verts) for vtx in corner_sets[0]),
+            any((vtx not in interior_non_remapped_verts) for vtx in corner_sets[1]),
+            any((vtx not in interior_non_remapped_verts) for vtx in corner_sets[2]),
+        )
+        corners_to_unfuse: Iterable[List[Tuple[int, int]]]
+        if all(is_exterior):
+            # Unfuse all corner sets
+            corners_to_unfuse = corner_sets
         else:
-            # Mark just the interior verts as not-fused
-            to_unfuse = interior_verts
+            # Unfuse only interior sets
+            corners_to_unfuse = (
+                corner_sets[i]
+                for i in range(3)
+                if not is_exterior[i]
+            )
 
-        # Unfuse each vertex by saying "this is no longer allowed to fuse with any vertices contained in the fused triangle this triangle is a part of"
-        triangle_we_fused_into = non_remapped_dupe_tris_to_fused_tris[(i_buf, i_vtxs)]
-        other_triangles_that_fused_into_ours = fully_fused_tri_set[triangle_we_fused_into]
-        non_remapped_verts_in_fusions_with_this_tri = set(
-            (i_f_buf, i_f_vtx)
-            for (i_f_buf, i_f_vtxs) in other_triangles_that_fused_into_ours
-            for i_f_vtx in i_f_vtxs
-            if i_f_vtxs != i_vtxs
-        )
-        for i_unfuse_vtx in to_unfuse:
-            unfuse_verts_with[(i_buf, i_unfuse_vtx)].update(non_remapped_verts_in_fusions_with_this_tri)
+        # Set up unfusions:
+        # for each corner to unfuse i.e. {D, C'}, {E, E'}, {F, F'}
+        #     for each vtx  (D or C')
+        #         unfuse_verts_with[vtx] += (D, C')
+        #         (we remove the cases of "unfuse D from D" later)
+        for corner_set in corners_to_unfuse:
+            for vtx in corner_set:
+                unfuse_verts_with[vtx].update(corner_set)
 
-    # Reduce each unfuse_verts_with list to just things that are already fused with the vert
-    reduced_unfuse_verts_with = {
-        (i_buf, i_vtx): tuple(
-            x
-            for x in to_unfuse_with
-            if x in fused_idx_to_buf_idx[buf_idx_to_fused_idx[i_buf][i_vtx]] and x != (i_buf, i_vtx)
-        )
-        for (i_buf, i_vtx), to_unfuse_with in unfuse_verts_with.items()
-    }
+    for vtx in unfuse_verts_with.keys():
+        unfuse_verts_with[vtx].remove(vtx)
 
-    return reduced_unfuse_verts_with
+    return unfuse_verts_with
 
 
 def vertex_fusion(idx_bufs: List[array.ArrayType],
