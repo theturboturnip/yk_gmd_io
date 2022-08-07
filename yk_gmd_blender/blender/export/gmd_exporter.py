@@ -7,8 +7,9 @@ from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.export.scene_gatherers.base import SkinnedGMDSceneGatherer, GMDSceneGathererConfig, \
-    SkinnedBoneMatrixOrigin, UnskinnedGMDSceneGatherer
+from yk_gmd_blender.blender.export.scene_gatherers.base import GMDSceneGathererConfig
+from yk_gmd_blender.blender.export.scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer
+from yk_gmd_blender.blender.export.scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
