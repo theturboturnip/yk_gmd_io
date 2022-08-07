@@ -1,9 +1,9 @@
-from collections import defaultdict
-from typing import Union, List, Dict, cast, Tuple, Set, DefaultDict
+from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
-from mathutils import Matrix, Vector
+from mathutils import Matrix
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
+from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import BoneWeight, GMDVertexBuffer_Skinned, GMDVertexBuffer_Generic
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
@@ -64,133 +64,6 @@ def make_bone_indices_consistent(
 
     # Done, return the full list of relevant bones.
     return relevant_bones
-
-
-def vertex_fusion(gmd_meshes: List[GMDMesh],
-                  vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[int]], List[List[bool]]]:
-    """
-    Applies "vertex fusion" to a set of vertex buffers, returning a list of which vertices were "fused"
-    and a mapping of (i_buf, i_vertex_in_buf) to fused index.
-
-    Fuses "adjacent" vertices, where adjacent vertices have the same
-    - position
-    - normal
-    - bone mapping
-    - weight mapping
-
-    :param vertices:
-    :return:
-    """
-
-    vert_indices: Dict[Tuple[Vector, Vector, Vector, Vector], int] = {}
-    # fused_idx_to_buf_idx[i] contains (i_buf, i_vertex_in_buf) indices that are all fused into vertex [i]
-    # each element of this list defines an adjacency relation - all vertices in fused_idx_to_buf_idx[i] are "adjacent"
-    fused_idx_to_buf_idx: List[List[Tuple[int, int]]] = []
-    # buf_idx_to_fused_idx[i_buf][i_vertex_in_buf] contains the fused index
-    buf_idx_to_fused_idx: List[List[int]] = [
-        [-1] * len(buf)
-        for buf in vertices
-    ]
-    # is_fused[i_buf][i_vertex_in_buf] = was that vertex fused into a previous vertex, or did it create a new one.
-    # NOTE: is_fused will be FALSE for the first vertex in a fusion
-    # i.e. if vertices [0, 1, 2] are fused into a single vertex, is_fused[0] will be FALSE because vertex 0 was not fused into anything before it.
-    is_fused: List[List[bool]] = [
-        [False] * len(buf)
-        for buf in vertices
-    ]
-
-    for i_buf, buf in enumerate(vertices):
-        for i in range(len(buf)):
-            vert_info = (
-                buf.pos[i].xyz.copy().freeze(),
-                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
-                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
-                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
-            )
-            if vert_info in vert_indices:
-                # Fuse this into a previous vertex
-                fusion_idx = vert_indices[vert_info]
-                fused_idx_to_buf_idx[fusion_idx].append((i_buf, i))
-                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
-                is_fused[i_buf][i] = True
-            else:
-                fusion_idx = len(fused_idx_to_buf_idx)
-                vert_indices[vert_info] = fusion_idx
-                fused_idx_to_buf_idx.append([(i_buf, i)])
-                buf_idx_to_fused_idx[i_buf][i] = fusion_idx
-                is_fused[i_buf][i] = False
-
-    # fully_fused_verts[i_buf] = a list of triangle indices within mesh i_buf that are fully fused
-    # i.e. all vertices are fused with other vertices
-    fully_fused_tris: List[List[int]] = [
-        []
-        for _ in vertices
-    ]
-    # Maps (remapped triangle indices) to lists of (i_buf, i_tri_start // 3) triangle IDs that were converted to it after remapping
-    fully_fused_tri_set: DefaultDict[Tuple[int, int, int], List[Tuple[int, int]]] = defaultdict(list)
-
-    def was_fused_to_anything(fused_idx: int) -> bool:
-        return len(fused_idx_to_buf_idx[fused_idx]) > 1
-
-    for i_buf, (gmd_mesh, buf) in enumerate(zip(gmd_meshes, vertices)):
-        buf_idx_to_fused_idx_for_mesh = buf_idx_to_fused_idx[i_buf]
-        for i_tri_start in range(0, len(gmd_mesh.triangle_indices), 3):
-            remapped_tri = (
-                buf_idx_to_fused_idx_for_mesh[gmd_mesh.triangle_indices[i_tri_start + 0]],
-                buf_idx_to_fused_idx_for_mesh[gmd_mesh.triangle_indices[i_tri_start + 1]],
-                buf_idx_to_fused_idx_for_mesh[gmd_mesh.triangle_indices[i_tri_start + 2]],
-            )
-            remapped_tri = tuple(sorted(remapped_tri))
-
-            if (was_fused_to_anything(remapped_tri[0]) and
-                    was_fused_to_anything(remapped_tri[1]) and
-                    was_fused_to_anything(remapped_tri[2])):
-                fully_fused_tri_set[remapped_tri].append((i_buf, i_tri_start // 3))
-
-    has_fully_fused_dupe_tris = any(len(fused_tris) > 1 for fused_tris in fully_fused_tri_set.values())
-
-    if has_fully_fused_dupe_tris:
-        # NOW: find islands of connected remapped triangles where len(fully_fused_tri_set[t]) > 1
-        # This will produce one island per set of duplicate meshes
-        # i.e. if you take a mesh, copy it into a vertex buffer twice, and run this code
-        # that will be one island, containing all remapped duplicate triangles of that mesh,
-        # and implicitly containing both sets of non-remapped triangles
-
-        # For each island
-        #    define the "interior vertices" as *non-remapped* vertices that only connect to non-remapped triangles within this island
-        #    for each non-remapped triangle in the island
-        #        if no vertices are interior
-        #            mark all three vertices as not-fused (TODO: mark a single vertex as not-fused? would have the same effect)
-        #        else
-        #            mark not-interior vertices as not-fused
-        #        (TODO not-fused really means "can only be fused within this layer"? we don't define the concept of a layer yet)
-        #        (TODO maybe not-fused means "cannot be fused with any vertex within this triangle's remapped version")
-        #        (because if you prevented it from fusing at all, split vertices within a single "layer" wouldn't be rejoined even if they reasonably could.)
-        #
-        #
-        # THE GOAL:
-        #   A
-        #  B C  <-- if there's only one duplicate-fused triangle, we have to split at least one vertex to create
-        #
-        #  x A B x
-        # x C D E x
-        #  x F G x   <-- if there's a vertex in the middle, just splitting that one would mean all the triangles get split, and it's more elegant than splitting the edge ones.
-        #                it also means you get 100% equivalent normals - if you split A, for example, it wouldn't connect to the surrounding x vertices and blender would calculate different normals.
-        #
-        # The remaining problem:
-        #    The above code outputs a set of constraints like (vertex v may not be fused with vertices vs').
-        #    We want to solve this while maximizing the amount of fusions we still do?
-
-        verts_in_fully_fused_tris: Set[int]
-        print(f"DEBUG special Mesh has fully fused duplicate triangles!")
-        for remapped_tri, fused_tris in fully_fused_tri_set.items():
-            if len(fused_tris) == 1:
-                continue
-            print(f"DEBUG special {len(fused_tris)} tris map to {remapped_tri}")
-
-            # TODO could check if the data between the different tris is actually different - if they aren't, we can ignore the dupe
-
-    return buf_idx_to_fused_idx, is_fused
 
 
 def gmd_meshes_to_bmesh(
@@ -256,7 +129,7 @@ def gmd_meshes_to_bmesh(
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
     if fuse_vertices:
-        mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion(gmd_meshes, vertices)
+        mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangle_indices for m in gmd_meshes], vertices)
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 if not is_fused[i_buf][i]:

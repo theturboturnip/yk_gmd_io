@@ -8,7 +8,7 @@ from typing import Dict, Union
 import bpy
 from mathutils import Vector, Matrix
 from yk_gmd_blender.blender.common import GMDGame
-from yk_gmd_blender.blender.importer.mesh_importer import gmd_meshes_to_bmesh
+from yk_gmd_blender.blender.importer.mesh.mesh_importer import gmd_meshes_to_bmesh
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, set_yakuza_shader_material_from_attributeset
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
