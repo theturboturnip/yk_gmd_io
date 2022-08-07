@@ -90,7 +90,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 continue
 
             # Unparented objects
-            # with vertex groups or an Armature modifier => warning. TODO - a "lenient mode" could try and work this into the hierarchy
+            # with vertex groups or an Armature modifier => warning.
             # with no object child-of modifier => unskinned root
             # with a child-of modifier
             # for the expected skeleton => unskinned child
@@ -212,7 +212,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 parent_mat = parent_gmd_bone.matrix if parent_gmd_bone else Matrix.Identity(4)
                 bone_matrix = (inv_r @ inv_t @ parent_mat)
 
-            # TODO - try to extract this mathematically instead of copying the one from the last import
+            # Can't extract this mathematically - have to take it from the last import
+            # (defaults to (0,0,0,0) if not imported from a GMD)
             anim_axis = blender_bone.yakuza_hierarchy_node_data.anim_axis
             flags = json.loads(blender_bone.yakuza_hierarchy_node_data.flags_json)
             if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
@@ -300,9 +301,10 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
     def export_skinned_object(self, context: bpy.types.Context, object: bpy.types.Object):
         """
-        Export a Blender object into a GMDSkinnedObject
-        :param object: TODO
-        :return: TODO
+        Export a Blender object into a GMDSkinnedObject, adding it to the node_roots list.
+
+        :param context: Blender context
+        :param object: Blender object to export
         """
 
         flags = json.loads(object.yakuza_hierarchy_node_data.flags_json)

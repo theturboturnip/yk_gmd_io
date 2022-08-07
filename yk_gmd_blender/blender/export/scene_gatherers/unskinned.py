@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Optional, Union
 
 import bpy
 from bpy.types import ShaderNodeGroup
@@ -11,7 +11,6 @@ from yk_gmd_blender.blender.export.scene_gatherers.base import BaseGMDSceneGathe
     GMDSceneGathererConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
@@ -87,11 +86,15 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         pass
 
     def export_unskinned_object(self, context: bpy.types.Context, collection: bpy.types.Collection,
-                                object: bpy.types.Object, parent: Optional[GMDNode]):
+                                object: bpy.types.Object, parent: Optional[Union[GMDBone, GMDUnskinnedObject]]):
         """
-        Export a Blender object into a GMDUnskinnedObject
-        :param object: TODO
-        :return: TODO
+        Export a Blender object into a GMDUnskinnedObject, adding it to the node_roots list or appending
+        it to its parent's `children` list.
+
+        :param context: Blender context
+        :param collection: Blender collection containing the scene to export
+        :param object: Blender object to export
+        :param parent: The GMD node for the object's parent, if it has one
         """
 
         # pos, rot, scale are local
@@ -109,7 +112,7 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
             self.error.fatal(f"bone {object.name} has invalid flags - must be a list of 4 integers")
 
-        gmd_object: GMDNode
+        gmd_object: Union[GMDUnskinnedObject, GMDBone]
         if object.type == "MESH":  # and object.data.vertices:
             gmd_object = GMDUnskinnedObject(
                 name=remove_blender_duplicate(object.name),
