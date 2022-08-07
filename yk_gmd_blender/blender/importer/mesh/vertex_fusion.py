@@ -5,6 +5,75 @@ from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
 from mathutils import Vector
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic
 
+"""
+This module handles vertex fusion - the process of deciding which vertices in a vertex buffer
+are logically equivalent and can be "fused" into a single vertex without losing data.
+
+## Motivation
+The GMD file format is optimized for rendering, not content authoring.
+As such, a single logical mesh/material pair can be split into many submeshes, with vertices duplicated between them,
+where it is required (e.g. mesh/material pairs with >65535 vertices are split up because index buffers are 16-bit).
+Additionally, many vertices may be duplicated for the sake of per-face data.
+For example, a simple textured cylinder will have duplicated vertices at the texture seam, one with UV = 0 and another
+with UV = 1.
+For rendering this has no effect, any vertices with identical positions and normals will be look like they are
+exactly the same vertex, but in Blender this causes issues.
+
+Blender automatically calculates vertex normals based on what other vertices it is connected to, instead of letting 
+users set normals manually. (You can try to use Split Normals, but I have not had good luck with this feature and 
+it seems difficult to hand-author them from the Blender GUI.)
+This means if two copies of the same vertex exist, both expected to have the same normals but connected to different
+faces, Blender will calculate different normals for them.
+Vertex fusion also makes it easier to manipulate vertices in the Blender GUI.
+
+Our solution is Vertex Fusion, where before loading the model into Blender we examine the vertex buffers, decide on 
+which vertices are logically equivalent, and "fuse" them into a single Blender-land vertex.
+Blender stores most data (e.g. UVs) per-face-corner, so two vertices X,Y with different UVs can still be fused as long
+as any face corners that originally referenced X use X's UV, and corners that referenced Y use Y's UV.
+This (hopefully) creates a Blender mesh that is very similar to the source meshes the developers created for the game.
+
+## Fusion
+The first pass of vertex fusion is simple, using a heuristic of strict equality over (position, normal, boneweights)
+to determine which vertices are equivalent (or "adjacent", to borrow a term from graph theory).
+Adjacent vertices are fused into a single vertex, and all other vertices are untouched.
+This heuristic is not perfect, though - it can over-fuse vertices to the point of losing data.
+
+## Motivation - Unfusion
+Consider two triangles ABC and DEF, where each vertex in ABC has an adjacent vertex in DEF.
+
+    A
+  B---C
+  | | |  
+  | D | 
+  E---F
+
+After the first pass of vertex fusion, each vertex of ABC will be fused with a vertex in DEF.
+We can represent the resulting fused vertices as 
+  - A,D -> X
+  - B,E -> Y
+  - C,F -> Z
+ABC and DEF can be referred to as "fully-fused duplicates" - each vertex is the result of a fusion, and after fusion
+they map to the same triangle XYZ.
+Blender does not allow two triangles to exist between the same vertices.
+There are two triangles worth of per-face-corner data to represent in ABC and DEF, which cannot be fully represented 
+in the single triangle XYZ, so half the data will be lost after this fusion.
+The solution? *Un*fuse some/all of those vertices to create two triangles XYZ and XYW, or XYZ and UVW, which can 
+hold all of the per-face-corner data, while keeping as many vertices fused as possible to maintain correct normal data.
+
+## Implementation
+This process is implemented in four stages, with a fifth function combining the stages.
+
+1. fuse_adjacent_vertices() does the first-pass fusion, deciding which vertices are adjacent and fusing them.
+2. detect_fully_fused_triangles() builds a mapping of (fused tri) -> [(constituent pre-fusion tris)]
+3. decide_on_unfusions() examines that mapping and decides which pairs of vertices should be *unfused* to resolve them
+4. solve_unfusion() applies those unfusions to the previous first-pass fusion to decide on the final fusions.
+
+vertex_fusion() applies stages 1 and 2, and if any fully-fused-duplicate-triangles are found it then applies 3 and 4.
+
+See each function's documentation for details on each step.
+decide_on_unfusions() has a comprehensive explanation of how it decides which vertices to unfuse.
+"""
+
 # Type Aliases
 VertIdx = int
 NotRemappedVertIdx = Tuple[int, VertIdx]  # originating mesh index + vertex index
@@ -145,7 +214,7 @@ def decide_on_unfusions(
         for i_vtx in i_vtxs
     )
 
-    # scan through all triangles again, to see if any of them have connections to non-remapped-verts
+    # Set of triangles that connect to vertices in our fully-fused-dupe-triangles
     non_remapped_tris_connected_to_verts_in_dupe_tris = set(
         (i_buf, tuple(tri_idxs[i_tri_start:i_tri_start + 3]))
         for i_buf, tri_idxs in enumerate(idx_bufs)  # foreach mesh
@@ -160,39 +229,47 @@ def decide_on_unfusions(
     # safety - all non-remapped-dupe-triangles are connected to verts in dupe tris
     assert non_remapped_tris_connected_to_verts_in_dupe_tris.issuperset(non_remapped_dupe_tris)
 
-    # Decide which vertices are "interior" vs. "exterior" - interior vertices are only connected to other
-    # fully-fused-dupe-triangles
+    # Decide which vertices are "interior" vs. "exterior"
+    # interior vertices are only connected to other fully-fused-dupe-triangles
     interior_non_remapped_verts = set()
+    # Foreach vertex in our fully-fused-dupe-triangles
     for i_buf, i_vtx in non_remapped_verts_in_dupe_tris:
+        # Find the triangles that connect to it
         connected_non_remapped_tris = set(
             (i_buf, i_vtxs)
             for (i_buf_tri, i_vtxs) in non_remapped_tris_connected_to_verts_in_dupe_tris
             if i_buf_tri == i_buf and (i_vtx in i_vtxs)
         )
+        # If all of those triangles are fully-fused-dupe-triangles...
         if connected_non_remapped_tris.issubset(non_remapped_dupe_tris):
+            # ... this vertex is an interior vertex.
             interior_non_remapped_verts.add((i_buf, i_vtx))
 
-    # Decide on the actual unfusions
-    # This unfusion algorithm is targeting "layers" - where the same mesh and the same triangles are overlaid on each
-    # other multiple times.
+    # The unfusion algorithm targets "layers" - where the same mesh and the same triangles are overlaid on each
+    # other at least once.
     # The reason we calculate "interior" vertices above, is we need to handle the case where only a subset of one mesh
     # is overlaid - the vertices on the "outside" of the copy can still be fused, and we want to fuse as many
     # as possible so that the output normals are most accurate.
-    # Consider the below example:
-    #      ---A--E
+    # Consider this triangle strip with an overlaid subset:
+    #      ---A---E
     #     B-----C---F
     #     |   | | | |
     #  -X-|---A'|-E'|
     # Y---B'----C'--F'
-    # Here the triangles ABC, ACE, CEF have overlays with A',B',C',E',F'.
-    # We *could* unfuse all of them from their counterparts, but it is more ideal to keep A/A' and B/B' fused for the sake of normals.
+    # Here the vertices ABCEF have overlays with A'B'C'E'F'.
+    # Fusing them all would create three sets of fully-fused duplicate triangles:
+    #    {ABC, A'B'C'},  {ACE, A'C'E'},  {CEF, C'E'F'}.
+    # We *could* unfuse all the vertices from their counterparts,
+    # but it is more ideal to keep A/A' and B/B' fused for the sake of normals.
+    #
     # Here A' and B' are "exterior" vertices while the others are "interior".
     # We define this relationship by whether the vertices are connected to other not-fully-fused-dupe-triangles.
     # This is based on the fact that those other triangles may change the normals of the vertices A, B.
     # If vertices X and Y were not present, clearly A'/B' will have the same normals as A/B even if they aren't fused.
     #
-    # So! We need to come up with an algorithm that decides to unfuse the B/B' pair, and the A/A' pair.
-    # We also need to make sure this algorithm doesn't unfuse intra-layer split vertices, i.e.
+    # So! We need to come up with an algorithm that unfuses C/C', E/E', F/F', but *not* A/A' and B/B'.
+    # We also need to make sure this algorithm doesn't unfuse intra-layer split vertices.
+    # Consider the case if we add a vertex D:
     #      ---A---E
     #     B-----CD--F
     #     |   | | | |
@@ -212,12 +289,13 @@ def decide_on_unfusions(
     # For ACE/A'C'E', we know that A' is exterior, so we don't unfuse A/A' but do unfuse C/C' and E/E'.
     # For DEF/C'E'F', there are no exterior vertices, so we unfuse all of D/C', E/E', F/F'.
     # The result is unfusing C/C', D/C', E/E', F/F', which is exactly what we want.
-    # Also, if we ever have a situation where all vertices are exterior
+    #
+    # Also, if we ever have a situation where all vertices are exterior:
     #      --G--
     #     H-----I
     #   x-|--G'-|-x
     # x---H'----I'-x
-    # Unfuse all of them. Technically you could only unfuse one, but then we'd have to decide which one.
+    # We unfuse all of them. Technically you could choose to unfuse one, but then we'd have to decide which one.
     #
     # The algorithm pseudocode:
     # for each fully-fused-dupe-triangle
@@ -235,6 +313,7 @@ def decide_on_unfusions(
         if len(not_remapped_tris) < 2:
             continue
 
+        # List of not-remapped vertices within this fused triangle
         not_remapped_vtxs = [
             (i_buf, i_vtx)
             for i_buf, i_vtxs in not_remapped_tris
@@ -243,9 +322,14 @@ def decide_on_unfusions(
 
         # First, build the corner sets
         # Three sets, each mapping to a corner of the fused triangle,
-        # containing the un-remapped vtxs that map to that corner
+        # containing the un-remapped vtxs from this triangle that were fused into that corner
         corner_sets = (
-            [vtx for vtx in fused_idx_to_buf_idx[fused_tri[0]] if vtx in not_remapped_vtxs],
+            [
+                # Each vertex that fuses into this corner
+                vtx for vtx in fused_idx_to_buf_idx[fused_tri[0]]
+                # If it is contained in one of our fully-fused-dupe-triangles.
+                if vtx in not_remapped_vtxs
+            ],
             [vtx for vtx in fused_idx_to_buf_idx[fused_tri[1]] if vtx in not_remapped_vtxs],
             [vtx for vtx in fused_idx_to_buf_idx[fused_tri[2]] if vtx in not_remapped_vtxs],
         )
@@ -255,6 +339,7 @@ def decide_on_unfusions(
             any((vtx not in interior_non_remapped_verts) for vtx in corner_sets[1]),
             any((vtx not in interior_non_remapped_verts) for vtx in corner_sets[2]),
         )
+        # Decide which corners to unfuse
         corners_to_unfuse: Iterable[List[Tuple[int, int]]]
         if all(is_exterior):
             # Unfuse all corner sets
@@ -291,11 +376,14 @@ def solve_unfusion(
     Given a set of previous vertex fusions F and a set of vertex *un*fusions U,
     return a new set of fusions F' taking all fusions in F except for those prevented by U
 
-    :return:
+    :param vert_bufs: Vertex buffers, used to iterate over buffer/vertex indices. Not modified or read directly.
+    :param old_fused_idx_to_buf_idx: Fused index -> original index mapping representing the previous fusions F.
+    :param unfuse_verts_with: The set of vertex unfusions U
+    :return: (fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused) representing F' = F - U.
     """
 
     # Create a set of "vertices this is fused with" for each vertex
-    # fusion_group_for[v] always contains v
+    # fusion_group_for[v] always contains v - it may just be [v] if no fusion is performed.
     fusion_group_for: Dict[NotRemappedVertIdx, Tuple[NotRemappedVertIdx, ...]] = {}
     for fused_verts in old_fused_idx_to_buf_idx:
         # Each not-remapped vert appears exactly once in fused_idx_to_buf_idx
@@ -306,8 +394,6 @@ def solve_unfusion(
 
             # This is guaranteed to be "consistent" i.e. for all v' in fusion_group_for[v], fusion_group_for[v'] contains v
             # IF AND ONLY IF unfuse_verts_with is consistent, i.e. for all v' in unfuse_verts_with[v], unfuse_verts_with[v'] contains v
-            # TODO i need to make sure that's legit lol
-            # TODO do I need to sort this?
             fusion_group_for[vert] = tuple(
                 v for v in fused_verts  # (1)
                 if v not in unfuse_verts_with[vert]  # (2)
@@ -372,58 +458,23 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
 
     # Detect fully fused triangles, and therefore fully fused duplicate triangles
     fully_fused_tri_set = detect_fully_fused_triangles(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx)
+    # There may be triangles where each vertex was fused, but that didn't result in a duplicate or loss of data.
+    # => check if any of the sets of (triangles that were fully-fused into one fused triangle) have >2 elements.
     has_fully_fused_dupe_tris = any(len(fused_tris) > 1 for fused_tris in fully_fused_tri_set.values())
 
     if has_fully_fused_dupe_tris:
-        print(f"DEBUG special Mesh has fully fused duplicate triangles!")
-        for remapped_tri, fused_tris in fully_fused_tri_set.items():
-            if len(fused_tris) == 1:
-                continue
-            print(f"DEBUG special {len(fused_tris)} tris map to {remapped_tri}")
-
-            # TODO could check if the data between the different tris is actually different - if they aren't, we can ignore the dupe
-
-        # NOW: find islands of connected remapped triangles where len(fully_fused_tri_set[t]) > 1
-        # This will produce one island per set of duplicate meshes
-        # i.e. if you take a mesh, copy it into a vertex buffer twice, and run this code
-        # that will be one island, containing all remapped duplicate triangles of that mesh,
-        # and implicitly containing both sets of non-remapped triangles
-
-        # TODO note - above doesn't sound necessary - the only thing it affects is the definition of "interior",
-        # and I don't think the value of interior would actually change if you increased the search space
-
-        # For each island
-        #    define the "interior vertices" as *non-remapped* vertices that only connect to non-remapped triangles within this island
-        #    for each non-remapped triangle in the island
-        #        if no vertices are interior
-        #            mark all three vertices as not-fused (TODO: mark a single vertex as not-fused? would have the same effect)
-        #        else
-        #            mark interior vertices as not-fused
-        #        (TODO not-fused really means "can only be fused within this layer"? we don't define the concept of a layer yet)
-        #        (TODO maybe not-fused means "cannot be fused with any vertex within this triangle's remapped version")
-        #        (because if you prevented it from fusing at all, split vertices within a single "layer" wouldn't be rejoined even if they reasonably could.)
-        #
-        #
-        # THE GOAL:
-        #   A
-        #  B C  <-- if there's only one duplicate-fused triangle, we have to split at least one vertex to create
-        #
-        #  x A B x
-        # x C D E x
-        #  x F G x   <-- if there's a vertex in the middle, just splitting that one would mean all the triangles get split, and it's more elegant than splitting the edge ones.
-        #                it also means you get 100% equivalent normals - if you split A, for example, it wouldn't connect to the surrounding x vertices and blender would calculate different normals.
-        #
-        # The remaining problem:
-        #    The above code outputs a set of constraints like (vertex v may not be fused with vertices vs').
-        #    We want to solve this while maximizing the amount of fusions we still do?
-
-        # TODO clean up comments
-
-        unfuse_verts_with = decide_on_unfusions(idx_bufs, fused_idx_to_buf_idx, buf_idx_to_fused_idx,
-                                                fully_fused_tri_set)
-        # for (i_buf, i_vtx), to_unfuse_with in sorted((x, y) for (x, y) in unfuse_verts_with.items()):
-        #     print(f"unfuse {(i_buf, i_vtx)} from {to_unfuse_with}")
-        fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = solve_unfusion(vertices, fused_idx_to_buf_idx,
-                                                                              unfuse_verts_with)
+        # Decide which vertices to unfuse to resolve the fully-fused-dupe-tris
+        unfuse_verts_with = decide_on_unfusions(
+            idx_bufs,
+            fused_idx_to_buf_idx,
+            buf_idx_to_fused_idx,
+            fully_fused_tri_set
+        )
+        # Actually perform the unfusion
+        fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = solve_unfusion(
+            vertices,
+            fused_idx_to_buf_idx,
+            unfuse_verts_with
+        )
 
     return buf_idx_to_fused_idx, is_fused
