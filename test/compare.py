@@ -139,7 +139,7 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in range(len(buf)):
+        for i in set(gmd_mesh.triangle_strip_noreset_indices):
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
@@ -165,7 +165,7 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in range(len(buf)):
+        for i in set(gmd_mesh.triangle_strip_noreset_indices):
             assert buf.bone_data and buf.weight_data
             all_verts.add(
                 (
