@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, cast, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector, Quaternion
+from yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key
 from yk_gmd_blender.blender.coordinate_converter import transform_position_blender_to_gmd, \
     transform_rotation_blender_to_gmd
@@ -70,11 +71,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             armature_data.pose_position = "REST"
 
         if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
-            self.copy_bones_from_target(armature_data)
-        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromOriginalGMDImport:
-            self.load_bones_from_blender(armature_data, use_previously_imported_matrix=True)
-        elif self.bone_matrix_origin == SkinnedBoneMatrixOrigin.Calculate:
-            self.load_bones_from_blender(armature_data, use_previously_imported_matrix=False)
+            self.check_bones_match_target(armature_data)
+        self.generate_bones(armature_data)
 
         # Once an armature has been chosen, find the un/skinned objects
         root_skinned_objects: List[bpy.types.Object] = []
@@ -167,8 +165,37 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         pass
 
-    def load_bones_from_blender(self, armature_data: bpy.types.Armature, use_previously_imported_matrix: bool):
-        def add_bone(blender_bone: bpy.types.Bone, parent_gmd_bone: Optional[GMDBone] = None):
+    def generate_gmd_bone_for_blender(self, blender_bone: bpy.types.Bone,
+                                      target_file_gmd_bone: Optional[GMDBone],
+                                      parent_gmd_bone: Optional[GMDBone]) -> GMDBone:
+        """
+        Given a Blender bone, generate a GMD Bone (including the matrix if necessary).
+        
+        
+        :param blender_bone: 
+        :param target_file_gmd_bone: If the target file had a bone with the same name and parentage, that bone is passed as a paramter.
+        :param parent_gmd_bone: 
+        :return: 
+        """
+
+        if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromTargetFile:
+            assert target_file_gmd_bone
+            return GMDBone(
+                name=target_file_gmd_bone.name,
+                node_type=NodeType.MatrixTransform,
+                parent=parent_gmd_bone,
+
+                pos=target_file_gmd_bone.pos,
+                rot=target_file_gmd_bone.rot,
+                scale=target_file_gmd_bone.scale,
+
+                world_pos=target_file_gmd_bone.world_pos,
+                anim_axis=target_file_gmd_bone.anim_axis,
+                flags=target_file_gmd_bone.flags,
+
+                matrix=target_file_gmd_bone.matrix
+            )
+        else:
             # Generating bone matrices is more difficult, because when we set the head/tail in the import process
             # the blender matrix changes from the GMD version
             # matrix_local is relative to the armature, not the parent
@@ -190,7 +217,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             else:
                 gmd_local_rot = Quaternion()
 
-            if use_previously_imported_matrix:
+            if self.bone_matrix_origin == SkinnedBoneMatrixOrigin.FromOriginalGMDImport:
                 if not blender_bone.yakuza_hierarchy_node_data.inited:
                     self.error.fatal(
                         f"Blender bone {blender_bone.name} was not imported from a GMD, "
@@ -205,6 +232,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 )
                 bone_matrix = Matrix(rows)
             else:
+                assert self.bone_matrix_origin == SkinnedBoneMatrixOrigin.Calculate
                 # Calculate from scratch
                 inv_t = Matrix.Translation(-parent_local_head)
                 inv_r = gmd_local_rot.inverted().to_matrix().to_4x4()
@@ -218,7 +246,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             flags = json.loads(blender_bone.yakuza_hierarchy_node_data.flags_json)
             if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
                 self.error.fatal(f"bone {blender_bone.name} has invalid flags - must be a list of 4 integers")
-            bone = GMDBone(
+            return GMDBone(
                 # Don't remove duplicates here - they're namespaced within the armature, blender guarantees unique names
                 # within the armature
                 name=blender_bone.name,
@@ -235,22 +263,51 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 matrix=bone_matrix
             )
 
+    def generate_bones(self, armature_data: bpy.types.Armature):
+        def lookup_target_bone(name: str, target_file_possible_parents: List[GMDNode]) -> Optional[GMDBone]:
+            for bone in target_file_possible_parents:
+                if bone.name == name and isinstance(bone, GMDBone):
+                    return bone
+            return None
+
+        def add_bone(blender_bone: bpy.types.Bone, target_file_gmd_bone: Optional[GMDBone],
+                     parent_gmd_bone: Optional[GMDBone]):
+            gmd_bone = self.generate_gmd_bone_for_blender(blender_bone, target_file_gmd_bone, parent_gmd_bone)
+
             if not parent_gmd_bone:
-                self.node_roots.append(bone)
-            self.bone_name_map[bone.name] = bone
+                self.node_roots.append(gmd_bone)
+            self.bone_name_map[gmd_bone.name] = gmd_bone
 
             # Export bone children in order
             for child in sorted(blender_bone.children, key=yakuza_hierarchy_node_data_sort_key):
-                add_bone(child, bone)
+                add_bone(
+                    child,
+                    lookup_target_bone(child.name, target_file_gmd_bone.children if target_file_gmd_bone else []),
+                    gmd_bone
+                )
 
         # Build a GMDNode structure for the armature only (objects will be added to this later)
+
+        # Grab the original bones in case we need them
+        original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
+
         # Export root bones in order
         for root_bone in sorted(armature_data.bones, key=yakuza_hierarchy_node_data_sort_key):
             if root_bone.parent:
                 continue
-            add_bone(root_bone, None)
+            add_bone(root_bone, lookup_target_bone(root_bone.name, original_root_bones), None)
 
-    def copy_bones_from_target(self, armature_data: bpy.types.Armature):
+        # TODO: If dragon engine, check if phys bones are exported in the correct indices.
+        #  if they aren't:
+        #     1. sort phys bones by expected index
+        #     2. assert the phys bones are in chains with a common parent
+        #        i.e. either phys_bone[i].parent is a phys bone, or phys_bone[i].parent = X where X is the same for all i.
+        #     3. reexport parent bones for X
+        #     4. once you've exported X, export padding bones until you reach the expected phys_bones[0] index
+        #     5. export all padding bones
+        #     6. export all other bones (children of X, then children of X.parent, then children of X.parent.parent and so on)
+
+    def check_bones_match_target(self, armature_data: bpy.types.Armature):
         original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]
 
         def check_bone_sets_match(parent_name: str, blender_bones: List[bpy.types.Bone], gmd_bones: List[GMDBone]):
@@ -272,34 +329,6 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         check_bone_sets_match("root",
                               [b for b in armature_data.bones if not b.parent],
                               original_root_bones)
-
-        def copy_bone(original_file_gmd_bone: GMDBone, new_gmd_parent: Optional[GMDBone] = None):
-            bone = GMDBone(
-                name=original_file_gmd_bone.name,
-                node_type=NodeType.MatrixTransform,
-                parent=new_gmd_parent,
-
-                pos=original_file_gmd_bone.pos,
-                rot=original_file_gmd_bone.rot,
-                scale=original_file_gmd_bone.scale,
-
-                world_pos=original_file_gmd_bone.world_pos,
-                anim_axis=original_file_gmd_bone.anim_axis,
-                flags=original_file_gmd_bone.flags,
-
-                matrix=original_file_gmd_bone.matrix
-            )
-            if not new_gmd_parent:
-                self.node_roots.append(bone)
-            self.bone_name_map[bone.name] = bone
-
-            for child in original_file_gmd_bone.children:
-                if not isinstance(child, GMDBone):
-                    continue
-                copy_bone(child, bone)
-
-        for root_bone in original_root_bones:
-            copy_bone(root_bone, None)
 
     def export_skinned_object(self, context: bpy.types.Context, object: bpy.types.Object):
         """
