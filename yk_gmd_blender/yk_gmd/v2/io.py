@@ -117,13 +117,15 @@ def check_version_writeable(version_props: VersionProperties, error_reporter: Er
 
 
 def pack_abstract_scene(version_props: VersionProperties, file_is_big_endian: bool, vertices_are_big_endian: bool,
-                        scene: GMDScene, error_reporter: ErrorReporter) -> FileData_Common:
+                        scene: GMDScene, old_file_contents: Union[FileData_Kenzan, FileData_YK1, FileData_Dragon],
+                        error_reporter: ErrorReporter) -> FileData_Common:
     if version_props.major_version == GMDVersion.Kiwami1:
         file_data = pack_abstract_contents_YK1(version_props, file_is_big_endian, vertices_are_big_endian, scene,
                                                error_reporter)
         return file_data
     elif version_props.major_version == GMDVersion.Dragon:
         file_data = pack_abstract_contents_Dragon(version_props, file_is_big_endian, vertices_are_big_endian, scene,
+                                                  old_file_contents,
                                                   error_reporter)
         return file_data
     elif version_props.major_version == GMDVersion.Kenzan:
@@ -162,8 +164,10 @@ def pack_file_data(version_props: VersionProperties, file_data: FileData_Common,
 
 
 def write_abstract_scene_out(version_props: VersionProperties, file_is_big_endian: bool, vertices_are_big_endian: bool,
-                             scene: GMDScene, path: Union[Path, str], error_reporter: ErrorReporter):
-    file_data = pack_abstract_scene(version_props, file_is_big_endian, vertices_are_big_endian, scene, error_reporter)
+                             scene: GMDScene, old_file_contents: Union[FileData_Kenzan, FileData_YK1, FileData_Dragon],
+                             path: Union[Path, str], error_reporter: ErrorReporter):
+    file_data = pack_abstract_scene(version_props, file_is_big_endian, vertices_are_big_endian, scene,
+                                    old_file_contents, error_reporter)
     data_bytearray = pack_file_data(version_props, file_data, error_reporter)
     try:
         with open(path, "wb") as out_file:

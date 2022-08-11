@@ -83,7 +83,7 @@ def vec3_to_vec4(vec: Vector, w: float = 0.0):
 
 def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool,
                                   vertices_big_endian: bool,
-                                  scene: GMDScene, error: ErrorReporter,
+                                  scene: GMDScene, old_file_contents: FileData_Dragon, error: ErrorReporter,
                                   base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
@@ -117,6 +117,32 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         world_pos = gmd_node.world_pos
         anim_axis = gmd_node.anim_axis
         flags = gmd_node.flags
+
+        if gmd_node.node_type == NodeType.MatrixTransform and gmd_node.name.endswith("_phy"):
+            # Find the node in the old file that maps to it
+            relevant_old_nodes = [
+                (i, node)
+                for i, node in enumerate(old_file_contents.node_arr)
+                if old_file_contents.node_name_arr[node.name_index].text == gmd_node.name
+                   and node.node_type == NodeType.MatrixTransform
+            ]
+            if not relevant_old_nodes:
+                error.recoverable(f"Phys bone {gmd_node.name} is not present in the target file,"
+                                  f"and will not behave as a phys bone in-game. \n"
+                                  f"Turn off Strict Export to ignore this error and continue.")
+            elif len(relevant_old_nodes) > 1:
+                error.recoverable(f"Phys bone {gmd_node.name} has two bones in the target file with the same name???\n"
+                                  f"Things will likely break if you export this file.\n"
+                                  f"Turn off Strict Export to ignore this and continue.")
+            else:
+                # len(relevant_old_nodes) == 1
+                old_node_idx, old_node = relevant_old_nodes[0]
+                if old_node_idx != i:
+                    error.recoverable(f"Phys bone {gmd_node.name} was previously node number {old_node_idx}, but is "
+                                      f"now number {i}. "
+                                      f"Dragon engine games seem to hardcode phys bone numbers, so this will "
+                                      f"likely break this bone or other bones.\n"
+                                      f"Turn off Strict Export to ignore this and continue.")
 
         node_arr.append(NodeStruct(
             index=i,

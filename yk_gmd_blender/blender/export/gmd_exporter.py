@@ -152,6 +152,7 @@ class ExportSkinnedGMD(BaseExportGMD):
             write_abstract_scene_out(gmd_version,
                                      gmd_contents.file_is_big_endian(), gmd_contents.vertices_are_big_endian(),
                                      gmd_scene,
+                                     gmd_contents,
                                      filepath,
                                      error)
 
@@ -223,6 +224,7 @@ class ExportUnskinnedGMD(BaseExportGMD):
             write_abstract_scene_out(gmd_version,
                                      gmd_contents.file_is_big_endian(), gmd_contents.vertices_are_big_endian(),
                                      gmd_scene,
+                                     gmd_contents,
                                      filepath,
                                      error)
 
