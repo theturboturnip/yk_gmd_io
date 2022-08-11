@@ -219,7 +219,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
                 self.error.fatal(f"bone {blender_bone.name} has invalid flags - must be a list of 4 integers")
             bone = GMDBone(
-                name=remove_blender_duplicate(blender_bone.name),
+                # Don't remove duplicates here - they're namespaced within the armature, blender guarantees unique names
+                # within the armature
+                name=blender_bone.name,
                 node_type=NodeType.MatrixTransform,
                 parent=parent_gmd_bone,
 
@@ -273,7 +275,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
         def copy_bone(original_file_gmd_bone: GMDBone, new_gmd_parent: Optional[GMDBone] = None):
             bone = GMDBone(
-                name=remove_blender_duplicate(original_file_gmd_bone.name),
+                name=original_file_gmd_bone.name,
                 node_type=NodeType.MatrixTransform,
                 parent=new_gmd_parent,
 
