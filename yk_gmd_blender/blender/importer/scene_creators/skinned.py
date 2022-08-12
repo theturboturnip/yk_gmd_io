@@ -92,6 +92,10 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             if not isinstance(gmd_node, GMDBone):
                 continue
 
+            # # TODO need to consider if this is OK? should I have a mode that doesn't skip this?
+            # if is_gmd_node_a_padding_bone(gmd_node):
+            #     continue
+
             self.error.debug("BONES", f"bone {gmd_node.name}")
             self.error.debug("BONES", f"Actual Data\n{gmd_node.pos}\t{gmd_node.rot}\t{gmd_node.scale}")
 
@@ -141,6 +145,10 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
+
+            # # TODO need to consider if this is OK? should I have a mode that doesn't skip this?
+            # if is_gmd_node_a_padding_bone(gmd_node):
+            #     continue
 
             if gmd_node.parent:
                 sibling_order = gmd_node.parent.children.index(gmd_node)

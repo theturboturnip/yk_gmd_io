@@ -5,15 +5,16 @@ from typing import List, Dict, Optional, cast, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector, Quaternion
-from yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key
+from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key, GMDGame, is_gmd_node_a_phys_bone, \
+    generate_padding_bone_name
 from yk_gmd_blender.blender.coordinate_converter import transform_position_blender_to_gmd, \
     transform_rotation_blender_to_gmd
 from yk_gmd_blender.blender.export.mesh_exporter.functions import split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.export.scene_gatherers.base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate, HierarchyData
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
@@ -264,6 +265,17 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             )
 
     def generate_bones(self, armature_data: bpy.types.Armature):
+        """
+        Generates the GMDBones from a Blender armature.
+        Overwrites self.node_roots and self.bone_name_map instead of returning.
+
+        :param armature_data:
+        :return:
+        """
+
+        bone_roots = []
+        internal_bone_name_map: Dict[str, GMDBone] = {}
+
         def lookup_target_bone(name: str, target_file_possible_parents: List[GMDNode]) -> Optional[GMDBone]:
             for bone in target_file_possible_parents:
                 if bone.name == name and isinstance(bone, GMDBone):
@@ -275,8 +287,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             gmd_bone = self.generate_gmd_bone_for_blender(blender_bone, target_file_gmd_bone, parent_gmd_bone)
 
             if not parent_gmd_bone:
-                self.node_roots.append(gmd_bone)
-            self.bone_name_map[gmd_bone.name] = gmd_bone
+                bone_roots.append(gmd_bone)
+            internal_bone_name_map[gmd_bone.name] = gmd_bone
 
             # Export bone children in order
             for child in sorted(blender_bone.children, key=yakuza_hierarchy_node_data_sort_key):
@@ -306,6 +318,170 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         #     4. once you've exported X, export padding bones until you reach the expected phys_bones[0] index
         #     5. export all padding bones
         #     6. export all other bones (children of X, then children of X.parent, then children of X.parent.parent and so on)
+
+        print(
+            f"DEBUG special - {self.config.game} matches_engine {GMDGame.Engine_Dragon}? {self.config.game.matches_engine(GMDGame.Engine_Dragon)} ")
+        if self.config.game.matches_engine(GMDGame.Engine_Dragon):
+            old_phys_bone_indices: Dict[str, int] = {
+                gmd_bone_old.name: i
+                for i, gmd_bone_old in enumerate(self.original_scene.overall_hierarchy.depth_first_iterate())
+                if is_gmd_node_a_phys_bone(gmd_bone_old)
+            }
+            new_phys_bone_indices: Dict[str, int] = {
+                gmd_bone_new.name: i
+                for i, gmd_bone_new in enumerate(HierarchyData(bone_roots).depth_first_iterate())
+                if is_gmd_node_a_phys_bone(gmd_bone_new)
+            }
+
+            print(old_phys_bone_indices)
+            print(new_phys_bone_indices)
+
+            if set(old_phys_bone_indices.keys()) != set(new_phys_bone_indices.keys()):
+                self.error.recoverable(f"Adding or removing phys bones - ")  # TODO better error message
+
+            if old_phys_bone_indices != new_phys_bone_indices:
+                print("DEBUG special - phys bones in different indices")
+                # The same bones are present in different places
+                old_phys_bone_indices_set = set(old_phys_bone_indices.values())
+                contiguous_old_phys_bone_indices_set = set(
+                    range(min(old_phys_bone_indices.values()), max(old_phys_bone_indices.values()) + 1))
+
+                print(old_phys_bone_indices_set)
+                print(contiguous_old_phys_bone_indices_set)
+
+                # TODO - YK2 kiryu has phys bones on his feet, arms?, *and* jacket
+                #   Assumption that all are contiguous is faulty
+                phys_are_contiguous = old_phys_bone_indices_set == contiguous_old_phys_bone_indices_set
+
+                if phys_are_contiguous:
+                    # TODO ensure that the parentage for the new bones is the same as the old ones
+                    print("DEBUG special phys_are_contiguous")
+
+                    phys_chain_starts = []
+                    for phys_bone_name in new_phys_bone_indices.keys():
+                        gmd_bone_new = internal_bone_name_map[phys_bone_name]
+                        # If the bone doesn't have a parent, or its parent is not a phys bone, it's the start of a chain
+                        if not gmd_bone_new.parent or (gmd_bone_new.parent.name not in new_phys_bone_indices):
+                            phys_chain_starts.append(gmd_bone_new)
+                    assert len(phys_chain_starts) > 0
+
+                    # Assume they all have the same parent
+                    if all((p.parent == phys_chain_starts[0].parent) for p in phys_chain_starts):
+                        # Find the chain of bones that leads to the common parent
+                        parent_chain = []
+                        parent_chain_bone = phys_chain_starts[0].parent
+                        while parent_chain_bone is not None:
+                            parent_chain.append(parent_chain_bone)
+                            parent_chain_bone = parent_chain_bone.parent
+                        # Reverse the parent chain so the top of the chain is first
+                        parent_chain = list(reversed(parent_chain))
+
+                        # Create a new bone hierarchy from the existing bones
+                        recreated_bone_roots = []
+                        recreated_internal_bone_name_map = {}
+
+                        extra_bone_i = 0
+
+                        def gen_pad_bone(parent: Optional[GMDBone]) -> GMDBone:
+                            nonlocal extra_bone_i, recreated_internal_bone_name_map
+                            extra_bone_i += 1
+                            bone = GMDBone(
+                                name=generate_padding_bone_name(extra_bone_i),
+                                node_type=NodeType.MatrixTransform,
+                                parent=parent,
+
+                                pos=Vector((0, 0, 0)),
+                                rot=Quaternion(),
+                                scale=Vector((1, 1, 1)),
+
+                                world_pos=parent.world_pos if parent else Vector((0, 0, 0)),
+                                anim_axis=Vector((0, 0, 0, 0)),
+                                flags=[0, 0, 0, 0],
+                                matrix=parent.matrix if parent else Matrix.Identity(4)
+                            )
+                            assert bone.name not in recreated_internal_bone_name_map
+                            recreated_internal_bone_name_map[bone.name] = bone
+                            return bone
+
+                        def gen_copy_of_bone(to_copy: GMDBone, new_parent: Optional[GMDBone]) -> GMDBone:
+                            nonlocal recreated_internal_bone_name_map
+                            bone = GMDBone(
+                                name=to_copy.name,
+                                node_type=NodeType.MatrixTransform,
+                                parent=new_parent,
+
+                                pos=to_copy.pos,
+                                rot=to_copy.rot,
+                                scale=to_copy.scale,
+
+                                world_pos=to_copy.world_pos,
+                                anim_axis=to_copy.anim_axis,
+                                flags=to_copy.flags,
+                                matrix=to_copy.matrix
+                            )
+                            assert bone.name not in recreated_internal_bone_name_map
+                            recreated_internal_bone_name_map[bone.name] = bone
+                            return bone
+
+                        def recursive_gen_copy_of_bone(to_copy: GMDBone, new_parent: Optional[GMDBone]) -> GMDBone:
+                            bone = gen_copy_of_bone(to_copy, new_parent)
+                            for child_to_copy in to_copy.children:
+                                assert isinstance(child_to_copy, GMDBone)
+                                recursive_gen_copy_of_bone(child_to_copy, bone)
+                            return bone
+
+                        def recreate_phys_bone_chain_parent(base: GMDBone, new_parent: Optional[GMDBone]) -> GMDBone:
+                            # First copy the base bone
+                            bone = gen_copy_of_bone(base, new_parent)
+                            # If we have a child in parent_chain, copy it first
+                            had_child_in_parent_chain = False
+                            for c in base.children:
+                                assert isinstance(c, GMDBone)
+                                if c in parent_chain:
+                                    recreate_phys_bone_chain_parent(c, bone)
+                                    had_child_in_parent_chain = True
+                                    break
+
+                            # If we didn't have a child in parent chain, we must have the phys_chain_starts
+                            if not had_child_in_parent_chain:
+                                assert all(phys_chain_start in base.children for phys_chain_start in phys_chain_starts)
+                                # TODO: Find the current index of the current child
+                                # We should have only created the elements of the parent chain by this point
+                                assert len(recreated_internal_bone_name_map) == len(parent_chain)
+                                current_dfs_index = len(parent_chain)
+                                index_to_pad_to = min(old_phys_bone_indices.values())
+                                assert index_to_pad_to > current_dfs_index
+                                # Create a bunch of padding
+                                for i in range(current_dfs_index, index_to_pad_to):
+                                    gen_pad_bone(bone)
+                                # Create those (TODO: Are they sorted correctly??)
+                                for phys_chain_start in phys_chain_starts:
+                                    recursive_gen_copy_of_bone(phys_chain_start, bone)
+                            # Copy the rest
+                            for c in base.children:
+                                assert isinstance(c, GMDBone)
+                                if c in parent_chain or c in phys_chain_starts:
+                                    continue
+                                recursive_gen_copy_of_bone(c, bone)
+                            return bone
+
+                        if parent_chain:
+                            recreate_phys_bone_chain_parent(parent_chain[0], None)
+                        # Create other bone roots
+                        for base_root in bone_roots:
+                            if base_root not in parent_chain:
+                                recreated_bone_roots.append(recursive_gen_copy_of_bone(base_root, None))
+
+                        self.node_roots = recreated_bone_roots
+                        self.bone_name_map = recreated_internal_bone_name_map
+                        return
+                    else:
+                        self.error.recoverable(f"Can't rearrange when phys chains don't share common parent")
+                else:
+                    self.error.fatal(f"Phys bones are being exported in the wrong place ")
+        # All phys bones are in the right place
+        self.node_roots = bone_roots
+        self.bone_name_map = internal_bone_name_map
 
     def check_bones_match_target(self, armature_data: bpy.types.Armature):
         original_root_bones = [b for b in self.original_scene.overall_hierarchy.roots if isinstance(b, GMDBone)]

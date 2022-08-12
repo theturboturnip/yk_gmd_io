@@ -7,6 +7,8 @@ from bmesh.types import BMesh, BMLayerCollection
 from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
@@ -87,6 +89,19 @@ class GMDGame(IntEnum):
 
     def as_blender(self) -> str:
         return GMDGame.mapping_to_blender_props()[self]
+
+    def matches_engine(self, engine: 'GMDGame') -> bool:
+        """
+        Returns True if this game matches the engine expressed in `engine`.
+        e.g. Yakuza5.matches(Engine_Kiwami) == True,
+        Yakuza5.matches(Engine_Dragon) == False,
+        Judgment.matches(Engine_Dragon) == True
+        :param engine:
+        :return:
+        """
+        assert engine in [GMDGame.Engine_Dragon, GMDGame.Engine_Kiwami, GMDGame.Engine_MagicalV]
+
+        return self & engine != 0
 
 
 class YakuzaHierarchyNodeData(PropertyGroup):
@@ -556,3 +571,15 @@ class AttribSetLayers_bmesh:
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, BMLayerCollection]]
     primary_uv_i: Optional[int]
+
+
+def is_gmd_node_a_phys_bone(node: GMDNode) -> bool:
+    return isinstance(node, GMDBone) and node.name.endswith("_phy")
+
+
+def generate_padding_bone_name(i: int) -> str:
+    return f"ykgmdio_pad_{i:03d}"
+
+
+def is_gmd_node_a_padding_bone(node: GMDNode) -> bool:
+    return isinstance(node, GMDBone) and node.name.startswith("ykgmdio_pad_")
