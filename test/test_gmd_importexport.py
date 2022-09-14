@@ -71,6 +71,7 @@ def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolat
         "YKGMDIO_TEST_SRC": str(gmdtest.src),
         "YKGMDIO_TEST_DST": str(gmdtest.dst),
         "YKGMDIO_SKINNED": str(gmdtest.skinned_method),
+        "YKGMDIO_LOGGING": gmdtest.logging,
     })
 
     SCRIPTLOC = os.path.dirname(__file__)
