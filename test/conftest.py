@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +30,10 @@ def pytest_addoption(parser):
         action="store_true",
         help="Should we isolate the blender install from the rest of the system & install the addon directly?"
     )
+    parser.addoption(
+        "--blender_logging",
+        help="Logging categories to enable. Can be empty."
+    )
 
 
 @dataclass(frozen=True)
@@ -36,10 +41,13 @@ class GMDTest:
     src: Path
     dst: Path
     skinned_method: str
+    logging: str
 
     def __str__(self):
         return f"{self.src.parent.name}/{self.src.name}" + (
-            f"-skin{self.skinned_method}" if self.skinned_method else "")
+            f"-skin{self.skinned_method}" if self.skinned_method else "") + (
+                   f"-log{self.logging}" if self.logging else "-nolog"
+               )
 
 
 @pytest.fixture
@@ -56,12 +64,15 @@ def pytest_generate_tests(metafunc):
     if "gmdtest" in metafunc.fixturenames:
         model_root_dir = Path(metafunc.config.getoption("model_root_dir"))
         output_dir = Path(metafunc.config.getoption("output_dir"))
+        logging = metafunc.config.getoption("blender_logging")
 
         assert model_root_dir
         assert output_dir
 
         gmdtests = []
+        sys.stderr.write(f"Considering root {model_root_dir}\n")
         for model_dir in model_root_dir.iterdir():
+            sys.stderr.write(f"Considering {model_dir}: (is_dir {model_dir.is_dir()})")
             if not model_dir.is_dir():
                 continue
             skinned = "-Skinned" in model_dir.name
@@ -72,23 +83,27 @@ def pytest_generate_tests(metafunc):
                     gmdtests.append(GMDTest(
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
-                        skinned_method="CALCULATE"
+                        skinned_method="CALCULATE",
+                        logging=logging
                     ))
                     gmdtests.append(GMDTest(
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
-                        skinned_method="FROM_TARGET_FILE"
+                        skinned_method="FROM_TARGET_FILE",
+                        logging=logging
                     ))
                     gmdtests.append(GMDTest(
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
-                        skinned_method="FROM_ORIGINAL_GMD_IMPORT"
+                        skinned_method="FROM_ORIGINAL_GMD_IMPORT",
+                        logging=logging
                     ))
                 else:
                     gmdtests.append(GMDTest(
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
-                        skinned_method=""
+                        skinned_method="",
+                        logging=logging
                     ))
 
         # Sort by filesize, to get quick files out of the way first

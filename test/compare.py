@@ -3,7 +3,7 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict
 
 from mathutils import Vector
 from yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
@@ -49,12 +49,12 @@ class VertApproxData:
             if other.normal is None or Vector(self.normal).dot(Vector(other.normal)) < t:
                 return False
 
-        if self.tangent is None:
-            if other.tangent is not None:
-                return False
-        else:
-            if other.tangent is None or Vector(self.tangent).dot(Vector(other.tangent)) < t:
-                return False
+        # if self.tangent is None:
+        #     if other.tangent is not None:
+        #         return False
+        # else:
+        #     if other.tangent is None or Vector(self.tangent).dot(Vector(other.tangent)) < t:
+        #         return False
 
         return True
 
@@ -92,7 +92,7 @@ class VertSet:
         """
         return set(self.verts.keys()).difference(other.verts.keys())
 
-    def difference(self, other: 'VertSet') -> Set[Tuple[Tuple, VertApproxData]]:
+    def difference(self, other: 'VertSet') -> Dict[Tuple, Tuple[VertApproxData]]:
         """
         Return the difference of two vert-sets as a set.
         (i.e. all elements that are in this set but not the others.)
@@ -105,7 +105,7 @@ class VertSet:
         :return: Set of (vert_exact, vert_approx) tuples not found in the other set
         """
 
-        verts: Set[Tuple[Tuple, VertApproxData]] = set()
+        verts: Dict[Tuple, Tuple[VertApproxData]] = {}
 
         key_set = set(self.verts.keys())
 
@@ -113,7 +113,7 @@ class VertSet:
         for vert_exact in key_set.difference(other.verts.keys()):
             # foreach vert_exact that doesn't exist in the other verts
             # add all (vert_exact, vert_approx) pairs to the set
-            verts.update((vert_exact, v_a) for v_a in self.verts[vert_exact])
+            verts[vert_exact] = tuple(v_a for v_a in self.verts[vert_exact])
 
         # 2. Find vert_approx that don't match within vert_exacts that do match
         for vert_exact in key_set.intersection(other.verts.keys()):
@@ -122,11 +122,13 @@ class VertSet:
             self_approx = self.verts[vert_exact]
             other_approx = other.verts[vert_exact]
             # O(n^2), but there shouldn't be many items in either list
-            verts.update(
-                (vert_exact, v_a)
+            differing_va = tuple(
+                v_a
                 for v_a in self_approx
                 if not any(v_a.approx_eq(v_a_alt) for v_a_alt in other_approx)
             )
+            if len(differing_va) > 0:
+                verts[vert_exact] = differing_va
 
         return verts
 
@@ -216,8 +218,14 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
     dst_but_not_src = dst_vertices.difference(src_vertices)
 
     if src_but_not_dst or dst_but_not_src:
-        src_but_not_dst_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_but_not_dst), 5))
-        dst_but_not_src_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_but_not_src), 5))
+        src_but_not_dst_str = '\n\t'.join(
+            f"{str(k)}:\n\t\t" + '\n\t\t'.join(str(x) for x in src_but_not_dst[k])
+            for k in itertools.islice(sorted(src_but_not_dst.keys()), 5)
+        )
+        dst_but_not_src_str = '\n\t'.join(
+            f"{str(k)}:\n\t\t" + '\n\t\t'.join(str(x) for x in dst_but_not_src[k])
+            for k in itertools.islice(sorted(dst_but_not_src.keys()), 5)
+        )
         error.recoverable(
             f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) APPROX data differs\n\t"
             f"src meshes have {len(src_but_not_dst)} vertices missing in dst:\n\t"

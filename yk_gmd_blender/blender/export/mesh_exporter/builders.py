@@ -34,6 +34,8 @@ class VertexFetcher:
     layers: AttribSetLayers_bpy
     error: ErrorReporter
 
+    has_warned_about_weights_over_one: bool
+
     def __init__(self,
                  skinned: bool,
                  vertex_layout: GMDVertexBufferLayout,
@@ -52,6 +54,7 @@ class VertexFetcher:
         self.vertex_group_bone_index_map = vertex_group_bone_index_map
         self.layers = layers
         self.error = error
+        self.has_warned_about_weights_over_one = False
 
     def normal_for(self, loop: bpy.types.MeshLoopTriangle, tri_index: int) -> Vector:
         normal = (self.transformation_direction @ Vector(self.mesh.loops[loop.loops[tri_index]].normal)).resized(4)
@@ -127,8 +130,13 @@ class VertexFetcher:
         # Take the top 4 elements, for the top 4 most deforming bones
         # Normalize the weights so they sum to 1
         b_weights = sorted(list(self.mesh.vertices[i].groups), key=lambda i: i.weight, reverse=True)
+        if b_weights and b_weights[0].weight > 1 and not self.has_warned_about_weights_over_one:
+            self.error.recoverable(f"Some weights in mesh {self.mesh.name} are greater than 1. "
+                                   f"These can't be exported - try normalizing your weights, or turn off Strict Export "
+                                   f"to clamp it to 1")
+            self.has_warned_about_weights_over_one = True
         b_weights = [
-            (weight_pair.group, weight_pair.weight)
+            (weight_pair.group, min(weight_pair.weight, 1.0))
             for weight_pair in b_weights
             if weight_pair.group in self.vertex_group_bone_index_map
         ]

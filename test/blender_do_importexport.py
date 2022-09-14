@@ -5,6 +5,7 @@ import bpy
 YKGMDIO_TEST_SRC = os.environ["YKGMDIO_TEST_SRC"].replace("\\", "/")
 YKGMDIO_TEST_DST = os.environ["YKGMDIO_TEST_DST"].replace("\\", "/")
 YKGMDIO_SKINNED_METHOD = os.environ["YKGMDIO_SKINNED"]
+YKGMDIO_LOGGING = os.environ["YKGMDIO_LOGGING"]
 
 bpy.ops.preferences.addon_enable(module='yk_gmd_blender')
 
@@ -23,9 +24,9 @@ try:
         # Import the file
         print(f"Loading from {YKGMDIO_TEST_SRC}")
         if YKGMDIO_SKINNED_METHOD:
-            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
+            bpy.ops.import_scene.gmd_skinned(filepath=YKGMDIO_TEST_SRC, logging_categories=YKGMDIO_LOGGING)
         else:
-            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories="MESH")
+            bpy.ops.import_scene.gmd_unskinned(filepath=YKGMDIO_TEST_SRC, logging_categories=YKGMDIO_LOGGING)
 
         # Select the top-level object in the first collection
         toplevel_collection = next(k for k in bpy.data.collections.keys() if k != "Collection")
@@ -34,10 +35,10 @@ try:
 
         # Export to the destination
         if YKGMDIO_SKINNED_METHOD:
-            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH",
+            bpy.ops.export_scene.gmd_skinned(filepath=YKGMDIO_TEST_DST, logging_categories=YKGMDIO_LOGGING,
                                              bone_matrix_origin=YKGMDIO_SKINNED_METHOD)
         else:
-            bpy.ops.export_scene.gmd_unskinned(filepath=YKGMDIO_TEST_DST, logging_categories="MESH")
+            bpy.ops.export_scene.gmd_unskinned(filepath=YKGMDIO_TEST_DST, logging_categories=YKGMDIO_LOGGING)
 finally:
     # Disable the addon
     # USe a context temp_override to set context.area
