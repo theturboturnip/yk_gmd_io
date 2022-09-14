@@ -1,7 +1,6 @@
 from typing import Iterable
 
 from mathutils import Quaternion, Vector
-
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
@@ -43,18 +42,6 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_Ken
 
 
 def bounds_of(mesh) -> BoundsDataStruct_Kenzan:
-    # min_pos = Vector(mesh.vertices_data.pos[0])
-    # max_pos = Vector(mesh.vertices_data.pos[0])
-    #
-    # for pos in mesh.vertices_data.pos:
-    #     min_pos.x = min(pos.x, min_pos.x)
-    #     min_pos.y = min(pos.y, min_pos.y)
-    #     min_pos.z = min(pos.z, min_pos.z)
-    #
-    #     max_pos.x = max(pos.x, max_pos.x)
-    #     max_pos.y = max(pos.y, max_pos.y)
-    #     max_pos.z = max(pos.z, max_pos.z)
-
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -62,8 +49,6 @@ def bounds_of(mesh) -> BoundsDataStruct_Kenzan:
 
 
 def combine_bounds(bounds: Iterable[BoundsDataStruct_Kenzan]) -> BoundsDataStruct_Kenzan:
-    # min_pos = None
-    # max_pos = None
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -96,8 +81,10 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_Kenzan]) -> BoundsDataStruc
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
-def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Kenzan:
+
+def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_big_endian: bool,
+                                  vertices_big_endian: bool,
+                                  scene: GMDScene, error: ErrorReporter) -> FileData_Kenzan:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
@@ -131,13 +118,9 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
         else:
             matrix_index = -1
 
-        if isinstance(gmd_node, GMDBone):
-            bone_pos = gmd_node.bone_pos
-            bone_axis = gmd_node.bone_axis
-        else:
-            bone_pos = Vector((gmd_node.pos.x, gmd_node.pos.y, gmd_node.pos.z, 1))
-            bone_axis = Quaternion((0, 0, 0, 0))
-            pass
+        world_pos = gmd_node.world_pos
+        anim_axis = gmd_node.anim_axis
+        flags = gmd_node.flags
 
         node_arr.append(NodeStruct(
             index=i,
@@ -153,10 +136,9 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             rot=gmd_node.rot,
             scale=vec3_to_vec4(gmd_node.scale),
 
-            bone_pos=vec3_to_vec4(bone_pos, 1),
-            bone_axis=bone_axis,
-            # TODO: GMD Node Flags
-            flags=[0, 0, 0, 0],
+            world_pos=vec3_to_vec4(world_pos, 1),
+            anim_axis=anim_axis,
+            flags=flags,
         ))
 
     vertex_buffer_arr = []
@@ -204,11 +186,14 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
                 error.fatal(f"Encountered a vertex_offset_from_index greater than 32bit, needs")
 
             try:
-                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
+                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data,
+                                                        vertex_data_bytearray)
             except PackingValidationError as e:
                 error.fatal(f"Error while packing a mesh for {node.name}: {e}")
 
-            error.debug("MESH_EXPORT", f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, min_index: {min_index}, vertex_count: {vertex_count})")
+            error.debug("MESH_EXPORT",
+                        f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, "
+                        f"min_index: {min_index}, vertex_count: {vertex_count})")
             mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset_from_index, min_index, vertex_count)
 
             min_index += vertex_count
@@ -314,11 +299,11 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
-            data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
+            data=gmd_attribute_set.unk12.float_data  # .port_to_version(version_properties.major_version).float_data
             if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
-            data=gmd_attribute_set.unk14.int_data#port_to_version(version_properties.major_version).int_data
+            data=gmd_attribute_set.unk14.int_data  # port_to_version(version_properties.major_version).int_data
             if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 
@@ -349,7 +334,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
-    flags = list(base_flags)
+    flags = list(scene.flags)
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
     else:
@@ -388,4 +373,3 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
         unk14=unk14_arr,
         flags=flags,
     )
-

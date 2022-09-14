@@ -1,18 +1,9 @@
-from mathutils import Quaternion
+import json
 
 import bpy
-from yk_gmd_blender.blender.common import root_name_for_gmd_file
-
-from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-import bpy
 from mathutils import Quaternion
-
-from yk_gmd_blender.blender.common import root_name_for_gmd_file
-from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
+from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
+    root_name_for_gmd_file
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -30,14 +21,17 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
     def validate_scene(self):
         # Skinned Importer checks for duplicate "bone" names (technically node names).
         # Skeletons can't have duplicate bones, but objects can.
-        # We remove the Blender-enforced duplicate suffix e.g. "object.001" on export, so nothing will break if we import duplicates
-        if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDSkinnedObject)]) != 0:
-            self.error.recoverable(f"This import method cannot import skinnned objects. Please use the [Skinned] variant")
-
+        # We remove the Blender-enforced duplicate suffix e.g. "object.001" on export,
+        # so nothing will break if we import duplicates
+        if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
+                isinstance(node, GMDSkinnedObject)]) != 0:
+            self.error.recoverable(
+                f"This import method cannot import skinnned objects. Please use the [Skinned] variant")
 
     def make_objects(self, collection: bpy.types.Collection):
         """
-        Populate the Blender scene with Blender objects for each node in the scene hierarchy representing a GMDUnskinnedObject.
+        Populate the Blender scene with Blender objects for each node in the scene hierarchy
+        representing a GMDUnskinnedObject.
         :param collection: The collection the import process is adding objects and meshes to.
         :return: Nothing
         """
@@ -46,10 +40,14 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
 
         root_name = root_name_for_gmd_file(self.gmd_scene)
         root_obj = bpy.data.objects.new(f"{root_name}", None)
+        root_obj.yakuza_file_root_data.is_valid_root = True
+        root_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
+        root_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
         collection.objects.link(root_obj)
 
         # Still create the vertex group list, so we create the vertex groups, but don't actually deform anything
-        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if isinstance(node, GMDBone)]
+        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
+                             isinstance(node, GMDBone)]
         vertex_group_indices = {
             name: i
             for i, name in enumerate(vertex_group_list)
@@ -66,8 +64,10 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             if gmd_node.parent:
                 # Parenting an object to another object is easy
                 node_obj.parent = gmd_objects[id(gmd_node.parent)]
+                sibling_order = gmd_node.parent.children.index(gmd_node)
             else:
                 node_obj.parent = root_obj
+                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
 
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
@@ -77,6 +77,18 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
+
+            # Set custom GMD data
+            node_obj.yakuza_hierarchy_node_data.inited = True
+            node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            # gmd_node is an unskinned object, guaranteed to have a matrix
+            node_obj.yakuza_hierarchy_node_data.imported_matrix = \
+                list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
+                    gmd_node.matrix[3])
+            node_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
+            # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
+            # This means you can insert new objects between other ones more easily
+            node_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj

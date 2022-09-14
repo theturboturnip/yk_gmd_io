@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
     pack_abstract_scene, pack_file_data
@@ -55,6 +56,7 @@ if __name__ == '__main__':
 
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("--output_dir", type=Path)
+    parser.add_argument("--skinned", action="store_true")
     parser.add_argument("file_to_poke", type=Path)
 
     args = parser.parse_args()
@@ -62,7 +64,10 @@ if __name__ == '__main__':
     error_reporter = LenientErrorReporter()
 
     version_props, header, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
-    scene = read_abstract_scene_from_filedata_object(version_props, False, file_data, error_reporter)
+    scene = read_abstract_scene_from_filedata_object(version_props,
+                                                     FileImportMode.SKINNED if args.skinned else FileImportMode.UNSKINNED,
+                                                     VertexImportMode.IMPORT_VERTICES,
+                                                     file_data, error_reporter)
 
     # for skinned_obj in scene.skinned_objects.depth_first_iterate():
     #     for mesh in skinned_obj.mesh_list:
@@ -78,7 +83,7 @@ if __name__ == '__main__':
     #print(version_props == new_version_props)
     #print(version_props)
     #print(new_version_props)
-    new_scene = read_abstract_scene_from_filedata_object(new_version_props, False, new_file_data, error_reporter)
+    new_scene = read_abstract_scene_from_filedata_object(new_version_props, FileImportMode.SKINNED if args.skinned else FileImportMode.UNSKINNED, VertexImportMode.IMPORT_VERTICES, new_file_data, error_reporter)
 
     if args.output_dir:
         with open(args.output_dir / args.file_to_poke, "wb") as out_file:

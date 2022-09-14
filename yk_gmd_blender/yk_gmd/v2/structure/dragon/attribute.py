@@ -39,10 +39,10 @@ class AttributeStruct_Dragon:
     texture_multi: TextureIndexStruct_Dragon
     texture_normal: TextureIndexStruct_Dragon  # Usually has textures with _tn postfix
     texture_rd: TextureIndexStruct_Dragon  # Usually has textures with _rd postfix
-   # Never filled
+    # Never filled
     texture_unk1: TextureIndexStruct_Dragon
     texture_rt: TextureIndexStruct_Dragon  # Usually has textures with _rt postfix
-    texture_ts: TextureIndexStruct_Dragon # Only present in "rs" shaders
+    texture_ts: TextureIndexStruct_Dragon  # Only present in "rs" shaders
     texture_refl: TextureIndexStruct_Dragon  # Observed to have a cubemap texture for one eye-related material
 
     extra_properties: List[float]  # Could be scale (x,y) pairs for the textures, although 0 is present a lot.
@@ -61,7 +61,7 @@ class AttributeStruct_Dragon:
                                 texture_rt: Optional,
                                 texture_ts: Optional,
                                 texture_refl: Optional,
-    ):
+                                ):
         count = 0
         if texture_diffuse:
             count = 1
@@ -81,6 +81,7 @@ class AttributeStruct_Dragon:
             count = 8
         return count
 
+
 AttributeStruct_Dragon_Unpack = StructureUnpacker(
     AttributeStruct_Dragon,
     fields=[
@@ -91,11 +92,7 @@ AttributeStruct_Dragon_Unpack = StructureUnpacker(
         ("mesh_indices_count", c_uint32),
         ("texture_init_count", c_uint32),
 
-        # These may not actually be a single flag block - but they all have data that we don't understand
-        #("unk1_always_1", c_uint16),
-        #("unk2_always_0", c_uint16),
         ("flags", c_uint64),
-        #("unk3_always_0", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
 
         ("texture_diffuse", TextureIndexStruct_Dragon_Unpack),
         ("texture_multi", TextureIndexStruct_Dragon_Unpack),
@@ -114,7 +111,6 @@ AttributeStruct_Dragon_Unpack = StructureUnpacker(
         # rt
         # ts
         # refl?
-
 
         ("extra_properties", FixedSizeArrayUnpacker(c_float32, 16))
     ]

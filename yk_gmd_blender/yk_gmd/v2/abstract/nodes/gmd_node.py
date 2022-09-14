@@ -3,12 +3,11 @@ from typing import List, Optional
 
 # TODO: I don't like depending on this
 # Create a set of read-only dataclasses for Vector etc?
-from mathutils import Vector, Quaternion, Matrix
-
+from mathutils import Vector, Quaternion
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
-@dataclass(init=False,repr=False)
+@dataclass(init=False, repr=False)
 class GMDNode:
     name: str
     node_type: NodeType
@@ -17,12 +16,20 @@ class GMDNode:
     rot: Quaternion
     scale: Vector
 
-    matrix: Optional[Matrix]
+    world_pos: Vector
+    # Should be 0,0,0,0 or a valid quaternion
+    anim_axis: Vector
+
+    flags: List[int]
 
     parent: Optional['GMDNode']
     children: List['GMDNode']
 
-    def __init__(self, name: str, node_type: NodeType, pos: Vector, rot: Quaternion, scale: Vector, matrix: Optional[Matrix], parent: Optional['GMDNode']):
+    def __init__(self, name: str, node_type: NodeType,
+                 pos: Vector, rot: Quaternion, scale: Vector,
+                 world_pos: Vector, anim_axis: Vector,
+                 parent: Optional['GMDNode'],
+                 flags: List[int]):
         self.name = name
         self.node_type = node_type
 
@@ -30,11 +37,12 @@ class GMDNode:
         self.rot = rot
         self.scale = scale
 
-        if matrix:
-            self.matrix = matrix.copy()
-            self.matrix.resize_4x4()
-        else:
-            self.matrix = None
+        self.world_pos = world_pos
+        self.anim_axis = anim_axis
+
+        self.flags = flags
+        if len(self.flags) != 4:
+            raise TypeError(f"GMDNode passed flags list {flags} which doesn't have 4 elements")
 
         self.parent = parent
         self.children = []
@@ -44,5 +52,8 @@ class GMDNode:
 
     def __repr__(self):
         return str(self)
+
     def __str__(self):
-        return f"{self.__class__.__name__}(name={self.name}, pos={self.pos}, rot={self.rot}, scale={self.scale}, parent={self.parent.name if self.parent else None}, children={[c.name for c in self.children]})"
+        return f"{self.__class__.__name__}(name={self.name}, pos={self.pos}, rot={self.rot}, " \
+               f"scale={self.scale}, parent={self.parent.name if self.parent else None}, " \
+               f"children={[c.name for c in self.children]})"

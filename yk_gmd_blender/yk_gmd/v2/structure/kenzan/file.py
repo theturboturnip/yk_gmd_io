@@ -77,6 +77,7 @@ class FileData_Kenzan(FileData_Common):
             "flags"
         ]
 
+
 FilePacker_Kenzan = FilePacker(
     FileData_Kenzan,
     GMDHeader_Kenzan_Unpack

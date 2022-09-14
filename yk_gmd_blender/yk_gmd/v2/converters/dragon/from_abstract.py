@@ -1,7 +1,6 @@
 from typing import Iterable
 
 from mathutils import Quaternion, Vector
-
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDUnk12
@@ -42,18 +41,6 @@ def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1
 
 
 def bounds_of(mesh) -> BoundsDataStruct_YK1:
-    # min_pos = Vector(mesh.vertices_data.pos[0])
-    # max_pos = Vector(mesh.vertices_data.pos[0])
-    #
-    # for pos in mesh.vertices_data.pos:
-    #     min_pos.x = min(pos.x, min_pos.x)
-    #     min_pos.y = min(pos.y, min_pos.y)
-    #     min_pos.z = min(pos.z, min_pos.z)
-    #
-    #     max_pos.x = max(pos.x, max_pos.x)
-    #     max_pos.y = max(pos.y, max_pos.y)
-    #     max_pos.z = max(pos.z, max_pos.z)
-
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -61,8 +48,6 @@ def bounds_of(mesh) -> BoundsDataStruct_YK1:
 
 
 def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
-    # min_pos = None
-    # max_pos = None
     min_pos = Vector((-1000, -1000, -1000))
     max_pos = Vector((+1000, +1000, +1000))
 
@@ -95,8 +80,11 @@ def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_Y
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
-def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
-                               scene: GMDScene, error: ErrorReporter, base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
+
+def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool,
+                                  vertices_big_endian: bool,
+                                  scene: GMDScene, old_file_contents: FileData_Dragon, error: ErrorReporter,
+                                  base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
@@ -126,14 +114,35 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         else:
             matrix_index = -1
 
-        if isinstance(gmd_node, GMDBone):
-            bone_pos = gmd_node.bone_pos
-            bone_axis = gmd_node.bone_axis
-        else:
-            # TODO - UnskinnedObjects should also export a bone_pos equal to their world-space position
-            bone_pos = Vector((gmd_node.pos.x, gmd_node.pos.y, gmd_node.pos.z, 1))
-            bone_axis = Quaternion((0, 0, 0, 0))
-            pass
+        world_pos = gmd_node.world_pos
+        anim_axis = gmd_node.anim_axis
+        flags = gmd_node.flags
+
+        if gmd_node.node_type == NodeType.MatrixTransform and gmd_node.name.endswith("_phy"):
+            # Find the node in the old file that maps to it
+            relevant_old_nodes = [
+                (i, node)
+                for i, node in enumerate(old_file_contents.node_arr)
+                if old_file_contents.node_name_arr[node.name_index].text == gmd_node.name
+                   and node.node_type == NodeType.MatrixTransform
+            ]
+            if not relevant_old_nodes:
+                error.recoverable(f"Phys bone {gmd_node.name} is not present in the target file,"
+                                  f"and will not behave as a phys bone in-game. \n"
+                                  f"Turn off Strict Export to ignore this error and continue.")
+            elif len(relevant_old_nodes) > 1:
+                error.recoverable(f"Phys bone {gmd_node.name} has two bones in the target file with the same name???\n"
+                                  f"Things will likely break if you export this file.\n"
+                                  f"Turn off Strict Export to ignore this and continue.")
+            else:
+                # len(relevant_old_nodes) == 1
+                old_node_idx, old_node = relevant_old_nodes[0]
+                if old_node_idx != i:
+                    error.recoverable(f"Phys bone {gmd_node.name} was previously node number {old_node_idx}, but is "
+                                      f"now number {i}. "
+                                      f"Dragon engine games seem to hardcode phys bone numbers, so this will "
+                                      f"likely break this bone or other bones.\n"
+                                      f"Turn off Strict Export to ignore this and continue.")
 
         node_arr.append(NodeStruct(
             index=i,
@@ -149,10 +158,9 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             rot=gmd_node.rot,
             scale=vec3_to_vec4(gmd_node.scale),
 
-            bone_pos=vec3_to_vec4(bone_pos, 1),
-            bone_axis=bone_axis,
-            # TODO: GMD Node Flags
-            flags=[0, 0, 0, 0],
+            world_pos=vec3_to_vec4(world_pos, 1),
+            anim_axis=anim_axis,
+            flags=flags,
         ))
 
     vertex_buffer_arr = []
@@ -200,11 +208,14 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
                 error.fatal(f"Encountered a vertex_offset_from_index greater than 32bit, needs")
 
             try:
-                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data, vertex_data_bytearray)
+                gmd_mesh.vertices_data.layout.pack_into(vertices_big_endian, gmd_mesh.vertices_data,
+                                                        vertex_data_bytearray)
             except PackingValidationError as e:
                 error.fatal(f"Error while packing a mesh for {node.name}: {e}")
 
-            error.debug("MESH_EXPORT", f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, min_index: {min_index}, vertex_count: {vertex_count})")
+            error.debug("MESH_EXPORT",
+                        f"(buffer_idx: {buffer_idx}, vertex_offset_from_index: {vertex_offset_from_index}, "
+                        f"min_index: {min_index}, vertex_count: {vertex_count})")
             mesh_buffer_stats[id(gmd_mesh)] = (buffer_idx, vertex_offset_from_index, min_index, vertex_count)
 
             min_index += vertex_count
@@ -310,20 +321,22 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     # DRAGON ENGINE DIFFERENCE - ordered textures
     # duplicates are allowed, each attribute set *must* use contiguous texture indices.
     ordered_texture_arr = []
+
     def make_texture_index(name: str):
         if name:
             idx = len(ordered_texture_arr)
             ordered_texture_arr.append(ChecksumStrStruct.make_from_str(name))
             return TextureIndexStruct_Dragon(idx)
         return TextureIndexStruct_Dragon(-1)
-    #make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
+
+    # make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
-            data=gmd_attribute_set.unk12.float_data#.port_to_version(version_properties.major_version).float_data
+            data=gmd_attribute_set.unk12.float_data  # .port_to_version(version_properties.major_version).float_data
             if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
-            data=gmd_attribute_set.unk14.int_data#port_to_version(version_properties.major_version).int_data
+            data=gmd_attribute_set.unk14.int_data  # port_to_version(version_properties.major_version).int_data
             if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 
@@ -351,7 +364,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
-# DRAGON ENGINE CHANGE - TEXTURES MUST BE DECLARED IN ORDER TO MAKE SURE THE RANGE IS CORRECT
+            # DRAGON ENGINE CHANGE - TEXTURES MUST BE DECLARED IN ORDER TO MAKE SURE THE RANGE IS CORRECT
             texture_diffuse=make_texture_index(gmd_attribute_set.texture_diffuse),
             texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
@@ -369,15 +382,11 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
-    flags = list(base_flags)
+    flags = list(scene.flags)
     if int16_bone_indices:
         flags[5] |= 0x8000_0000
     else:
         flags[5] &= ~0x8000_0000
-    # TODO: This is in all(?) Yakuza Dragon files
-    # It could be worth passing on the flags from original files if we're still exporting "over" them
-    flags[5] |= 0x22
-    flags[4] = 0x32b7c266 # TODO - wtf
 
     return FileData_Dragon(
         magic="GSGM",
@@ -397,7 +406,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         matrix_arr=rearranged_data.ordered_matrices,
         vertex_buffer_arr=vertex_buffer_arr,
         vertex_data=bytes(vertex_data_bytearray),
-        texture_arr=ordered_texture_arr, # DRAGON ENGINE DIFFERENCE
+        texture_arr=ordered_texture_arr,  # DRAGON ENGINE DIFFERENCE
         shader_arr=rearranged_data.shader_names,
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,
@@ -409,4 +418,3 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         unk14=unk14_arr,
         flags=flags,
     )
-

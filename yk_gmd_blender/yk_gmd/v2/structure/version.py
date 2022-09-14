@@ -6,10 +6,11 @@ from typing import Tuple
 # TODO: Is there a better way to classify this? GMD files do not evolve with engines pre-dragon
 # Could name FeatureSet or something
 class GMDVersion(Enum):
-    Kenzan = 1 # a.k.a Magical V-Engine?
+    Kenzan = 1  # a.k.a Magical V-Engine?
     # 5?/0/Kiwami era - unknown what this engine was called
     Kiwami1 = 3
     Dragon = 4
+
 
 @dataclass(frozen=True)
 class VersionProperties:
@@ -27,11 +28,14 @@ class VersionProperties:
     def version_str(self):
         return f"{self.version_tuple[0]}.{self.version_tuple[1]}"
 
+
 def get_major_minor_version(version_combined: int) -> Tuple[int, int]:
     return (version_combined >> 16) & 0xFFFF, (version_combined >> 0) & 0xFFFF
 
+
 def combine_versions(major_version: int, minor_version: int):
     return ((major_version & 0xFFFF) << 16) | (minor_version & 0xFFFF)
+
 
 def get_version_properties(version_major: int, version_minor: int) -> VersionProperties:
     if version_major == 1:
@@ -62,7 +66,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
     elif version_major == 3:
         # All 0/Kiwami-era files
         return VersionProperties(
-            major_version = GMDVersion.Kiwami1,
+            major_version=GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
             indices_offset_by_min_index=True
@@ -70,13 +74,14 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
     elif version_major == 4:
         # Dragon engine
         return VersionProperties(
-            major_version = GMDVersion.Dragon,
+            major_version=GMDVersion.Dragon,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
             indices_offset_by_min_index=True
         )
 
     print(f"Unknown major/minor combination {version_major}.{version_minor}")
+
 
 def get_combined_version_properties(version_combined: int):
     return get_version_properties((version_combined >> 16) & 0xFFFF, (version_combined >> 0) & 0xFFFF)

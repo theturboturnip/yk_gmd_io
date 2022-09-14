@@ -9,5 +9,6 @@ MatrixUnpacker = ValueAdaptor(mathutils.Matrix,
                               # Solution - pass the columns in as rows, and then transpose
                               lambda arr: mathutils.Matrix((arr[0:4], arr[4:8], arr[8:12], arr[12:16])).transposed(),
                               # Column-major = each column concatenated
-                              lambda matrix: list(matrix.col[0]) + list(matrix.col[1]) + list(matrix.col[2]) + list(matrix.col[3])
+                              lambda matrix: list(matrix.col[0]) + list(matrix.col[1]) + list(matrix.col[2]) + list(
+                                  matrix.col[3])
                               )

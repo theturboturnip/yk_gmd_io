@@ -13,7 +13,6 @@ class ObjectStruct_YK1:
     # TODO: whyyyy is this a rel_ptr? What is it rel_ to?
     drawlist_rel_ptr: int
 
-    # TODO: 010 template says this is a matrix
     bbox: BoundsDataStruct_YK1
 
 

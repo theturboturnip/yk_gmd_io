@@ -3,7 +3,6 @@ from enum import IntEnum
 from typing import List
 
 from mathutils import Vector, Quaternion
-
 from yk_gmd_blender.structurelib.base import StructureUnpacker, ValueAdaptor, FixedSizeArrayUnpacker
 from yk_gmd_blender.structurelib.primitives import c_int32, c_uint32
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec4Unpacker, QuatUnpacker
@@ -37,8 +36,8 @@ class NodeStruct:
     rot: Quaternion
     scale: Vector
 
-    bone_pos: Vector
-    bone_axis: Vector
+    world_pos: Vector
+    anim_axis: Vector
     flags: List[int]
 
 
@@ -66,8 +65,8 @@ NodeStruct_Unpack = StructureUnpacker(
         ("rot", QuatUnpacker),
         ("scale", Vec4Unpacker),
 
-        ("bone_pos", Vec4Unpacker),
-        ("bone_axis", Vec4Unpacker),
+        ("world_pos", Vec4Unpacker),
+        ("anim_axis", Vec4Unpacker),
         ("flags", FixedSizeArrayUnpacker(c_uint32, 4)),
     ]
 )

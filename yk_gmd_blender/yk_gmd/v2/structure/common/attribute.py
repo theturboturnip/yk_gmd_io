@@ -42,7 +42,7 @@ class AttributeStruct:
     texture_multi: TextureIndexStruct
     # Never filled
     texture_unk1: TextureIndexStruct
-    texture_ts: TextureIndexStruct # Only present in "rs" shaders
+    texture_ts: TextureIndexStruct  # Only present in "rs" shaders
     texture_normal: TextureIndexStruct  # Usually has textures with _tn postfix
     texture_rt: TextureIndexStruct  # Usually has textures with _rt postfix
     texture_rd: TextureIndexStruct  # Usually has textures with _rd postfix
@@ -67,7 +67,7 @@ AttributeStruct_Unpack = StructureUnpacker(
         ("unk1_always_1", c_uint16),
         ("unk2_always_0", c_uint16),
         ("flags", c_uint16),
-        ("unk3_always_0", c_uint16),  # This may be part of the flags block - it may be other flags left unused in Kiwami
+        ("unk3_always_0", c_uint16),  # This may be part of the flags block, and just unused in Kiwami
 
         ("texture_diffuse", TextureIndexStruct_Unpack),
         ("texture_refl", TextureIndexStruct_Unpack),

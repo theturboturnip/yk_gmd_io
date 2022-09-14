@@ -33,4 +33,3 @@ MeshStruct_YK1_Unpack = StructureUnpacker(
         ("min_index", c_uint32)
     ]
 )
-

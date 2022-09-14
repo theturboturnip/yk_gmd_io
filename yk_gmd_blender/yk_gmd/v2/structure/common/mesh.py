@@ -11,7 +11,8 @@ class IndicesStruct:
     index_count: int
 
     def extract_range(self, data: List[int]) -> List[int]:
-        return data[self.index_offset:self.index_offset+self.index_count]
+        return data[self.index_offset:self.index_offset + self.index_count]
+
 
 IndicesStruct_Unpack = StructureUnpacker(
     IndicesStruct,

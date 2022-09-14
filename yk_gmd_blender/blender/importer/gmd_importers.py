@@ -9,11 +9,12 @@ from bpy.types import (
     OperatorFileListElement,
 )
 from bpy_extras.io_utils import ImportHelper
-
+from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, GMDGame, MaterialNamingType
+from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
 from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
 from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
+from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene_from_filedata_object, \
@@ -26,7 +27,7 @@ class BaseImportGMD:
 
     # Selected files (allows for multi-import)
     files: CollectionProperty(name="File Path",
-                        type=OperatorFileListElement)
+                              type=OperatorFileListElement)
     directory: StringProperty(
         subtype='DIR_PATH',
     )
@@ -40,7 +41,8 @@ class BaseImportGMD:
                                default=True)
 
     import_materials: BoolProperty(name="Import Materials",
-                                   description="If True, will import materials. If False, all objects will not have any materials. "
+                                   description="If True, will import materials. "
+                                               "If False, all objects will not have any materials. "
                                                "This is required if you want to export the scene later.",
                                    default=True)
     material_naming: EnumProperty(name="Material Naming",
@@ -54,7 +56,8 @@ class BaseImportGMD:
                                   default="COLLECTION_TEXTURE")
 
     fuse_vertices: BoolProperty(name="Fuse Vertices",
-                                description="If True, meshes that are attached to the same object will have duplicate vertices removed.",
+                                description="If True, meshes that are attached to the same object "
+                                            "will have duplicate vertices removed.",
                                 default=True)
 
     game_enum: EnumProperty(name="Game/Engine Version",
@@ -70,7 +73,8 @@ class BaseImportGMD:
 
     def create_logger(self) -> BlenderErrorReporter:
         debug_categories = set(self.logging_categories.split(" "))
-        base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(debug_categories)
+        base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(
+            debug_categories)
         return BlenderErrorReporter(self.report, base_error_reporter)
 
     def create_gmd_config(self, gmd_version: VersionProperties, error: BlenderErrorReporter) -> GMDSceneCreatorConfig:
@@ -86,9 +90,11 @@ class BaseImportGMD:
             game = GMDGame.mapping_from_blender_props()[self.game_enum]
             if game & engine_enum == 0:
                 # the specified game doesn't use the same engine as expected
-                error.fatal(f"Expected a file from {GMDGame(game).name} but file uses engine {GMDGame(engine_enum).name}. Try using Autodetect, or change the engine version to be correct.")
+                error.fatal(
+                    f"Expected a file from {GMDGame(game).name} but file uses engine {GMDGame(engine_enum).name}. "
+                    f"Try using Autodetect, or change the engine version to be correct.")
 
-        material_naming_from_enum ={
+        material_naming_from_enum = {
             "COLLECTION_SHADER": MaterialNamingType.Collection_Shader,
             "COLLECTION_TEXTURE": MaterialNamingType.Collection_DiffuseTexture,
             "TEXTURE": MaterialNamingType.DiffuseTexture,
@@ -118,9 +124,6 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
                                  description="If True, will import the full object hierarchy. "
                                              "This is required if you want to export the scene later.",
                                  default=True)
-    anim_skeleton: BoolProperty(name="Load Animation Skeleton",
-                                     description="If True, will modify skeleton before importing to allow for proper animation imports",
-                                     default=False)
 
     def draw(self, context):
         layout = self.layout
@@ -139,59 +142,65 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
         layout.prop(self, 'import_hierarchy')
         layout.prop(self, 'import_objects')
-        layout.prop(self, 'anim_skeleton')
 
     def execute(self, context):
         error = self.create_logger()
 
-        successes = 0
-        base_folder = self.directory
-        for f in self.files:
-            gmd_filepath = os.path.join(base_folder, f.name)
+        if self.files:
+            successes = 0
+            base_folder = self.directory
+            for f in self.files:
+                gmd_filepath = os.path.join(base_folder, f.name)
 
-            try:
-                if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
-                    error.fatal(f"{gmd_filepath} is not a gmd file.")
+                try:
+                    self.import_single(context, gmd_filepath, error)
+                    successes += 1
+                except GMDImportExportError as e:
+                    print(e)
+                    self.report({"ERROR"}, str(e))
+                    # If one failure should stop subsequent files from importing, return here.
+                    # Otherwise, the loop will continue.
+                    if self.stop_on_fail:
+                        if len(self.files) > 1:
+                            self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
+                        return {'CANCELLED'}
 
-                self.report({"INFO"}, f"Importing {f.name}...")
-
-                self.report({"INFO"}, "Extracting abstract scene...")
-                gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
-                gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, True, gmd_contents, error)
-                self.report({"INFO"}, "Finished extracting abstract scene")
-
-                scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
-
-                scene_creator.validate_scene()
-
-                gmd_collection = scene_creator.make_collection(context)
-
-                if self.import_hierarchy:
-                    self.report({"INFO"}, "Importing bone hierarchy...")
-                    gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection, anim_skeleton=self.anim_skeleton)
-
-                if self.import_objects:
-                    self.report({"INFO"}, "Importing objects...")
-                    scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
-
-                self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
-
-                successes += 1
-            except GMDImportExportError as e:
-                print(e)
-                self.report({"ERROR"}, str(e))
-                # If one failure should stop subsequent files from importing, return here.
-                # Otherwise, the loop will continue.
-                if self.stop_on_fail:
-                    if len(self.files) > 1:
-                        self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
-                    return {'CANCELLED'}
-
-        if len(self.files) > 1:
-            self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+            if len(self.files) > 1:
+                self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+        else:
+            self.import_single(context, self.filepath, error)
 
         return {'FINISHED'}
+
+    def import_single(self, context, gmd_filepath, error):
+        if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
+            error.fatal(f"{gmd_filepath} is not a gmd file.")
+
+        self.report({"INFO"}, f"Importing {gmd_filepath}...")
+
+        self.report({"INFO"}, "Extracting abstract scene...")
+        gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
+        gmd_config = self.create_gmd_config(gmd_version, error)
+        gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.SKINNED,
+                                                             VertexImportMode.IMPORT_VERTICES, gmd_contents,
+                                                             error)
+        self.report({"INFO"}, "Finished extracting abstract scene")
+
+        scene_creator = GMDSkinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
+
+        scene_creator.validate_scene()
+
+        gmd_collection = scene_creator.make_collection(context)
+
+        if self.import_hierarchy:
+            self.report({"INFO"}, "Importing bone hierarchy...")
+            gmd_armature = scene_creator.make_bone_hierarchy(context, gmd_collection)
+
+        if self.import_objects:
+            self.report({"INFO"}, "Importing objects...")
+            scene_creator.make_objects(context, gmd_collection, gmd_armature if self.import_hierarchy else None)
+
+        self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
 
 
 def menu_func_import_skinned(self, context):
@@ -221,48 +230,55 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
     def execute(self, context):
         error = self.create_logger()
 
-        successes = 0
-        base_folder = self.directory
-        for f in self.files:
-            gmd_filepath = os.path.join(base_folder, f.name)
+        if self.files:
+            successes = 0
+            base_folder = self.directory
+            for f in self.files:
+                gmd_filepath = os.path.join(base_folder, f.name)
+                try:
+                    self.import_single(context, gmd_filepath, error)
+                    successes += 1
+                except GMDImportExportError as e:
+                    print(e)
+                    self.report({"ERROR"}, str(e))
+                    # If one failure should stop subsequent files from importing, return here.
+                    # Otherwise, the loop will continue.
+                    if self.stop_on_fail:
+                        if len(self.files) > 1:
+                            self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
+                        return {'CANCELLED'}
 
-            try:
-                if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
-                    error.fatal(f"{gmd_filepath} is not a gmd file.")
-
-                self.report({"INFO"}, f"Importing {f.name}...")
-
-                self.report({"INFO"}, "Extracting abstract scene...")
-                gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
-                gmd_config = self.create_gmd_config(gmd_version, error)
-                gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, False, gmd_contents, error)
-                self.report({"INFO"}, "Finished extracting abstract scene")
-
-                scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
-
-                scene_creator.validate_scene()
-
-                gmd_collection = scene_creator.make_collection(context)
-
-                self.report({"INFO"}, "Importing objects...")
-                scene_creator.make_objects(gmd_collection)
-
-                self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
-                successes += 1
-            except GMDImportExportError as e:
-                print(e)
-                self.report({"ERROR"}, str(e))
-                # If one failure should stop subsequent files from importing, return here.
-                # Otherwise, the loop will continue.
-                if self.stop_on_fail:
-                    if len(self.files) > 1:
-                        self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
-                    return {'CANCELLED'}
-
-        if len(self.files) > 1:
-            self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+            if len(self.files) > 1:
+                self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+        else:
+            self.import_single(context, self.filepath, error)
 
         return {'FINISHED'}
+
+    def import_single(self, context, gmd_filepath, error):
+        if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
+            error.fatal(f"{gmd_filepath} is not a gmd file.")
+
+        self.report({"INFO"}, f"Importing {gmd_filepath}...")
+
+        self.report({"INFO"}, "Extracting abstract scene...")
+        gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
+        gmd_config = self.create_gmd_config(gmd_version, error)
+        gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, FileImportMode.UNSKINNED,
+                                                             VertexImportMode.IMPORT_VERTICES, gmd_contents,
+                                                             error)
+        self.report({"INFO"}, "Finished extracting abstract scene")
+
+        scene_creator = GMDUnskinnedSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
+
+        scene_creator.validate_scene()
+
+        gmd_collection = scene_creator.make_collection(context)
+
+        self.report({"INFO"}, "Importing objects...")
+        scene_creator.make_objects(gmd_collection)
+
+        self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
 
 
 def menu_func_import_unskinned(self, context):
