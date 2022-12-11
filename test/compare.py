@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict
 
 from mathutils import Vector
-from yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
@@ -15,6 +14,7 @@ from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMod
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
+from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 
 T = TypeVar('T')
 
@@ -145,6 +145,8 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
+                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
+                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
                     tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
                     tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
                     tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
@@ -172,6 +174,8 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
+                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
+                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
                     tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
                     tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
                     tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
