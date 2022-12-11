@@ -3,7 +3,9 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 """
 This module handles vertex fusion - the process of deciding which vertices in a vertex buffer
@@ -79,6 +81,62 @@ VertIdx = int
 NotRemappedVertIdx = Tuple[int, VertIdx]  # originating mesh index + vertex index
 Tri = Tuple[VertIdx, VertIdx, VertIdx]  # 3 vertex indices
 NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
+
+
+def make_bone_indices_consistent(
+        gmd_meshes: List[GMDSkinnedMesh],
+) -> Tuple[List[GMDBone], List[GMDVertexBuffer_Skinned]]:
+    """
+    Creates a list of vertex buffers with consistent bone indices
+    i.e. vertices in different buffers use the same indices to refer to the same bones.
+    ONLY MODIFIES .bone_weights, NOT .bone_data
+    Returns the overall list of bones and a list of the new vertex buffers.
+    The first vertex buffer is NOT copied, because it doesn't need to be remapped
+
+    :param gmd_meshes:
+    :return:
+    """
+
+    # Fix up bone mappings if the meshes are skinned
+
+    # Build a list of references bones
+    # All vertex buffers will have their data remapped to indexes into this list.
+    # Start from the first mesh's bone list, then grow from there
+    remapped_vertices = [gmd_meshes[0].vertices_data]
+    relevant_bones = gmd_meshes[0].relevant_bones[:]
+    # The first mesh doesn't need remapping, because we start from its bone list, but subsequent ones do
+    for i_mesh in range(1, len(gmd_meshes)):
+        gmd_mesh = gmd_meshes[i_mesh]
+
+        # Mapping of gmd_meshes[i] bone indices to relevant_bones indices
+        bone_index_mapping = {}
+        for i, bone in enumerate(gmd_mesh.relevant_bones):
+            if bone not in relevant_bones:
+                relevant_bones.append(bone)
+            bone_index_mapping[i] = relevant_bones.index(bone)
+
+        def remap_weight(bone_weight: BoneWeight):
+            # If the weight is 0 the bone is unused, so map it to a consistent 0.
+            if bone_weight.weight == 0:
+                return BoneWeight(0, weight=0.0)
+            else:
+                return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
+
+        # Copy the vertex buffer
+        verts_to_remap = gmd_mesh.vertices_data[:]
+        # Remap the bones in the vertices
+        for i_vtx in range(len(verts_to_remap)):
+            old_weights = verts_to_remap.bone_weights[i_vtx]
+            verts_to_remap.bone_weights[i_vtx] = (
+                remap_weight(old_weights[0]),
+                remap_weight(old_weights[1]),
+                remap_weight(old_weights[2]),
+                remap_weight(old_weights[3]),
+            )
+        remapped_vertices.append(verts_to_remap)
+
+    # Done, return the full list of relevant bones.
+    return relevant_bones, remapped_vertices
 
 
 def fuse_adjacent_vertices(
