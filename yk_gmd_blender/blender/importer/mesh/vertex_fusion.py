@@ -89,7 +89,6 @@ def make_bone_indices_consistent(
     """
     Creates a list of vertex buffers with consistent bone indices
     i.e. vertices in different buffers use the same indices to refer to the same bones.
-    ONLY MODIFIES .bone_weights, NOT .bone_data
     Returns the overall list of bones and a list of the new vertex buffers.
     The first vertex buffer is NOT copied, because it doesn't need to be remapped
 
@@ -127,12 +126,19 @@ def make_bone_indices_consistent(
         # Remap the bones in the vertices
         for i_vtx in range(len(verts_to_remap)):
             old_weights = verts_to_remap.bone_weights[i_vtx]
-            verts_to_remap.bone_weights[i_vtx] = (
+            new_weights = (
                 remap_weight(old_weights[0]),
                 remap_weight(old_weights[1]),
                 remap_weight(old_weights[2]),
                 remap_weight(old_weights[3]),
             )
+            verts_to_remap.bone_weights[i_vtx] = new_weights
+            verts_to_remap.bone_data[i_vtx] = Vector((
+                new_weights[0].bone,
+                new_weights[1].bone,
+                new_weights[2].bone,
+                new_weights[3].bone,
+            ))
         remapped_vertices.append(verts_to_remap)
 
     # Done, return the full list of relevant bones.
