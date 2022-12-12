@@ -500,8 +500,10 @@ def solve_unfusion(
     return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused
 
 
-def vertex_fusion(idx_bufs: List[array.ArrayType],
-                  vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[VertIdx]], List[List[bool]]]:
+def vertex_fusion(
+        idx_bufs: List[array.ArrayType],
+        vertices: List[GMDVertexBuffer_Generic]
+) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Calculates "vertex fusion" for a set of vertex buffers which will result in a single contiguous list of vertices.
     Returns a list of which vertices were "fused" and a mapping of (i_buf, i_vertex_in_buf) to fused index.
@@ -541,4 +543,4 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
             unfuse_verts_with
         )
 
-    return buf_idx_to_fused_idx, is_fused
+    return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused

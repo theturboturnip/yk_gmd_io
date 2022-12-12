@@ -97,8 +97,15 @@ def test_vertex_fusion_hex_splitcenter():
         3, 4, 5,  # DEF
     ])
 
-    buf_idx_to_fused_idx, is_fused = vertex_fusion([idx_buf], [vtx_buf])
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = vertex_fusion([idx_buf], [vtx_buf])
 
+    assert fused_idx_to_buf_idx == [
+        [(0, 0)],  # A indices
+        [(0, 1)],  # B indices
+        [(0, 2), (0, 3)],  # C + D indices
+        [(0, 4)],  # E indices
+        [(0, 5)],  # F indices
+    ]
     assert len(buf_idx_to_fused_idx) == 1  # only one set of buffers was passed in, only one should be returned
     assert len(is_fused) == 1  # only one set of buffers was passed in, only one should be returned
     assert buf_idx_to_fused_idx == [[

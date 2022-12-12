@@ -3,10 +3,10 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Union
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict
 
 from mathutils import Vector
-from yk_gmd_blender.blender.importer.mesh.vertex_fusion import fuse_adjacent_vertices, make_bone_indices_consistent
+from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
@@ -302,13 +302,12 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
     def find_fusion_output_vs(ms: List[GMDMesh]) -> FusedVertVoxelSet:
-        unfused_vs: Union[List[GMDVertexBuffer_Generic], List[GMDVertexBuffer_Skinned]]
-        print(len(ms))
+        unfused_vs: List[GMDVertexBuffer_Generic]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
         else:
             unfused_vs = [m.vertices_data for m in ms]
-        fused_idx_to_buf_idx, _, _ = fuse_adjacent_vertices(unfused_vs)
+        fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
 
         all_verts = FusedVertVoxelSet()
         if skinned:
