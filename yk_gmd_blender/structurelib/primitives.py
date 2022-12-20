@@ -64,3 +64,4 @@ class RangeConverterPrimitive(BoundedPrimitiveUnpacker[float]):
 
 
 c_unorm8 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(0, 1))
+c_u8_Minus1_1 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(-1.0, 1.0))

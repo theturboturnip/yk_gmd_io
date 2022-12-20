@@ -4,7 +4,8 @@ from typing import Optional, Tuple, List, Sized, Iterable
 
 from mathutils import Vector
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, c_uint8, RangeConverterPrimitive
+from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, c_uint8, RangeConverterPrimitive, \
+    c_u8_Minus1_1
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker_of, Vec4Unpacker_of
 
@@ -49,8 +50,7 @@ vector_unpackers = {
 
 vec4fixed_unpackers = {
     FixedConvertMethod.To0_1: Vec4Unpacker_of(c_unorm8),
-    FixedConvertMethod.ToMinus1_1: Vec4Unpacker_of(
-        RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(-1.0, 1.0))),
+    FixedConvertMethod.ToMinus1_1: Vec4Unpacker_of(c_u8_Minus1_1),
     # We store bone_data in a Vector, which stores components as floats
     # Just using Vec4Unpacker_of(c_uint8) requires the incoming data to be int
     # Instead, use an identity RangeConverterPrimitive to convert it to float without changing the underlying value.

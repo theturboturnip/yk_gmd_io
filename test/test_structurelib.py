@@ -1,7 +1,7 @@
 import pytest
 
 from yk_gmd_blender.structurelib.primitives import c_uint8, c_uint16, c_uint32, c_uint64, c_int8, c_int32, c_int64, \
-    c_int16, c_unorm8
+    c_int16, c_unorm8, c_u8_Minus1_1
 
 
 # This module tests the structurelib finite-range primitive types,
@@ -222,3 +222,37 @@ def test_prim_unorm8_exhaustive_repack():
         d, _ = t.unpack(False, b, i)
         t.pack(True, d, b_prime)
     assert b == b_prime
+
+
+@pytest.mark.order(2)
+def test_prim_u8_Minus1_1_selfconsistent():
+    start, end = -1.0, 1.0
+    t = c_u8_Minus1_1
+    datapoints = [
+        start + ((end - start) * x / 255)
+        for x in range(256)
+    ]
+    for d in datapoints:
+        b = bytearray()
+        t.pack(False, d, b)
+        t.pack(True, d, b)
+
+        off = 0
+        d_out_little, off = t.unpack(False, b, off)
+        d_out_big, off = t.unpack(True, b, off)
+
+        assert d_out_little == d
+        assert d_out_big == d
+
+
+@pytest.mark.order(2)
+def test_prim_u8_Minus1_1_exhaustive_repack():
+    t = c_u8_Minus1_1
+    # Foreach byte
+    b = bytearray(range(256))
+    b_prime = bytearray()
+    for i in range(256):
+        d, _ = t.unpack(False, b, i)
+        t.pack(True, d, b_prime)
+
+    assert list(b_prime) == list(b)
