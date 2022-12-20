@@ -32,36 +32,32 @@ c_float16 = BasePrimitive(struct_fmt="e", python_type=float)
 c_float32 = BasePrimitive(struct_fmt="f", python_type=float)
 
 
-class RangeConverterPrimitive(BoundedPrimitiveUnpacker[float]):
-    base_unpack: BasePrimitive
-    from_range: Tuple[float, float]
+class U8ConverterPrimitive(BoundedPrimitiveUnpacker[float]):
     to_range: Tuple[float, float]
 
-    def __init__(self, base_unpack: BasePrimitive, from_range: Tuple[float, float], to_range: Tuple[float, float]):
-        super().__init__(python_type=float, struct_fmt=base_unpack.struct_fmt, range=to_range)
-        self.base_unpack = base_unpack
-
-        self.from_range = from_range
-        self.to_range = to_range
+    def __init__(self, to_range: Tuple[float, float]):
+        super().__init__(python_type=float, struct_fmt=c_uint8.struct_fmt, range=to_range)
+        self.start = to_range[0]
+        self.width = to_range[1] - to_range[0]
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[float, int]:
-        value, offset = self.base_unpack.unpack(big_endian, data, offset)
+        value, offset = c_uint8.unpack(big_endian, data, offset)
 
-        independent_float = (value - self.from_range[0]) / (self.from_range[1] - self.from_range[0])
-        target_range_float = (independent_float * (self.to_range[1] - self.to_range[0])) + self.to_range[0]
+        float_0_1 = value / 255.0
+        target_range_float = (float_0_1 * self.width) + self.start
 
         return target_range_float, offset
 
     def pack(self, big_endian: bool, value: float, append_to: bytearray):
         self.validate_value(value)
 
-        independent_float = (value - self.to_range[0]) / (self.to_range[1] - self.to_range[0])
-        target_range_float = (independent_float * (self.from_range[1] - self.from_range[0])) + self.from_range[0]
-        self.base_unpack.pack(big_endian, self.base_unpack.python_type(target_range_float), append_to)
+        independent_float = (value - self.start) / self.width
+        float_0_255 = independent_float * 255
+        c_uint8.pack(big_endian, int(round(float_0_255)), append_to)
 
     def sizeof(self):
-        return self.base_unpack.sizeof()
+        return c_uint8.sizeof()
 
 
-c_unorm8 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(0, 1))
-c_u8_Minus1_1 = RangeConverterPrimitive(base_unpack=c_uint8, from_range=(0, 255), to_range=(-1.0, 1.0))
+c_unorm8 = U8ConverterPrimitive(to_range=(0, 1))
+c_u8_Minus1_1 = U8ConverterPrimitive(to_range=(-1.0, 1.0))
