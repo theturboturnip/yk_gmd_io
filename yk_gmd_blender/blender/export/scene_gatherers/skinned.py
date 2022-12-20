@@ -48,7 +48,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         if not selected_armature or selected_armature.type != "ARMATURE":
             self.error.fatal(f"Please select the armature for the skinned file you want to export!")
 
-        if selected_armature.parent:
+        if selected_armature.parent is not None:
             self.error.fatal(f"The file armature should not have a parent.")
 
         if selected_armature.matrix_world != Matrix.Identity(4):
@@ -85,7 +85,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             if object.type != "MESH":
                 continue
 
-            if object.parent:
+            if object.parent is not None:
                 self.error.debug("GATHER", f"Skipping object {object.name} because parent")
                 continue
 
@@ -246,7 +246,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         # Build a GMDNode structure for the armature only (objects will be added to this later)
         # Export root bones in order
         for root_bone in sorted(armature_data.bones, key=yakuza_hierarchy_node_data_sort_key):
-            if root_bone.parent:
+            if root_bone.parent is not None:
                 continue
             add_bone(root_bone, None)
 
@@ -270,7 +270,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                                       [b for b in gmd_bone.children if isinstance(b, GMDBone)])
 
         check_bone_sets_match("root",
-                              [b for b in armature_data.bones if not b.parent],
+                              [b for b in armature_data.bones if b.parent is None],
                               original_root_bones)
 
         def copy_bone(original_file_gmd_bone: GMDBone, new_gmd_parent: Optional[GMDBone] = None):

@@ -47,7 +47,7 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             if object.type not in ["MESH", "EMPTY"]:
                 continue
 
-            if object.parent:
+            if object.parent is not None:
                 self.error.debug("GATHER", f"Skipping object {object.name} because parent")
                 continue
 
