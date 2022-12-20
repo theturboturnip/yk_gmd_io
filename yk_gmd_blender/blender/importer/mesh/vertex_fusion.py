@@ -201,10 +201,10 @@ def detect_fully_fused_triangles(
         idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]]
-) -> DefaultDict[Tri, List[NotRemappedTri]]:
+) -> Dict[Tri, List[NotRemappedTri]]:
     """
     Given a set of fused vertices and the meshes they came from, determine which triangles are "fully fused"
-    i.e. each of their indices are fully fused.
+    i.e. each of their indices are fully fused, or it resolves to the same post-fusion triangle as another triangle.
 
     These are only important in the case of dupes (two fully fused triangles which result in the same fused triangle).
     Fully fused dupe triangles cannot be represented in Blender, because it cannot represent
@@ -236,20 +236,18 @@ def detect_fully_fused_triangles(
                 buf_idx_to_fused_idx_for_mesh[non_remapped_tri[2]],
             )
             remapped_tri = tuple(sorted(remapped_tri))
+            fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
 
-            if (was_fused_to_anything(remapped_tri[0]) and
-                    was_fused_to_anything(remapped_tri[1]) and
-                    was_fused_to_anything(remapped_tri[2])):
-                fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
-
-    return fully_fused_tri_set
+    return {remapped_tri: tri_set for (remapped_tri, tri_set) in fully_fused_tri_set.items() if
+            len(tri_set) > 1 or (was_fused_to_anything(remapped_tri[0]) and
+                                 was_fused_to_anything(remapped_tri[1]) and
+                                 was_fused_to_anything(remapped_tri[2]))}
 
 
 def decide_on_unfusions(
         idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
-        buf_idx_to_fused_idx: List[List[VertIdx]],
-        fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
+        fully_fused_tri_set: Dict[Tri, List[NotRemappedTri]]
 ) -> Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
     """
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
@@ -533,7 +531,6 @@ def vertex_fusion(
         unfuse_verts_with = decide_on_unfusions(
             idx_bufs,
             fused_idx_to_buf_idx,
-            buf_idx_to_fused_idx,
             fully_fused_tri_set
         )
         # Actually perform the unfusion

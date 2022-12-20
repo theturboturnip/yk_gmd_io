@@ -403,7 +403,6 @@ def test_decide_on_unfusions_twolayer_interior():
     unfusions = decide_on_unfusions(
         [idx_buf],
         fused_idx_to_buf_idx,
-        buf_idx_to_fused_idx,
         fully_fused_tri_set
     )
     assert unfusions == {
@@ -576,7 +575,6 @@ def test_decide_on_unfusions_twolayer_interior_twoseam():
     unfusions = decide_on_unfusions(
         [idx_buf_0, idx_buf_1],
         fused_idx_to_buf_idx,
-        buf_idx_to_fused_idx,
         fully_fused_tri_set
     )
     assert unfusions == {
@@ -694,7 +692,6 @@ def test_decide_on_unfusions_twolayer_splitvtx():
     unfusions = decide_on_unfusions(
         [idx_buf],
         fused_idx_to_buf_idx,
-        buf_idx_to_fused_idx,
         fully_fused_tri_set
     )
     # The unfusion process should unfuse {C, C'}, {D, C'}, {E, E'}, {F, F'}
