@@ -3,7 +3,9 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 """
 This module handles vertex fusion - the process of deciding which vertices in a vertex buffer
@@ -81,6 +83,68 @@ Tri = Tuple[VertIdx, VertIdx, VertIdx]  # 3 vertex indices
 NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 
+def make_bone_indices_consistent(
+        gmd_meshes: List[GMDSkinnedMesh],
+) -> Tuple[List[GMDBone], List[GMDVertexBuffer_Skinned]]:
+    """
+    Creates a list of vertex buffers with consistent bone indices
+    i.e. vertices in different buffers use the same indices to refer to the same bones.
+    Returns the overall list of bones and a list of the new vertex buffers.
+    The first vertex buffer is NOT copied, because it doesn't need to be remapped
+
+    :param gmd_meshes:
+    :return:
+    """
+
+    # Fix up bone mappings if the meshes are skinned
+
+    # Build a list of references bones
+    # All vertex buffers will have their data remapped to indexes into this list.
+    # Start from the first mesh's bone list, then grow from there
+    remapped_vertices = [gmd_meshes[0].vertices_data]
+    relevant_bones = gmd_meshes[0].relevant_bones[:]
+    # The first mesh doesn't need remapping, because we start from its bone list, but subsequent ones do
+    for i_mesh in range(1, len(gmd_meshes)):
+        gmd_mesh = gmd_meshes[i_mesh]
+
+        # Mapping of gmd_meshes[i] bone indices to relevant_bones indices
+        bone_index_mapping = {}
+        for i, bone in enumerate(gmd_mesh.relevant_bones):
+            if bone not in relevant_bones:
+                relevant_bones.append(bone)
+            bone_index_mapping[i] = relevant_bones.index(bone)
+
+        def remap_weight(bone_weight: BoneWeight):
+            # If the weight is 0 the bone is unused, so map it to a consistent 0.
+            if bone_weight.weight == 0:
+                return BoneWeight(0, weight=0.0)
+            else:
+                return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
+
+        # Copy the vertex buffer
+        verts_to_remap = gmd_mesh.vertices_data[:]
+        # Remap the bones in the vertices
+        for i_vtx in range(len(verts_to_remap)):
+            old_weights = verts_to_remap.bone_weights[i_vtx]
+            new_weights = (
+                remap_weight(old_weights[0]),
+                remap_weight(old_weights[1]),
+                remap_weight(old_weights[2]),
+                remap_weight(old_weights[3]),
+            )
+            verts_to_remap.bone_weights[i_vtx] = new_weights
+            verts_to_remap.bone_data[i_vtx] = Vector((
+                new_weights[0].bone,
+                new_weights[1].bone,
+                new_weights[2].bone,
+                new_weights[3].bone,
+            ))
+        remapped_vertices.append(verts_to_remap)
+
+    # Done, return the full list of relevant bones.
+    return relevant_bones, remapped_vertices
+
+
 def fuse_adjacent_vertices(
         vertices: List[GMDVertexBuffer_Generic]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
@@ -137,10 +201,10 @@ def detect_fully_fused_triangles(
         idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         buf_idx_to_fused_idx: List[List[VertIdx]]
-) -> DefaultDict[Tri, List[NotRemappedTri]]:
+) -> Dict[Tri, List[NotRemappedTri]]:
     """
     Given a set of fused vertices and the meshes they came from, determine which triangles are "fully fused"
-    i.e. each of their indices are fully fused.
+    i.e. each of their indices are fully fused, or it resolves to the same post-fusion triangle as another triangle.
 
     These are only important in the case of dupes (two fully fused triangles which result in the same fused triangle).
     Fully fused dupe triangles cannot be represented in Blender, because it cannot represent
@@ -172,20 +236,18 @@ def detect_fully_fused_triangles(
                 buf_idx_to_fused_idx_for_mesh[non_remapped_tri[2]],
             )
             remapped_tri = tuple(sorted(remapped_tri))
+            fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
 
-            if (was_fused_to_anything(remapped_tri[0]) and
-                    was_fused_to_anything(remapped_tri[1]) and
-                    was_fused_to_anything(remapped_tri[2])):
-                fully_fused_tri_set[remapped_tri].append((i_buf, non_remapped_tri))
-
-    return fully_fused_tri_set
+    return {remapped_tri: tri_set for (remapped_tri, tri_set) in fully_fused_tri_set.items() if
+            len(tri_set) > 1 or (was_fused_to_anything(remapped_tri[0]) and
+                                 was_fused_to_anything(remapped_tri[1]) and
+                                 was_fused_to_anything(remapped_tri[2]))}
 
 
 def decide_on_unfusions(
         idx_bufs: List[array.ArrayType],
         fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
-        buf_idx_to_fused_idx: List[List[VertIdx]],
-        fully_fused_tri_set: DefaultDict[Tri, List[NotRemappedTri]]
+        fully_fused_tri_set: Dict[Tri, List[NotRemappedTri]]
 ) -> Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]:
     """
     Given a set of fused vertices, the meshes they came from, and which triangles are "fully fused" with other triangles
@@ -297,6 +359,20 @@ def decide_on_unfusions(
     # x---H'----I'-x
     # We unfuse all of them. Technically you could choose to unfuse one, but then we'd have to decide which one.
     #
+    # Consider the case if we add a seam:
+    #      ---A---EG
+    #     B-----CD----F
+    #     |   | | |   |
+    #  -X-|---A'|-E'G'|
+    # Y---B'----C'D'--F'
+    # Here the triangles are (ignoring XY) ABC, ACE, DGF, A'B'C', A'C'E', D'G'F'.
+    # We should keep C and D merged, but the algorithm should still decide to unfuse {C/C', D/D'}
+    # We should keep E and G merged, but the algorithm should still decide to unfuse {E/E', G/G'}
+    #
+    # For ABC/A'B'C', we know that A' and B' are exterior, so we don't unfuse A/A', B/B' and just unfuse C from C'.
+    # For ACE/A'C'E', we know that A' is exterior, so we don't unfuse A/A' but do unfuse C/C' and E/E'.
+    # For DGF/D'G'F', there are no exterior vertices, so we unfuse all of D/D', G/E', F/F'.
+    #
     # The algorithm pseudocode:
     # for each fully-fused-dupe-triangle
     #     for each corner set (i.e. {A, A'}, {B, B'}, {C, C'})
@@ -387,17 +463,67 @@ def solve_unfusion(
     fusion_group_for: Dict[NotRemappedVertIdx, Tuple[NotRemappedVertIdx, ...]] = {}
     for fused_verts in old_fused_idx_to_buf_idx:
         # Each not-remapped vert appears exactly once in fused_idx_to_buf_idx
+        # Each bucket will contain at least one vertex
+        # Overall, all vertices in fused_verts will appear in buckets exactly once
+        buckets: List[List[NotRemappedVertIdx]] = []
         for vert in fused_verts:
             # Each vertex should be in a fusion group with
             # (1) the vertices F said they should be fused with
             # (2) except the vertices U says it *shouldn't* be fused with
+            # (3) except some other vertices in group F that U says shouldn't be fused together
+
+            # Before, we just evaluated (1) and (2) with
+            # fusion_group_for[vert] = tuple(
+            #     v for v in fused_verts  # (1)
+            #     if v not in unfuse_verts_with[vert]  # (2)
+            # )
 
             # This is guaranteed to be "consistent" i.e. for all v' in fusion_group_for[v], fusion_group_for[v'] contains v
             # IF AND ONLY IF unfuse_verts_with is consistent, i.e. for all v' in unfuse_verts_with[v], unfuse_verts_with[v'] contains v
-            fusion_group_for[vert] = tuple(
-                v for v in fused_verts  # (1)
-                if v not in unfuse_verts_with[vert]  # (2)
-            )
+            # BUT it isn't guaranteed to be *correct* i.e. no fusions prevented by U are present
+            # Consider: AB
+            #           |
+            #          A'B'
+            # fused_verts = [A, B, A', B']
+            # unfuse_verts_with = [A/A', A'/A, B/B', B'/B]
+            # fusion_group_for = [
+            #     A -> (A, B, B'),
+            #     A' -> (A', B, B'),
+            #     B -> (A, A', B),
+            #     B' -> (A, A', B'),
+            # ]
+
+            # New version: greedy bucketing
+            # Maintain a list of buckets for each group of previously-fused verts
+            # Foreach previously-fused vert, add to the first bucket without any conflicts
+            #    if all the buckets have conflicts i.e. they have vertices that we can't be fused with...
+            #        create a new bucket!
+            # Then once we have the buckets construct fusion_group_for[v] based on the buckets
+            # This is guarantees to be correct, i.e. no fusions prevents by U are present,
+            # but I don't think it's guaranteed to be *minimal*
+
+            relevant_U = unfuse_verts_with[vert]
+            placed_in_bucket = False
+            for b in buckets:
+                # If we aren't allowed to be with any vertex already in this bucket...
+                if any(b_v in relevant_U for b_v in b):
+                    # ...skip this bucket
+                    continue
+                # else, take this bucket!
+                b.append(vert)
+                placed_in_bucket = True
+                # (and only take this bucket, don't take any other buckets)
+                break
+            # If we couldn't find a bucket, create a new one
+            if not placed_in_bucket:
+                buckets.append([vert])
+        # Create the fusion_group_for entries for each vertex now the fusion groups are complete
+        for b in buckets:
+            b_t = tuple(b)
+            for v in b_t:
+                # consistency check
+                assert not any(b_v in unfuse_verts_with[v] for b_v in b_t)
+                fusion_group_for[v] = b_t
 
     # TODO - consistency check?
 
@@ -436,8 +562,10 @@ def solve_unfusion(
     return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused
 
 
-def vertex_fusion(idx_bufs: List[array.ArrayType],
-                  vertices: List[GMDVertexBuffer_Generic]) -> Tuple[List[List[VertIdx]], List[List[bool]]]:
+def vertex_fusion(
+        idx_bufs: List[array.ArrayType],
+        vertices: List[GMDVertexBuffer_Generic]
+) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Calculates "vertex fusion" for a set of vertex buffers which will result in a single contiguous list of vertices.
     Returns a list of which vertices were "fused" and a mapping of (i_buf, i_vertex_in_buf) to fused index.
@@ -467,7 +595,6 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
         unfuse_verts_with = decide_on_unfusions(
             idx_bufs,
             fused_idx_to_buf_idx,
-            buf_idx_to_fused_idx,
             fully_fused_tri_set
         )
         # Actually perform the unfusion
@@ -477,4 +604,4 @@ def vertex_fusion(idx_bufs: List[array.ArrayType],
             unfuse_verts_with
         )
 
-    return buf_idx_to_fused_idx, is_fused
+    return fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused

@@ -4,9 +4,9 @@ from typing import List, Tuple
 import pytest
 
 from mathutils import Vector
-from yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, VecStorage
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, fuse_adjacent_vertices, \
-    detect_fully_fused_triangles, decide_on_unfusions
+    detect_fully_fused_triangles, decide_on_unfusions, solve_unfusion
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, VecStorage
 
 
 def mock_vertex_buffer(pos: List[Vector]) -> GMDVertexBuffer_Generic:
@@ -97,8 +97,15 @@ def test_vertex_fusion_hex_splitcenter():
         3, 4, 5,  # DEF
     ])
 
-    buf_idx_to_fused_idx, is_fused = vertex_fusion([idx_buf], [vtx_buf])
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = vertex_fusion([idx_buf], [vtx_buf])
 
+    assert fused_idx_to_buf_idx == [
+        [(0, 0)],  # A indices
+        [(0, 1)],  # B indices
+        [(0, 2), (0, 3)],  # C + D indices
+        [(0, 4)],  # E indices
+        [(0, 5)],  # F indices
+    ]
     assert len(buf_idx_to_fused_idx) == 1  # only one set of buffers was passed in, only one should be returned
     assert len(is_fused) == 1  # only one set of buffers was passed in, only one should be returned
     assert buf_idx_to_fused_idx == [[
@@ -396,12 +403,185 @@ def test_decide_on_unfusions_twolayer_interior():
     unfusions = decide_on_unfusions(
         [idx_buf],
         fused_idx_to_buf_idx,
-        buf_idx_to_fused_idx,
         fully_fused_tri_set
     )
     assert unfusions == {
         (0, 9): {(0, 22)},
         (0, 22): {(0, 9)},
+    }
+
+
+@pytest.mark.order(1)
+def test_decide_on_unfusions_twolayer_interior_twoseam():
+    # Create a large mesh, where the starred verts are duplicated (two layers).
+    #   A  B  C
+    #  D E* F* G
+    # H I* J* L* M
+    #  N O* P* Q
+    #   R  S  T
+    # The triangles between EFIJLOP should all be fused dupes.
+    # The unfusion process should only try to unfuse J.
+    # Also, split the mesh into two buffers with a seam along the c--r diagonal
+
+    vtx_buf_0 = mock_vertex_buffer([
+        v(-2, 2, 0), v(0, 2, 0), v(2, 2, 0),
+        v(-3, 1, 0), v(-1, 1, 0), v(1, 1, 0),  # v(3, 1, 0),
+        v(-4, 0, 0), v(-2, 0, 0), v(0, 0, 0),  # v(2, 0, 0), v(4, 0, 0),
+        v(-3, -1, 0), v(-1, -1, 0),  # v(1, -1, 0), v(3, -1, 0),
+        v(-2, -2, 0),  # v(0, -2, 0), v(2, -2, 0),
+
+        # duplicates for starred
+        v(-1, 1, 0), v(1, 1, 0),
+        v(-2, 0, 0), v(0, 0, 0),  # v(2, 0, 0),
+        v(-1, -1, 0),  # v(1, -1, 0),
+    ])
+    vtx_buf_1 = mock_vertex_buffer([
+        v(2, 2, 0),
+        v(1, 1, 0), v(3, 1, 0),
+        v(0, 0, 0), v(2, 0, 0), v(4, 0, 0),
+        v(-1, -1, 0), v(1, -1, 0), v(3, -1, 0),
+        v(-2, -2, 0), v(0, -2, 0), v(2, -2, 0),
+
+        # duplicates for starred
+        v(1, 1, 0),
+        v(0, 0, 0), v(2, 0, 0),
+        v(-1, -1, 0), v(1, -1, 0),
+    ])
+    #     0   1   2
+    #   3   4   5   x
+    # 6   7   8  xx  xx
+    #   9  10  xx  xx
+    #    11  xx  xx
+    #
+    #      12  13
+    #    14  15  xx
+    #      16  xx
+    idx_buf_0 = mock_idx_buffer([
+        # Top row of triangles
+        0, 3, 4,
+        0, 1, 4,
+        1, 4, 5,
+        1, 5, 2,
+
+        # Second row
+        3, 6, 7,
+        3, 4, 7,
+        4, 7, 8,  # fused
+        4, 5, 8,  # fused
+
+        # Third row
+        6, 7, 9,
+        7, 9, 10,
+        7, 8, 10,  # fused
+
+        # Bottom row
+        9, 10, 11,
+
+        # Duplicates
+        12, 14, 15,
+        12, 13, 15,
+        14, 15, 16,
+    ])
+    #     x   x   0
+    #   x   x   1   2
+    # x   x   3   4   5
+    #  xx   6   7   8
+    #     9  10  11
+    #
+    #      xx  12
+    #    xx  13  14
+    #      15  16
+    idx_buf_1 = mock_idx_buffer([
+        # Top row of triangles
+        0, 1, 2,
+
+        # Second row
+        1, 3, 4,  # fused
+        1, 2, 4,
+        2, 4, 5,
+
+        # Third row
+        3, 6, 7,  # fused
+        3, 4, 7,  # fused
+        4, 7, 8,
+        4, 5, 8,
+
+        # Bottom row
+        6, 9, 10,
+        6, 7, 10,
+        7, 10, 11,
+        7, 8, 11,
+
+        # Duplicates
+        12, 13, 14,
+        13, 15, 16,
+        13, 14, 16
+    ])
+
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = fuse_adjacent_vertices([vtx_buf_0, vtx_buf_1])
+    # seam indices: (0, {2,5,8,10,11,13,15,16}), (1, {0,1,3,6,9,12,13,15}) should be fused with each other
+    fusions = [
+        # seam not including EFIJLOP: (0, {2,11}), (1, {0,9})
+        [(0, 2), (1, 0)],
+        [(0, 11), (1, 9)],
+        # EFIJLOP: (0, {4,5,7,8,-,10,-}), (0, {12,13,14,15,-,16,-}), (1, {-,1,-,3,4,6,7}), (1, {-,12,-,13,14,15,16}) should be fused with each other
+        [(0, 4), (0, 12)],
+        [(0, 5), (0, 13), (1, 1), (1, 12)],
+        [(0, 7), (0, 14)],
+        [(0, 8), (0, 15), (1, 3), (1, 13)],
+        [(1, 4), (1, 14)],
+        [(0, 10), (0, 16), (1, 6), (1, 15)],
+        [(1, 7), (1, 16)]
+    ]
+    # not-fused: (0, {0,1,3,6,9}), (1,{2,5,8,10,11})
+    expected = sorted(fusions + [
+        [(0, 0)],
+        [(0, 1)],
+        [(0, 3)],
+        [(0, 6)],
+        [(0, 9)],
+        [(1, 2)],
+        [(1, 5)],
+        [(1, 8)],
+        [(1, 10)],
+        [(1, 11)],
+    ], key=lambda x: x[0])
+    assert fused_idx_to_buf_idx == expected
+
+    # just assume these are right, i'm tired
+    # assert buf_idx_to_fused_idx[0][19] == 4
+    # assert buf_idx_to_fused_idx[0][20] == 5
+    # assert buf_idx_to_fused_idx[0][21] == 8
+    # assert buf_idx_to_fused_idx[0][22] == 9
+    # assert buf_idx_to_fused_idx[0][23] == 10
+    # assert buf_idx_to_fused_idx[0][24] == 13
+    # assert buf_idx_to_fused_idx[0][25] == 14
+    # assert is_fused == [([False] * 19 + [True] * 7)]
+
+    fully_fused_tri_set = detect_fully_fused_triangles(
+        [idx_buf_0, idx_buf_1],
+        fused_idx_to_buf_idx,
+        buf_idx_to_fused_idx
+    )
+    assert sorted(fully_fused_tri_set.values(), key=lambda x: x[0]) == [
+        [(0, (4, 5, 8)), (0, (12, 13, 15))],
+        [(0, (4, 7, 8)), (0, (12, 14, 15))],
+        [(0, (7, 8, 10)), (0, (14, 15, 16))],
+        [(1, (1, 3, 4)), (1, (12, 13, 14))],
+        [(1, (3, 4, 7)), (1, (13, 14, 16))],
+        [(1, (3, 6, 7)), (1, (13, 15, 16))],
+    ]
+
+    unfusions = decide_on_unfusions(
+        [idx_buf_0, idx_buf_1],
+        fused_idx_to_buf_idx,
+        fully_fused_tri_set
+    )
+    assert unfusions == {
+        (0, 8): {(0, 15)},
+        (0, 15): {(0, 8)},
+        (1, 3): {(1, 13)},
+        (1, 13): {(1, 3)}
     }
 
 
@@ -512,7 +692,6 @@ def test_decide_on_unfusions_twolayer_splitvtx():
     unfusions = decide_on_unfusions(
         [idx_buf],
         fused_idx_to_buf_idx,
-        buf_idx_to_fused_idx,
         fully_fused_tri_set
     )
     # The unfusion process should unfuse {C, C'}, {D, C'}, {E, E'}, {F, F'}
@@ -526,4 +705,90 @@ def test_decide_on_unfusions_twolayer_splitvtx():
         (0, 10): {(0, 5)},  # F' from F
     }
 
-# TODO test solve_unfusion
+
+@pytest.mark.order(1)
+def test_detect_fully_fused_triangles():
+    # triangles that are "fully fused" i.e. cause issues with blender don't necessarily have all their vertices fused
+    # e.g.
+    #   -A
+    #  B |\
+    #  |-A'\
+    #  B'--C
+    # ABC and A'B'C can't be represented in blender if A/A' and B/B' are fused
+    # because they resolve to the same fused vertices
+
+    vtx_buf = mock_vertex_buffer([
+        v(1, 1, 0),  # A  0
+        v(0, 0, 0),  # B  1
+        v(2, 0, 0),  # C  2
+        v(1, 1, 0),  # A' 3
+        v(0, 0, 0),  # B' 4
+    ])
+    idx_buf = mock_idx_buffer([
+        0, 1, 2,  # ABC
+        2, 3, 4,  # A'B'C
+    ])
+
+    fused_idx_to_buf_idx, buf_idx_to_fused_idx, is_fused = fuse_adjacent_vertices([vtx_buf])
+    assert fused_idx_to_buf_idx == [
+        [(0, 0), (0, 3)],  # A/A'
+        [(0, 1), (0, 4)],  # B/B'
+        [(0, 2)],  # C
+    ]
+    assert buf_idx_to_fused_idx == [[
+        0,  # A
+        1,  # B
+        2,  # C
+        0,  # A' -> A
+        1,  # B' -> B
+    ]]
+    assert is_fused == [[
+        False,
+        False,
+        False,
+        True,
+        True
+    ]]
+
+    fully_fused_tri_set = detect_fully_fused_triangles(
+        [idx_buf],
+        fused_idx_to_buf_idx,
+        buf_idx_to_fused_idx
+    )
+    # Fully fused triangles: ABC/A'B'C
+    assert fully_fused_tri_set == {
+        (0, 1, 2): [(0, (0, 1, 2)), (0, (2, 3, 4))],
+    }
+
+
+# TODO more tests for solve_unfusion
+@pytest.mark.order(1)
+def test_complex_unfusion():
+    # Test the case of four vertices which would be fused, but are really in two layers:
+    #    AB
+    #    |
+    #   A'B'
+    #
+    # A/A' and B/B' should be unfused
+    # The outcome should be two groups, where no groups have A and A' or B and B'
+    vtx_buf = mock_vertex_buffer([
+        v(0, 0, 0),  # A
+        v(0, 0, 0),  # A'
+        v(0, 0, 0),  # B
+        v(0, 0, 0),  # B'
+    ])
+    old_fused_idx_to_buf_idx = [
+        [(0, 0), (0, 1), (0, 2), (0, 3)]
+    ]
+    unfuse_verts_with = {
+        (0, 0): {(0, 1)},
+        (0, 1): {(0, 0)},
+        (0, 2): {(0, 3)},
+        (0, 3): {(0, 2)},
+    }
+    fused_idx_to_buf_idx, _, _ = solve_unfusion([vtx_buf], old_fused_idx_to_buf_idx, unfuse_verts_with)
+    assert len(fused_idx_to_buf_idx) == 2
+    for fused_vert_group in fused_idx_to_buf_idx:
+        for vert in fused_vert_group:
+            for vert_prime in unfuse_verts_with[vert]:
+                assert vert_prime not in fused_vert_group
