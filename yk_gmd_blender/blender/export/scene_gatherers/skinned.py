@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict, Optional, cast, Tuple
 
@@ -18,6 +19,16 @@ from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 
 
+@dataclass(frozen=True)
+class GMDSkinnedSceneGathererConfig(GMDSceneGathererConfig):
+    # The maximum number of bones allowed per export.
+    # Must be a positive integer.
+    bone_limit: int
+
+    def __post_init__(self):
+        assert self.bone_limit > 0
+
+
 class SkinnedBoneMatrixOrigin(Enum):
     # Calculate bone matrices directly
     Calculate = 0
@@ -29,10 +40,11 @@ class SkinnedBoneMatrixOrigin(Enum):
 
 
 class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
+    config: GMDSkinnedSceneGathererConfig
     bone_matrix_origin: SkinnedBoneMatrixOrigin
     bone_name_map: Dict[str, GMDBone]
 
-    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSceneGathererConfig,
+    def __init__(self, filepath: str, original_scene: GMDScene, config: GMDSkinnedSceneGathererConfig,
                  bone_matrix_origin: SkinnedBoneMatrixOrigin, error: ErrorReporter):
         super().__init__(filepath, original_scene, config, error)
 
@@ -362,8 +374,8 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                     f"If you're absolutely sure that this material works for skinned meshes,"
                     f"check the 'Assume Skinned' box in the Yakuza Material Properties."
                 )
-            # bone_limit = -1 if (self.export_version == GMDVersion.Dragon) else 32
-            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map, 32,
+            gmd_meshes = split_skinned_blender_mesh_object(context, object, attribute_sets, self.bone_name_map,
+                                                           self.config.bone_limit,
                                                            self.error)
             for gmd_mesh in gmd_meshes:
                 gmd_object.add_mesh(gmd_mesh)
