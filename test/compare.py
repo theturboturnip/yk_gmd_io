@@ -246,6 +246,8 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
+                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
+                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
                     tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
                     tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
                     tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
@@ -273,6 +275,8 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
+                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
+                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
                     tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
                     tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
                     tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
