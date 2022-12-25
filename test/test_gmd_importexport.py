@@ -27,7 +27,7 @@ COMPARE_FILTER = {
         "static > node000152 > node000150 > node000148 > node000140 > node000141 > object1571 > "
         "attr set s_met_plan05_ig_d src (292 unique verts) and dst (288 unique verts) exact data differs",
     ],
-    ("y0", "c_at_kiryu.gmd"): [
+    ("y0-Skinned", "c_at_kiryu.gmd"): [
         # The leather shoes have the same issue as yk1 st_sera_dead - triangles that are effectively degenerate
         # whose vertices disappear
         "[l0]shoes_leather > attr set c_am_kiryu_shoes_di"
