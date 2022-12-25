@@ -3,7 +3,7 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic
 
 from mathutils import Vector
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
@@ -174,14 +174,18 @@ class VertSet:
         return self.len
 
 
-class FusedVertVoxelSet:
+TExact = TypeVar('TExact')
+TApprox = TypeVar('TApprox')
+
+
+class VertVoxelSet(Generic[TExact, TApprox]):
     """
     Class for storing sets of vertex data grouped into 3D voxels
     """
     # Mapping of (voxel centre) -> [vert_index for each vert in voxel]
     voxels: DefaultDict[Tuple[int, int, int], List[int]]
-    # List of (exact pos, exact normal, boneweights)
-    verts: List[Tuple[Vector, Vector, Tuple]]
+    # List of (pos, exact data, approx data)
+    verts: List[Tuple[Vector, TExact, TApprox]]
     voxel_size: float
 
     def __init__(self, voxel_size: float = 0.0001):
@@ -189,13 +193,13 @@ class FusedVertVoxelSet:
         self.voxel_size = voxel_size
         self.verts = []
 
-    def add(self, exact_pos: Vector, exact_norm: Vector, rounded_bw: Tuple):
+    def add(self, pos: Vector, exact: TExact, approx: TApprox):
         voxel = (
-            int(exact_pos.x / self.voxel_size), int(exact_pos.y / self.voxel_size), int(exact_pos.z / self.voxel_size))
+            int(pos.x / self.voxel_size), int(pos.y / self.voxel_size), int(pos.z / self.voxel_size))
         self.voxels[voxel].append(len(self.verts))
-        self.verts.append((exact_pos, exact_norm, rounded_bw))
+        self.verts.append((pos, exact, approx))
 
-    def check_one_to_one(self, other: 'FusedVertVoxelSet', pos_epsilon: float = 0.00001):
+    def check_fusions(self, other: 'VertVoxelSet', pos_epsilon: float = 0.00001):
         # AAAH
         # LJ kaito: src: 5483 post-fusion, dst: 6321 post-fusion
         # In LJ kaito, this manifests as creating multiple vertices on the same point that no longer fuse
@@ -214,8 +218,12 @@ class FusedVertVoxelSet:
         assert self.voxel_size == other.voxel_size
         assert self.voxel_size > pos_epsilon
 
-        has_no_equiv_in_other: List[Tuple[Vector, Vector, Tuple]] = []
-        was_unfused_in_other = []
+        # We always need to check at least 3x3x3=27 voxels per vertex to find vertices within pos_epsilon <= voxel_size,
+        # because the vertex could be right at the edge
+        # (if it was in the middle we could just use one, but we don't check)
+
+        has_no_equiv_in_other: List[Tuple[Vector, TExact, TApprox]] = []
+        too_many_equiv_in_other: List[Tuple[Vector, TExact, List[Tuple[int, TApprox]], List[Tuple[int, TApprox]]]] = []
 
         counted_other_verts: Set[int] = set()
         pos_epsilon_sqr = pos_epsilon ** 2
@@ -223,43 +231,45 @@ class FusedVertVoxelSet:
         for voxel_key, verts in self.voxels.items():
             other_search_space = [
                 (other_i, other.verts[other_i])
-                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1, voxel_key[0] + 2)
-                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1, voxel_key[1] + 2)
-                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1, voxel_key[2] + 2)
+                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1)
+                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1)
+                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1)
+                if (x, y, z) in other.voxels
                 for other_i in other.voxels[(x, y, z)]
             ]
             self_search_space = [
                 (self_i, self.verts[self_i])
-                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1, voxel_key[0] + 2)
-                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1, voxel_key[1] + 2)
-                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1, voxel_key[2] + 2)
+                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1)
+                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1)
+                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1)
                 if (x, y, z) in self.voxels
                 for self_i in self.voxels[(x, y, z)]
             ]
 
             for self_vert in verts:
-                self_v_pos, self_v_norm, self_v_rounded_bw = self.verts[self_vert]
+                self_pos, self_exact, self_approx = self.verts[self_vert]
 
                 potential_other_verts = [
-                    (other_fused_idx, tuple(round(n, 3) for n in other_norm) if other_norm else None, other_pos)
-                    for other_fused_idx, (other_pos, other_norm, other_rounded_bw) in other_search_space
-                    if other_rounded_bw == self_v_rounded_bw and
-                       (self_v_pos - other_pos).length_squared < pos_epsilon_sqr
+                    (fi, a)
+                    for fi, (p, e, a) in other_search_space
+                    if e == self_exact and
+                       (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
-                counted_other_verts.update(i for (i, _, _) in potential_other_verts)
+                counted_other_verts.update(i for (i, _) in potential_other_verts)
 
                 potential_self_verts = [
-                    (other_fused_idx, tuple(round(n, 3) for n in other_norm) if other_norm else None, other_pos)
-                    for other_fused_idx, (other_pos, other_norm, other_rounded_bw) in self_search_space
-                    if other_rounded_bw == self_v_rounded_bw and
-                       (self_v_pos - other_pos).length_squared < pos_epsilon_sqr
+                    (fi, a)
+                    for fi, (p, e, a) in self_search_space
+                    if e == self_exact and
+                       (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
+                assert len(potential_self_verts) > 0
 
                 if len(potential_other_verts) == 0:
-                    has_no_equiv_in_other.append((self_v_pos, self_v_norm, self_v_rounded_bw))
+                    has_no_equiv_in_other.append((self_pos, self_exact, self_approx))
                 elif len(potential_other_verts) > len(potential_self_verts):
-                    was_unfused_in_other.append(
-                        (self_v_pos, self_v_rounded_bw, potential_self_verts, potential_other_verts))
+                    too_many_equiv_in_other.append(
+                        (self_pos, self_exact, potential_self_verts, potential_other_verts))
 
         other_vs_with_no_equiv_in_self = [
             other.verts[other_i]
@@ -267,7 +277,7 @@ class FusedVertVoxelSet:
             if other_i not in counted_other_verts
         ]
 
-        return has_no_equiv_in_other, was_unfused_in_other, other_vs_with_no_equiv_in_self
+        return has_no_equiv_in_other, too_many_equiv_in_other, other_vs_with_no_equiv_in_self
 
     def __len__(self):
         return len(self.verts)
@@ -342,7 +352,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
 
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
-    def find_fusion_output_vs(ms: List[GMDMesh]) -> FusedVertVoxelSet:
+    def find_fusion_output_vs(ms: List[GMDMesh]) -> VertVoxelSet:
         unfused_vs: List[GMDVertexBuffer_Generic]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
@@ -350,7 +360,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
             unfused_vs = [m.vertices_data for m in ms]
         fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
 
-        all_verts = FusedVertVoxelSet()
+        all_verts: VertVoxelSet[Tuple, Optional[Tuple]] = VertVoxelSet()
         if skinned:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
@@ -364,8 +374,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                         if bw.weight > 0
                     ) if buf.bone_weights else nul_item,
                 )
-                norm = buf.normal[i].xyz if buf.normal else None
-                all_verts.add(exact_pos, norm, rounded_bw)
+                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                all_verts.add(exact_pos, rounded_bw, norm)
         else:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
@@ -376,8 +386,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                     tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
                     tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
                 )
-                norm = buf.normal[i].xyz if buf.normal else None
-                all_verts.add(exact_pos, norm, rounded_bw)
+                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                all_verts.add(exact_pos, rounded_bw, norm)
 
         return all_verts
 
@@ -388,7 +398,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
 
     # Compare the src fused set with the dst fused set
     (src_vs_with_no_equiv, src_vs_unfused_in_dst, dst_vs_with_no_equiv_in_src) = \
-        src_fused_vs.check_one_to_one(dst_fused_vs)
+        src_fused_vs.check_fusions(dst_fused_vs)
     if src_vs_with_no_equiv or src_vs_unfused_in_dst or dst_vs_with_no_equiv_in_src:
         src_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_vs_with_no_equiv), 5))
         n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _, _ in ss))
