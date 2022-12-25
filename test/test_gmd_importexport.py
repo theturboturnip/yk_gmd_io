@@ -3,17 +3,16 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import NoReturn, List, Optional
 
 import pytest
 
 import compare
 from conftest import GMDTest
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, StrictErrorReporter, ErrorReporter
+from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
 
 # Filter out specific fatal errors for specific files
 COMPARE_FILTER = {
-    "st_sera_dead.gmd": [
+    ("yk1_stage", "st_sera_dead.gmd"): [
         # box02 is a really weird mesh that has 5 vertices in the same place,
         # two of which participate in the same triangle (functionally a degenerate triangle)
         # and this message complains that some of those triangles don't survive. Boo hoo.
@@ -27,35 +26,14 @@ COMPARE_FILTER = {
         "attr set s_met_plan05_ig_d src (292 unique verts) and dst (288 unique verts) exact data differs",
         "static > node000152 > node000150 > node000148 > node000140 > node000141 > object1571 > "
         "attr set s_met_plan05_ig_d src (292 unique verts) and dst (288 unique verts) exact data differs",
+    ],
+    ("y0", "c_at_kiryu.gmd"): [
+        # The leather shoes have the same issue as yk1 st_sera_dead - triangles that are effectively degenerate
+        # whose vertices disappear
+        "[l0]shoes_leather > attr set c_am_kiryu_shoes_di"
+        "src (1202 unique verts) and dst (1192 unique verts) exact data differs"
     ]
 }
-
-
-class FilteredErrorReporter(ErrorReporter):
-    error: ErrorReporter
-    filtered_out_fatals: List[str]
-
-    def __init__(self, error: ErrorReporter, filtered_out_fatals: Optional[List[str]]):
-        self.error = error
-        self.filtered_out_fatals = filtered_out_fatals or []
-
-    def recoverable(self, msg: str):
-        self.error.recoverable(msg)
-
-    def fatal_exception(self, ex: Exception) -> NoReturn:
-        self.error.fatal_exception(ex)
-
-    def fatal(self, msg: str) -> NoReturn:
-        if any(msg.startswith(x) for x in self.filtered_out_fatals):
-            self.error.recoverable(f"Filtered out: {msg}")
-        else:
-            self.error.fatal(msg)
-
-    def info(self, msg: str):
-        self.error.info(msg)
-
-    def debug(self, category: str, msg: str) -> bool:
-        return self.error.debug(category, msg)
 
 
 @pytest.mark.order(10)
@@ -95,12 +73,12 @@ def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolat
 
     # Compare the import/export
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
-                          error=FilteredErrorReporter(LenientErrorReporter(allowed_categories=set()),
-                                                      COMPARE_FILTER.get(gmdtest.src.name)))
+                          error=LenientErrorReporter(allowed_categories=set()),
+                          strict=False, mismatch_filter=COMPARE_FILTER.get((gmdtest.src.parent.name, gmdtest.src.name)))
 
 
 @pytest.mark.order(20)
 def test_gmd_compare_strict(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
-                          error=FilteredErrorReporter(StrictErrorReporter(allowed_categories=set()),
-                                                      COMPARE_FILTER.get(gmdtest.src.name)))
+                          error=StrictErrorReporter(allowed_categories=set()),
+                          strict=True, mismatch_filter=COMPARE_FILTER.get((gmdtest.src.parent.name, gmdtest.src.name)))
