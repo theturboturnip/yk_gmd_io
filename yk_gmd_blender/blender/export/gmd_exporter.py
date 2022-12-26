@@ -2,13 +2,14 @@ import os
 
 from bpy.props import (StringProperty,
                        BoolProperty,
-                       EnumProperty)
+                       EnumProperty, IntProperty)
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.export.scene_gatherers.base import GMDSceneGathererConfig
-from yk_gmd_blender.blender.export.scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer
+from yk_gmd_blender.blender.export.scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer, \
+    GMDSkinnedSceneGathererConfig
 from yk_gmd_blender.blender.export.scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
 from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
@@ -94,6 +95,17 @@ class ExportSkinnedGMD(BaseExportGMD):
                                      ],
                                      default="FROM_TARGET_FILE")
 
+    autodetect_bone_limit: BoolProperty(name="Autodetect Bone Limit",
+                                        description="Automatically find the maximum amount of bones per mesh.\n"
+                                                    "Pre-DE games have at most 32 bones per mesh, the addon splits\n"
+                                                    "meshes up to stay within this. DE doesn't have a known limit,\n"
+                                                    "but we use 256 to be on the safe side.",
+                                        default=True)
+    manual_bone_limit: IntProperty(name="Manual Bone Limit",
+                                   description="Set the maximum bone count manually.\nUse at your own risk!",
+                                   default=32,
+                                   min=1)
+
     # TODO - dry run feature
     #  when set, instead of exporting it will open a window with a report on what would be exported
 
@@ -110,6 +122,21 @@ class ExportSkinnedGMD(BaseExportGMD):
 
         layout.prop(self, 'bone_matrix_origin')
         layout.prop(self, 'debug_compare_matrices')
+        layout.prop(self, 'autodetect_bone_limit')
+        if not self.autodetect_bone_limit:
+            layout.prop(self, 'manual_bone_limit')
+
+    def create_skinned_gmd_config(
+            self, gmd_version: VersionProperties, error: BlenderErrorReporter
+    ) -> GMDSkinnedSceneGathererConfig:
+        base_config = self.create_gmd_config(gmd_version, error)
+        if self.autodetect_bone_limit:
+            bone_limit = 256 if (base_config.game & GMDGame.Engine_Dragon) else 32
+        else:
+            bone_limit = 32 if self.manual_bone_limit <= 0 else self.manual_bone_limit
+        return GMDSkinnedSceneGathererConfig(game=base_config.game,
+                                             debug_compare_matrices=base_config.debug_compare_matrices,
+                                             bone_limit=bone_limit)
 
     def execute(self, context):
         error = self.create_logger()
@@ -123,7 +150,7 @@ class ExportSkinnedGMD(BaseExportGMD):
 
             error.info(f"Reading original file properties {filepath}")
             gmd_version, gmd_header, gmd_contents = read_gmd_structures(filepath, error)
-            gmd_config = self.create_gmd_config(gmd_version, error)
+            gmd_config = self.create_skinned_gmd_config(gmd_version, error)
             check_version_writeable(gmd_version, error)
 
             bone_matrix_origin = {
