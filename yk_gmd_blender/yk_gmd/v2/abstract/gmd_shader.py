@@ -77,10 +77,10 @@ class VecStorage:
     def transform_native_fmt_array(self, src: np.ndarray) -> np.ndarray:
         expected_dtype = self.comp_fmt.numpy_transformed_dtype()
         if self.comp_fmt in [VecCompFmt.Byte_0_255, VecCompFmt.Float16, VecCompFmt.Float32]:
-            if src.dtype == expected_dtype:  # If the byte order is the same, passthru
-                return src
-            else:  # else make a copy with transformed byte order
-                return src.astype(expected_dtype, casting='equiv')
+            # Always make a copy, even if the byte order is the same as we want.
+            # The Blender side wants to do bone remapping etc. so we want a mutable version.
+            # src is backed by `bytes` -> is immutable.
+            return src.astype(expected_dtype, casting='equiv', copy=True)
         elif self.comp_fmt == VecCompFmt.Byte_0_1:
             # src must have dtype == vector of uint8
             # it's always safe to cast uint8 -> float16 and float32, they can represent all values
@@ -240,17 +240,17 @@ class GMDVertexBuffer_Generic(Sized):
         return GMDVertexBuffer_Generic(
             layout=self.layout,
 
-            pos=self.pos[item],
+            pos=self.pos[item].copy(),
 
-            weight_data=self.weight_data[item] if self.weight_data is not None else None,
-            bone_data=self.bone_data[item] if self.bone_data is not None else None,
-            normal=self.normal[item] if self.normal is not None else None,
-            tangent=self.tangent[item] if self.tangent is not None else None,
-            unk=self.unk[item] if self.unk is not None else None,
-            col0=self.col0[item] if self.col0 is not None else None,
-            col1=self.col1[item] if self.col1 is not None else None,
+            weight_data=self.weight_data[item].copy() if self.weight_data is not None else None,
+            bone_data=self.bone_data[item].copy() if self.bone_data is not None else None,
+            normal=self.normal[item].copy() if self.normal is not None else None,
+            tangent=self.tangent[item].copy() if self.tangent is not None else None,
+            unk=self.unk[item].copy() if self.unk is not None else None,
+            col0=self.col0[item].copy() if self.col0 is not None else None,
+            col1=self.col1[item].copy() if self.col1 is not None else None,
             uvs=[
-                uv[item]
+                uv[item].copy()
                 for uv in self.uvs
             ],
         )
@@ -322,17 +322,17 @@ class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
         return GMDVertexBuffer_Generic(
             layout=self.layout,
 
-            pos=self.pos[:],
+            pos=self.pos.copy(),
 
-            bone_data=self.bone_data[:],
-            weight_data=self.weight_data[:],
-            normal=self.normal[:] if self.normal is not None else None,
-            tangent=self.tangent[:] if self.tangent is not None else None,
-            unk=self.unk[:] if self.unk is not None else None,
-            col0=self.col0[:] if self.col0 is not None else None,
-            col1=self.col1[:] if self.col1 is not None else None,
+            bone_data=self.bone_data.copy(),
+            weight_data=self.weight_data.copy(),
+            normal=self.normal.copy() if self.normal is not None else None,
+            tangent=self.tangent.copy() if self.tangent is not None else None,
+            unk=self.unk.copy() if self.unk is not None else None,
+            col0=self.col0.copy() if self.col0 is not None else None,
+            col1=self.col1.copy() if self.col1 is not None else None,
             uvs=[
-                uv[:]
+                uv.copy()
                 for uv in self.uvs
             ],
         )
@@ -353,18 +353,18 @@ class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
         return GMDVertexBuffer_Skinned(
             layout=self.layout,
 
-            pos=self.pos[item],
+            pos=self.pos[item].copy(),
 
-            bone_weights=self.bone_weights[item],
-            bone_data=self.bone_data[item],
-            weight_data=self.weight_data[item],
-            normal=self.normal[item] if self.normal is not None else None,
-            tangent=self.tangent[item] if self.tangent is not None else None,
-            unk=self.unk[item] if self.unk is not None else None,
-            col0=self.col0[item] if self.col0 is not None else None,
-            col1=self.col1[item] if self.col1 is not None else None,
+            bone_weights=self.bone_weights[item].copy(),
+            bone_data=self.bone_data[item].copy(),
+            weight_data=self.weight_data[item].copy(),
+            normal=self.normal[item].copy() if self.normal is not None else None,
+            tangent=self.tangent[item].copy() if self.tangent is not None else None,
+            unk=self.unk[item].copy() if self.unk is not None else None,
+            col0=self.col0[item].copy() if self.col0 is not None else None,
+            col1=self.col1[item].copy() if self.col1 is not None else None,
             uvs=[
-                uv[item]
+                uv[item].copy()
                 for uv in self.uvs
             ],
         )
@@ -402,7 +402,6 @@ class GMDVertexBufferLayout:
 
     def __str__(self):
         return f"GMDVertexBufferLayout(\n" \
-               f"big_endian: {self.big_endian},\n" \
                f"assume_skinned: {self.assume_skinned},\n" \
                f"packing_flags: {self.packing_flags:016x},\n" \
                f"\n" \

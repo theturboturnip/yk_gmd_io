@@ -1,7 +1,7 @@
 from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
@@ -54,11 +54,11 @@ def gmd_meshes_to_bmesh(
 
     # Add a single vertex's (position, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
-        vert = bm.verts.new(gmd_to_blender_world @ buf.pos[i].xyz)
-        if buf.normal:
+        vert = bm.verts.new(gmd_to_blender_world @ Vector(buf.pos[i][:3]))
+        if buf.normal is not None:
             # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
             # Just using .xyz would make blender apply a translation
-            vert.normal = (gmd_to_blender_world @ (buf.normal[i].xyz.resized(4))).xyz
+            vert.normal = (gmd_to_blender_world @ (Vector(buf.normal[i][:3]).resized(4))).xyz
         if deform:
             for bone_weight in buf.bone_weights[i]:
                 if bone_weight.weight > 0:
@@ -160,29 +160,29 @@ def gmd_meshes_to_bmesh(
                 assert gmd_mesh.vertices_data.col0 is not None
                 for (v_i, loop) in zip(tri_idxs, face.loops):
                     color = gmd_mesh.vertices_data.col0[v_i]
-                    loop[layers.col0_layer] = (color.x, color.y, color.z, color.w)
+                    loop[layers.col0_layer] = color
 
             if layers.col1_layer:
                 assert gmd_mesh.vertices_data.col1 is not None
                 for (v_i, loop) in zip(tri_idxs, face.loops):
                     color = gmd_mesh.vertices_data.col1[v_i]
-                    loop[layers.col1_layer] = (color.x, color.y, color.z, color.w)
+                    loop[layers.col1_layer] = color
 
             if layers.weight_data_layer:
                 for (v_i, loop) in zip(tri_idxs, face.loops):
                     weight = gmd_mesh.vertices_data.weight_data[v_i]
-                    loop[layers.weight_data_layer] = (weight.x, weight.y, weight.z, weight.w)
+                    loop[layers.weight_data_layer] = weight
 
             if layers.bone_data_layer:
                 for (v_i, loop) in zip(tri_idxs, face.loops):
                     # Divide by 255 to scale to 0..1
                     bones = gmd_mesh.vertices_data.bone_data[v_i] / 255
-                    loop[layers.bone_data_layer] = (bones.x, bones.y, bones.z, bones.w)
+                    loop[layers.bone_data_layer] = bones
 
             if layers.normal_w_layer:
                 assert gmd_mesh.vertices_data.normal is not None
                 for (v_i, loop) in zip(tri_idxs, face.loops):
-                    normal_w = gmd_mesh.vertices_data.normal[v_i].w
+                    normal_w = gmd_mesh.vertices_data.normal[v_i][3]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
                     loop[layers.normal_w_layer] = ((normal_w + 1) / 2, 0, 0, 0)
@@ -199,7 +199,7 @@ def gmd_meshes_to_bmesh(
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
                 for (v_i, loop) in zip(tri_idxs, face.loops):
-                    tangent_w = gmd_mesh.vertices_data.tangent[v_i].w
+                    tangent_w = gmd_mesh.vertices_data.tangent[v_i][3]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
                     loop[layers.tangent_w_layer] = ((tangent_w + 1) / 2, 0, 0, 0)
@@ -208,11 +208,11 @@ def gmd_meshes_to_bmesh(
                 if uv_componentcount == 2:
                     for (v_i, loop) in zip(tri_idxs, face.loops):
                         original_uv = gmd_mesh.vertices_data.uvs[uv_i][v_i]
-                        loop[uv_layer].uv = (original_uv.x, 1.0 - original_uv.y)
+                        loop[uv_layer].uv = (original_uv[0], 1.0 - original_uv[1])
                 else:
                     for (v_i, loop) in zip(tri_idxs, face.loops):
                         original_uv = gmd_mesh.vertices_data.uvs[uv_i][v_i]
-                        loop[uv_layer] = original_uv.resized(4)
+                        loop[uv_layer] = Vector(original_uv).resized(4)
                         if any(x < 0 or x > 1 for x in original_uv):
                             error.recoverable(f"Data in UV{uv_i} is outside the range of values Blender can store. "
                                               f"Expected values between 0 and 1, got {original_uv}")

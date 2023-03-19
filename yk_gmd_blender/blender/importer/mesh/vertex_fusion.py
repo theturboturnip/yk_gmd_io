@@ -176,10 +176,10 @@ def fuse_adjacent_vertices(
     for i_buf, buf in enumerate(vertices):
         for i in range(len(buf)):
             vert_info = (
-                buf.pos[i].xyz.copy().freeze(),
-                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
-                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
-                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
+                Vector(buf.pos[i][:3]).freeze(),
+                Vector(buf.normal[i][:3]).freeze() if buf.normal is not None else None,
+                Vector(buf.bone_data[i]).freeze() if buf.bone_data is not None else None,
+                Vector(buf.weight_data[i]).freeze() if buf.weight_data is not None else None,
             )
             if vert_info in vert_indices:
                 # Fuse this into a previous vertex
