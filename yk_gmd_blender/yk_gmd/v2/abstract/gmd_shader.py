@@ -2,12 +2,19 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List, Sized, Iterable, Set, overload
 
+import numpy as np
+
 from mathutils import Vector
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, U8ConverterPrimitive, \
     c_u8_Minus1_1
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker_of, Vec4Unpacker_of
+
+LITTLE_ENDIAN_F16 = np.dtype("<f2")
+BIG_ENDIAN_F16 = np.dtype(">f2")
+LITTLE_ENDIAN_F32 = np.dtype("<f4")
+BIG_ENDIAN_F32 = np.dtype(">f4")
 
 
 class VecCompFmt(Enum):
@@ -26,6 +33,23 @@ class VecCompFmt(Enum):
             return 4
         raise RuntimeError(f"Nonexistent VecCompFmt called size_bytes: {self}")
 
+    def numpy_native_dtype(self, big_endian: bool):
+        if self in [VecCompFmt.Byte_0_1, VecCompFmt.Byte_Minus1_1, VecCompFmt.Byte_0_255]:
+            return np.uint8
+        elif self == VecCompFmt.Float16:
+            return BIG_ENDIAN_F16 if big_endian else LITTLE_ENDIAN_F16
+        elif self == VecCompFmt.Float32:
+            return BIG_ENDIAN_F32 if big_endian else LITTLE_ENDIAN_F32
+        raise RuntimeError(f"Nonexistent VecCompFmt called numpy_native_dtype: {self}")
+
+    def numpy_transformed_dtype(self):
+        if self == VecCompFmt.Byte_0_255:
+            return np.uint8
+        elif self == VecCompFmt.Float16:
+            return np.float16
+        else:
+            return np.float32
+
 
 @dataclass(frozen=True)
 class VecStorage:
@@ -37,6 +61,62 @@ class VecStorage:
 
     def size_bytes(self):
         return self.comp_fmt.size_bytes() * self.n_comps
+
+    def numpy_native_dtype(self, big_endian: bool):
+        return np.dtype((self.comp_fmt.numpy_native_dtype(big_endian), self.n_comps))
+
+    def numpy_transformed_dtype(self):
+        return np.dtype((self.comp_fmt.numpy_transformed_dtype(), self.n_comps))
+
+    def preallocate(self, n_vertices: int) -> np.ndarray:
+        return np.zeros(
+            n_vertices,
+            dtype=self.numpy_transformed_dtype(),
+        )
+
+    def transform_native_fmt_array(self, src: np.ndarray) -> np.ndarray:
+        expected_dtype = self.comp_fmt.numpy_transformed_dtype()
+        if self.comp_fmt in [VecCompFmt.Byte_0_255, VecCompFmt.Float16, VecCompFmt.Float32]:
+            if src.dtype == expected_dtype:  # If the byte order is the same, passthru
+                return src
+            else:  # else make a copy with transformed byte order
+                return src.astype(expected_dtype, casting='equiv')
+        elif self.comp_fmt == VecCompFmt.Byte_0_1:
+            # src must have dtype == vector of uint8
+            # it's always safe to cast uint8 -> float16 and float32, they can represent all values
+            data = src.astype(expected_dtype, casting='safe')
+            # (0, 255) -> (0, 1) by dividing by 255
+            data = data / 255.0
+            return data
+        elif self.comp_fmt == VecCompFmt.Byte_Minus1_1:
+            # src must have dtype == vector of uint8
+            # it's always safe to cast uint8 -> float16 and float32, they can represent all values
+            data = src.astype(expected_dtype, casting='safe')
+            # (0, 255) -> (0, 1) by dividing by 255
+            # (0, 1) -> (-1, 1) by multiplying by 2, subtracting 1
+            data = ((data / 255.0) * 2.0) - 1.0
+            return data
+        raise RuntimeError(f"Invalid VecStorage called transform_native_fmt_array: {self}")
+
+    def untransform_array(self, big_endian: bool, transformed: np.ndarray) -> np.ndarray:
+        expected_dtype = self.comp_fmt.numpy_native_dtype(big_endian)
+        if self.comp_fmt in [VecCompFmt.Byte_0_255, VecCompFmt.Float16, VecCompFmt.Float32]:
+            if transformed.dtype == expected_dtype:  # If the byte order is the same, passthru
+                return transformed
+            else:  # else make a copy with transformed byte order
+                return transformed.astype(expected_dtype, casting='equiv')
+        elif self.comp_fmt == VecCompFmt.Byte_0_1:
+            # (0, 1) -> (0, 255) by multiplying by 255
+            data = transformed * 255.0
+            # storage = float, casting to int cannot preserve values -> use 'unsafe'
+            return data.astype(expected_dtype, casting='unsafe')
+        elif self.comp_fmt == VecCompFmt.Byte_Minus1_1:
+            # (-1, 1) to (0, 1) by adding 1, dividing by 2
+            # (0, 1) to (0, 255) by multiplying by 255
+            data = ((transformed + 1.0) / 2.0) * 255.0
+            # storage = float, casting to int cannot preserve values -> use 'unsafe'
+            return data.astype(expected_dtype, casting='unsafe')
+        raise RuntimeError(f"Invalid VecStorage called transform_native_fmt_array: {self}")
 
 
 vector_unpackers = {
@@ -92,39 +172,34 @@ BoneWeight4 = Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]
 class GMDVertexBuffer_Generic(Sized):
     layout: 'GMDVertexBufferLayout'
 
-    pos: List[Vector]
-    weight_data: Optional[List[Vector]]
-    bone_data: Optional[List[Vector]]
-    normal: Optional[List[Vector]]
-    tangent: Optional[List[Vector]]
-    unk: Optional[List[Vector]]
-    col0: Optional[List[Vector]]
-    col1: Optional[List[Vector]]
-    uvs: List[List[Vector]]
+    pos: np.ndarray
+    weight_data: Optional[np.ndarray]
+    bone_data: Optional[np.ndarray]
+    normal: Optional[np.ndarray]
+    tangent: Optional[np.ndarray]
+    unk: Optional[np.ndarray]
+    col0: Optional[np.ndarray]
+    col1: Optional[np.ndarray]
+    uvs: List[np.ndarray]
 
     @staticmethod
     def build_empty(layout: 'GMDVertexBufferLayout', count: int):
-        # TODO: Right now, this pre-allocates lists of None-s which are filled in with Vector-s later.
-        # This prevents constant re-allocating when we grow the list.
-        # This is still inefficient tho, as each Vector we create is a heap allocation (potentially with a C FFI?)
-        # Unfortunately, because we're using the super-generic unpacking setup we can't resolve this easily.
-        # This should be changed to use numpy or similar for a big performance boost, but this is out-of-scope for now.
-        alloc_for_type = lambda field_type: [None] * count if field_type else None
+        alloc_storage = lambda storage: storage.preallocate(count) if storage else None
         return GMDVertexBuffer_Generic(
             layout=layout,
 
-            pos=[None] * count,
+            pos=layout.pos_storage.preallocate(count),
 
-            weight_data=alloc_for_type(layout.weights_unpacker),
-            bone_data=alloc_for_type(layout.bones_unpacker),
-            normal=alloc_for_type(layout.normal_unpacker),
-            tangent=alloc_for_type(layout.tangent_unpacker),
-            unk=alloc_for_type(layout.unk_unpacker),
-            col0=alloc_for_type(layout.col0_unpacker),
-            col1=alloc_for_type(layout.col1_unpacker),
+            weight_data=alloc_storage(layout.weights_storage),
+            bone_data=alloc_storage(layout.bones_storage),
+            normal=alloc_storage(layout.normal_storage),
+            tangent=alloc_storage(layout.tangent_storage),
+            unk=alloc_storage(layout.unk_storage),
+            col0=alloc_storage(layout.col0_storage),
+            col1=alloc_storage(layout.col1_storage),
             uvs=[
-                [None] * count
-                for t in layout.uv_unpackers
+                alloc_storage(s)
+                for s in layout.uv_storages
             ],
         )
 
@@ -217,7 +292,7 @@ class GMDVertexBuffer_Generic(Sized):
             ],
         )
 
-        self.pos = []
+        self.pos = np.asarray([])
         self.bone_data = None
         self.weight_data = None
         self.normal = None
@@ -240,8 +315,8 @@ class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
 
     bone_weights: List[BoneWeight4]
     # Individual bone,weight datas are still here, but must not be None
-    weight_data: List[Vector]
-    bone_data: List[Vector]
+    weight_data: np.ndarray
+    bone_data: np.ndarray
 
     def copy_as_generic(self) -> GMDVertexBuffer_Generic:
         return GMDVertexBuffer_Generic(
@@ -327,6 +402,7 @@ class GMDVertexBufferLayout:
 
     def __str__(self):
         return f"GMDVertexBufferLayout(\n" \
+               f"big_endian: {self.big_endian},\n" \
                f"assume_skinned: {self.assume_skinned},\n" \
                f"packing_flags: {self.packing_flags:016x},\n" \
                f"\n" \
@@ -526,6 +602,7 @@ class GMDVertexBufferLayout:
 
             packing_flags: int,
     ):
+
         return GMDVertexBufferLayout(
             assume_skinned=assume_skinned,
 
@@ -552,50 +629,67 @@ class GMDVertexBufferLayout:
             packing_flags=packing_flags,
         )
 
+    def numpy_dtype(self, big_endian: bool) -> np.dtype:
+        names = ["pos"]
+        formats = [self.pos_storage.numpy_native_dtype(big_endian)]
+        offsets = [0]
+        curr_offset = self.pos_storage.size_bytes()
+
+        def register_storage(name: str, storage: Optional[VecStorage]):
+            nonlocal curr_offset
+            if storage:
+                names.append(name)
+                formats.append(storage.numpy_native_dtype(big_endian))
+                offsets.append(curr_offset)
+                curr_offset += storage.size_bytes()
+
+        register_storage("weights", self.weights_storage)
+        register_storage("bones", self.bones_storage)
+        register_storage("normal", self.normal_storage)
+        register_storage("tangent", self.tangent_storage)
+        register_storage("unk", self.unk_storage)
+        register_storage("col0", self.col0_storage)
+        register_storage("col1", self.col1_storage)
+        for i, uv_storage in enumerate(self.uv_storages):
+            register_storage(f"uv{i}", uv_storage)
+
+        return np.dtype({
+            "names": names,
+            "formats": formats,
+            "offsets": offsets
+        })
+
     def bytes_per_vertex(self) -> int:
-        size = 0
-        size += self.pos_unpacker.sizeof()
-        if self.weights_unpacker:
-            size += self.weights_unpacker.sizeof()
-        if self.bones_unpacker:
-            size += self.bones_unpacker.sizeof()
-        if self.normal_unpacker:
-            size += self.normal_unpacker.sizeof()
-        if self.tangent_unpacker:
-            size += self.tangent_unpacker.sizeof()
-        if self.unk_unpacker:
-            size += self.unk_unpacker.sizeof()
-        if self.col0_unpacker:
-            size += self.col0_unpacker.sizeof()
-        if self.col1_unpacker:
-            size += self.col1_unpacker.sizeof()
-        for uv_unpacker in self.uv_unpackers:
-            size += uv_unpacker.sizeof()
-        return size
+        return self.numpy_dtype(False).itemsize
 
     def unpack_from(self, big_endian: bool, vertex_count: int,
                     data: bytes, offset: int) -> Tuple[GMDVertexBuffer_Generic, int]:
-        vertices: GMDVertexBuffer_Generic = GMDVertexBuffer_Generic.build_empty(self, vertex_count)
+        numpy_dtype = self.numpy_dtype(big_endian)
+        vertices_np = np.frombuffer(data, numpy_dtype, count=vertex_count, offset=offset)
+        offset += vertex_count * numpy_dtype.itemsize
 
-        for i in range(vertex_count):
-            # unpack() returns the unpacked value and offset + size, so incrementing offset is done in one line
-            vertices.pos[i], offset = self.pos_unpacker.unpack(big_endian, data, offset)
-            if self.weights_unpacker:
-                vertices.weight_data[i], offset = self.weights_unpacker.unpack(big_endian, data, offset)
-            if self.bones_unpacker:
-                vertices.bone_data[i], offset = self.bones_unpacker.unpack(big_endian, data, offset)
-            if self.normal_unpacker:
-                vertices.normal[i], offset = self.normal_unpacker.unpack(big_endian, data, offset)
-            if self.tangent_unpacker:
-                vertices.tangent[i], offset = self.tangent_unpacker.unpack(big_endian, data, offset)
-            if self.unk_unpacker:
-                vertices.unk[i], offset = self.unk_unpacker.unpack(big_endian, data, offset)
-            if self.col0_unpacker:
-                vertices.col0[i], offset = self.col0_unpacker.unpack(big_endian, data, offset)
-            if self.col1_unpacker:
-                vertices.col1[i], offset = self.col1_unpacker.unpack(big_endian, data, offset)
-            for uv_idx, uv_unpacker in enumerate(self.uv_unpackers):
-                vertices.uvs[uv_idx][i], offset = uv_unpacker.unpack(big_endian, data, offset)
+        def transform_storage_array(name: str, storage: Optional[VecStorage]):
+            nonlocal vertices_np
+            if storage is None:
+                return None
+            return storage.transform_native_fmt_array(vertices_np[name])
+
+        vertices: GMDVertexBuffer_Generic = GMDVertexBuffer_Generic(
+            layout=self,
+
+            pos=self.pos_storage.transform_native_fmt_array(vertices_np["pos"]),
+            weight_data=transform_storage_array("weights", self.weights_storage),
+            bone_data=transform_storage_array("bones", self.bones_storage),
+            normal=transform_storage_array("normal", self.normal_storage),
+            tangent=transform_storage_array("tangent", self.tangent_storage),
+            unk=transform_storage_array("unk", self.unk_storage),
+            col0=transform_storage_array("col0", self.col0_storage),
+            col1=transform_storage_array("col1", self.col1_storage),
+            uvs=[
+                transform_storage_array(f"uv{i}", s)
+                for (i, s) in enumerate(self.uv_storages)
+            ]
+        )
 
         return vertices, offset
 
