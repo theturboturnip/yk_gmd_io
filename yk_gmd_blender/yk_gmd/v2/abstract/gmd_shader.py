@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple, List, Sized, Iterable
+from typing import Optional, Tuple, List, Sized, Iterable, Set, overload
 
 from mathutils import Vector
 from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
@@ -10,64 +10,68 @@ from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker_of, Vec4Unpacker_of
 
 
-# TODO: Rename to HLSL-style (ubyte4, float2, float3, float4, half2 etc.)
-class VecStorage(Enum):
-    Vec4Fixed = 1
-    Vec2Full = 2
-    Vec3Full = 3
-    Vec4Full = 4
-    Vec2Half = 5
-    Vec3Half = 6
-    Vec4Half = 7
+class VecCompFmt(Enum):
+    Byte_0_1 = 0  # Fixed-point byte representation scaled between 0 and 1
+    Byte_Minus1_1 = 1  # Fixed-point byte representation scaled between -1 and 1
+    Byte_0_255 = 2  # Raw byte value, 0 to 255
+    Float16 = 3  # 16-bit IEEE float
+    Float32 = 4  # 32-bit IEEE float
 
-    @staticmethod
-    def component_count(val: 'VecStorage'):
-        if val in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
-            return 4
-        elif val in [VecStorage.Vec3Half, VecStorage.Vec3Full]:
-            return 3
-        else:
+    def size_bytes(self):
+        if self in [VecCompFmt.Byte_0_1, VecCompFmt.Byte_Minus1_1, VecCompFmt.Byte_0_255]:
+            return 1
+        elif self == VecCompFmt.Float16:
             return 2
+        elif self == VecCompFmt.Float32:
+            return 4
+        raise RuntimeError(f"Nonexistent VecCompFmt called size_bytes: {self}")
 
 
-class FixedConvertMethod(Enum):
-    To0_1 = 0
-    ToMinus1_1 = 1
-    ToByte = 2
+@dataclass(frozen=True)
+class VecStorage:
+    comp_fmt: VecCompFmt
+    n_comps: int
+
+    def __post_init__(self):
+        assert 1 <= self.n_comps <= 4
+
+    def size_bytes(self):
+        return self.comp_fmt.size_bytes() * self.n_comps
 
 
 vector_unpackers = {
-    VecStorage.Vec2Full: ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float32, 2), forwards=Vector,
-                                      backwards=list),
-    VecStorage.Vec3Full: Vec3Unpacker_of(c_float32),
-    VecStorage.Vec4Full: Vec4Unpacker_of(c_float32),
+    (2, VecCompFmt.Float32): ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float32, 2), forwards=Vector,
+                                          backwards=list),
+    (3, VecCompFmt.Float32): Vec3Unpacker_of(c_float32),
+    (4, VecCompFmt.Float32): Vec4Unpacker_of(c_float32),
 
-    VecStorage.Vec2Half: ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float16, 2), forwards=Vector,
-                                      backwards=list),
-    VecStorage.Vec3Half: Vec3Unpacker_of(c_float16),
-    VecStorage.Vec4Half: Vec4Unpacker_of(c_float16),
-}
+    (2, VecCompFmt.Float16): ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float16, 2), forwards=Vector,
+                                          backwards=list),
+    (3, VecCompFmt.Float16): Vec3Unpacker_of(c_float16),
+    (4, VecCompFmt.Float16): Vec4Unpacker_of(c_float16),
 
-vec4fixed_unpackers = {
-    FixedConvertMethod.To0_1: Vec4Unpacker_of(c_unorm8),
-    FixedConvertMethod.ToMinus1_1: Vec4Unpacker_of(c_u8_Minus1_1),
+    (4, VecCompFmt.Byte_0_1): Vec4Unpacker_of(c_unorm8),
+    (4, VecCompFmt.Byte_Minus1_1): Vec4Unpacker_of(c_u8_Minus1_1),
     # We store bone_data in a Vector, which stores components as floats
     # Just using Vec4Unpacker_of(c_uint8) requires the incoming data to be int
     # Instead, use an identity RangeConverterPrimitive to convert it to float without changing the underlying value.
     # Can still be cast to int if needed, as in BoneWeight.
-    FixedConvertMethod.ToByte: Vec4Unpacker_of(U8ConverterPrimitive(to_range=(0., 255.0)))
+    (4, VecCompFmt.Byte_0_255): Vec4Unpacker_of(U8ConverterPrimitive(to_range=(0., 255.0)))
 }
 
 
-def make_vector_unpacker(vec_type: VecStorage, byte_convert: Optional[FixedConvertMethod] = None) \
-        -> BaseUnpacker[Vector]:
-    if vec_type == VecStorage.Vec4Fixed:
-        if not byte_convert:
-            print(f"Field had vec_type = Vec4Fixed but gave no byte_convert, assuming ToByte")
-            byte_convert = FixedConvertMethod.ToByte
-        return vec4fixed_unpackers[byte_convert]
-    else:
-        return vector_unpackers[vec_type]
+@overload
+def make_vector_unpacker(vec_type: VecStorage) -> BaseUnpacker[Vector]: ...
+
+
+@overload
+def make_vector_unpacker(vec_type: None) -> None: ...
+
+
+def make_vector_unpacker(vec_type: Optional[VecStorage]) -> Optional[BaseUnpacker[Vector]]:
+    if vec_type is None:
+        return None
+    return vector_unpackers[(vec_type.n_comps, vec_type.comp_fmt)]
 
 
 # This is effectively a primitive
@@ -321,14 +325,10 @@ class GMDVertexBufferLayout:
 
     packing_flags: int
 
-    def __post_init__(self):
-        if not self.pos_unpacker:
-            raise TypeError(f"VertexBufferLayout claims to not have vertex positions!")
-
     def __str__(self):
         return f"GMDVertexBufferLayout(\n" \
                f"assume_skinned: {self.assume_skinned},\n" \
-               f"packing_flags: {self.packing_flags:x},\n" \
+               f"packing_flags: {self.packing_flags:016x},\n" \
                f"\n" \
                f"pos: {self.pos_storage},\n" \
                f"weights: {self.weights_storage},\n" \
@@ -347,7 +347,7 @@ class GMDVertexBufferLayout:
         # This derived from the 010 template
         # Bit-checking logic - keep track of the bits we examine, to ensure we don't miss anything
         if checked:
-            touched_packing_bits = set()
+            touched_packing_bits: Set[int] = set()
 
             def touch_bits(bit_indices: Iterable[int]):
                 touched_bits = set(bit_indices)
@@ -358,62 +358,81 @@ class GMDVertexBufferLayout:
             def touch_bits(bit_indices: Iterable[int]):
                 pass
 
+        # Helper for extracting a bitrange start:length and marking those bits as touched.
         def extract_bits(start, length):
             touch_bits(range(start, start + length))
 
             # Extract bits by shifting down to start and generating a mask of `length` 1's in binary
+            # TODO that is the worst possible way to generate that mask.
             return (vertex_packing_flags >> start) & int('1' * length, 2)
 
+        # Helper for extracting a bitmask and marking those bits as touched.
         def extract_bitmask(bitmask):
             touch_bits([i for i in range(32) if ((bitmask >> i) & 1)])
 
             return vertex_packing_flags & bitmask
 
-        def extract_vector_type(en: bool, start: int, expected_full_precision: VecStorage) -> Optional[VecStorage]:
+        # If the given vector type is `en`abled, extract the bits start:start+2 and find the VecStorage they refer to.
+        # If the vector uses full-precision float components, the length is set by `full_precision_n_comps`.
+        # If the vector uses byte-size components, the format of those bytes is set by `byte_fmt`.
+        def extract_vector_type(en: bool, start: int,
+                                full_precision_n_comps: int, byte_fmt: VecCompFmt) -> Optional[VecStorage]:
             bits = extract_bits(start, 2)
             if en:
                 if bits == 0:
-                    return expected_full_precision
+                    # Float32
+                    comp_fmt = VecCompFmt.Float32
+                    n_comps = full_precision_n_comps
                 elif bits == 1:
-                    return VecStorage.Vec4Half
+                    # Float16
+                    comp_fmt = VecCompFmt.Float16
+                    n_comps = 4
                 else:
-                    return VecStorage.Vec4Fixed
+                    # Some kind of fixed
+                    comp_fmt = byte_fmt
+                    n_comps = 4
+                return VecStorage(comp_fmt, n_comps)
             else:
                 return None
 
         # pos can be (3 or 4) * (half or full) floats
         pos_count = extract_bits(0, 3)
         pos_precision = extract_bits(3, 1)
-        if pos_precision == 1:
-            pos_storage = VecStorage.Vec3Half if pos_count == 3 else VecStorage.Vec4Half
-        else:
-            pos_storage = VecStorage.Vec3Full if pos_count == 3 else VecStorage.Vec4Full
+        pos_storage = VecStorage(
+            comp_fmt=VecCompFmt.Float16 if pos_precision == 1 else VecCompFmt.Float32,
+            n_comps=3 if pos_count == 3 else 4
+        )
 
         weight_en = extract_bitmask(0x70)
-        weights_storage = extract_vector_type(weight_en, 7, expected_full_precision=VecStorage.Vec4Full)
+        weights_storage = extract_vector_type(weight_en, 7, full_precision_n_comps=4, byte_fmt=VecCompFmt.Byte_0_1)
 
         bones_en = extract_bitmask(0x200)
-        bones_storage = VecStorage.Vec4Fixed if bones_en else None
+        bones_storage = VecStorage(VecCompFmt.Byte_0_255, 4) if bones_en else None
 
         normal_en = extract_bitmask(0x400)
-        normal_storage = extract_vector_type(normal_en, 11, expected_full_precision=VecStorage.Vec3Full)
+        normal_storage = extract_vector_type(normal_en, 11, full_precision_n_comps=3,
+                                             byte_fmt=VecCompFmt.Byte_Minus1_1)
 
         tangent_en = extract_bitmask(0x2000)
-        tangent_storage = extract_vector_type(tangent_en, 14, expected_full_precision=VecStorage.Vec3Full)
+        # Previously this was unpacked with 0_1 because it was arbitrary data.
+        # We interpret it as [-1,1] here, and assume it's always equal to the actual tangent.
+        # This is usually a good assumption because basically everything needs normal maps, especially character models
+        tangent_storage = extract_vector_type(tangent_en, 14, full_precision_n_comps=3,
+                                              byte_fmt=VecCompFmt.Byte_Minus1_1)
 
         unk_en = extract_bitmask(0x0001_0000)
-        unk_storage = extract_vector_type(unk_en, 17, expected_full_precision=VecStorage.Vec3Full)
+        unk_storage = extract_vector_type(unk_en, 17, full_precision_n_comps=3, byte_fmt=VecCompFmt.Byte_0_1)
 
         # TODO: Are we sure these bits aren't used for something?
         touch_bits((19, 20))
 
         # col0 is diffuse and opacity for GMD versions up to 0x03000B
         col0_en = extract_bitmask(0x0020_0000)
-        col0_storage = extract_vector_type(col0_en, 22, expected_full_precision=VecStorage.Vec4Full)
+        col0_storage = extract_vector_type(col0_en, 22, full_precision_n_comps=4, byte_fmt=VecCompFmt.Byte_0_1)
 
         # col1 is specular for GMD versions up to 0x03000B
         col1_en = extract_bitmask(0x0100_0000)
-        col1_storage = extract_vector_type(col1_en, 25, expected_full_precision=VecStorage.Vec4Full)
+        col1_storage = extract_vector_type(col1_en, 25, full_precision_n_comps=4, byte_fmt=VecCompFmt.Byte_0_1)
 
         # Extract the uv_enable and uv_count bits, to fill out the first 32 bits of the flags
         uv_en = extract_bits(27, 1)
@@ -427,24 +446,21 @@ class GMDVertexBufferLayout:
                     if uv_slot_bits == 0xF:
                         continue
 
+                    # format_bits is a value between 0 and 3
                     format_bits = (uv_slot_bits >> 2) & 0b11
                     if format_bits in [2, 3]:
-                        # This should be formatted as a [-1, 1] range thing
-                        # This is currently set in gmd_shader.py, although really it should be set in here
-                        # TODO: shift make_vector_unpacker logic out of abstract/gmd_shader and into here
-                        uv_storages.append(VecStorage.Vec4Fixed)
-                    else:
+                        uv_storages.append(VecStorage(VecCompFmt.Byte_0_1, 4))
+                    else:  # format_bits are 0 or 1
                         bit_count_idx = uv_slot_bits & 0b11
                         bit_count = (2, 3, 4, 1)[bit_count_idx]
 
+                        # Component format is float16 or float32
+                        uv_comp_fmt = VecCompFmt.Float16 if format_bits else VecCompFmt.Float32
+
                         if bit_count == 1:
                             error.fatal(f"UV with 1 element encountered - unsure how to proceed")
-                        elif bit_count == 2:
-                            uv_storages.append(VecStorage.Vec2Half if format_bits else VecStorage.Vec2Full)
-                        elif bit_count == 3:
-                            uv_storages.append(VecStorage.Vec3Half if format_bits else VecStorage.Vec3Full)
-                        elif bit_count == 4:
-                            uv_storages.append(VecStorage.Vec4Half if format_bits else VecStorage.Vec4Full)
+                        else:
+                            uv_storages.append(VecStorage(uv_comp_fmt, n_comps=bit_count))
 
                     if len(uv_storages) == uv_count:
                         # Touch the rest of the bits
@@ -453,12 +469,14 @@ class GMDVertexBufferLayout:
 
                 if len(uv_storages) != uv_count:
                     error.recoverable(
-                        f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs but specified {len(uv_storages)}")
+                        f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs "
+                        f"but specified {len(uv_storages)}")
             else:
                 # Touch all of the uv bits, without doing anything with them
                 touch_bits(range(32, 64))
-                # TODO: Raise here? This is an unknown item
-                uv_storages = [VecStorage.Vec2Full] * uv_count
+                error.fatal(
+                    f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs "
+                    f"but UVs are disabled")
         else:
             # No UVs at all
             touch_bits(range(32, 64))
@@ -512,20 +530,14 @@ class GMDVertexBufferLayout:
             assume_skinned=assume_skinned,
 
             pos_unpacker=make_vector_unpacker(pos_storage),
-            weights_unpacker=make_vector_unpacker(weights_storage,
-                                                  FixedConvertMethod.To0_1) if weights_storage else None,
-            bones_unpacker=make_vector_unpacker(bones_storage, FixedConvertMethod.ToByte) if bones_storage else None,
-            normal_unpacker=make_vector_unpacker(normal_storage,
-                                                 FixedConvertMethod.ToMinus1_1) if normal_storage else None,
-            # Previously this was unpacked with 0_1 because it was arbitrary data.
-            # We interpret it as [-1,1] here, and assume it's always equal to the actual tangent.
-            # This is usually a good assumption because basically everything needs normal maps, especially character models
-            tangent_unpacker=make_vector_unpacker(tangent_storage,
-                                                  FixedConvertMethod.ToMinus1_1) if tangent_storage else None,
-            unk_unpacker=make_vector_unpacker(unk_storage) if unk_storage else None,
-            col0_unpacker=make_vector_unpacker(col0_storage, FixedConvertMethod.To0_1) if col0_storage else None,
-            col1_unpacker=make_vector_unpacker(col1_storage, FixedConvertMethod.To0_1) if col1_storage else None,
-            uv_unpackers=tuple([make_vector_unpacker(s, FixedConvertMethod.To0_1) for s in uv_storages]),
+            weights_unpacker=make_vector_unpacker(weights_storage),
+            bones_unpacker=make_vector_unpacker(bones_storage),
+            normal_unpacker=make_vector_unpacker(normal_storage),
+            tangent_unpacker=make_vector_unpacker(tangent_storage),
+            unk_unpacker=make_vector_unpacker(unk_storage),
+            col0_unpacker=make_vector_unpacker(col0_storage),
+            col1_unpacker=make_vector_unpacker(col1_storage),
+            uv_unpackers=tuple([make_vector_unpacker(s) for s in uv_storages]),
 
             pos_storage=pos_storage,
             weights_storage=weights_storage,
