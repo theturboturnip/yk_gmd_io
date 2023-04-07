@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-mathutils = "2.81.2"
+mathutils = "3.3.0"
 pytest = "7.1"
 pytest-order = "1.0"
 
