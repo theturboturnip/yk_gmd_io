@@ -1,13 +1,16 @@
+import array
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Set, TypeVar, NewType, Callable
+from typing import List, Dict, Tuple, Set, TypeVar, NewType, Callable, Optional, Union
 from typing import cast
 
 import numpy as np
 
 import bpy
+from yk_gmd_blender.blender.common import AttribSetLayerNames
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
@@ -35,7 +38,7 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
         skinned_submeshes += convert_meshloop_tris_to_skinned_submeshes(mesh, loops, triangles, material_idx, bone_info,
                                                                         error, max_bones_per_submesh=bone_limit)
 
-    return [s.build_skinned(mesh, bone_info, materials) for s in skinned_submeshes]
+    return [s.build_skinned(mesh, bone_info, materials, error) for s in skinned_submeshes]
 
 
 def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,
@@ -48,7 +51,7 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
     for (material_idx, (loops, triangles)) in per_mat_meshloop_lists_and_triangles.items():
         submeshes += convert_meshloop_tris_to_unskinned_submeshes(loops, triangles, material_idx)
 
-    return [s.build_unskinned(mesh, materials) for s in submeshes]
+    return [s.build_unskinned(mesh, materials, error) for s in submeshes]
 
 
 def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tangent: bool) -> bpy.types.Mesh:
@@ -257,8 +260,182 @@ class Submesh:
         if len(self.loops) > 65536:
             raise RuntimeError("Created a Submesh with more than 65536 vertices.")
 
-    def build_unskinned(self, mesh: bpy.types.Mesh, materials: List[GMDAttributeSet]) -> GMDMesh:
-        raise NotImplementedError()
+    def build_unskinned(self, mesh: bpy.types.Mesh, materials: List[GMDAttributeSet], error: ErrorReporter) -> GMDMesh:
+        material = materials[self.material_idx]
+        layer_names = AttribSetLayerNames.build_from(material.shader.vertex_buffer_layout, is_skinned=False)
+        layers = layer_names.try_retrieve_from(mesh, error)
+
+        vertices = GMDVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
+
+        if vertices.normal is not None:
+            self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
+        if vertices.tangent is not None:
+            if layers.tangent_layer is not None:
+                self._extract_tangents_from_layer(layers.tangent_layer, vertices.tangent)
+            else:
+                self._extract_tangents_from_mesh(mesh, layers.tangent_w_layer, vertices.tangent)
+        # TODO loll we literally don't do anything for unk
+        if vertices.unk is not None:
+            error.recoverable(f"Mesh {mesh}/shader {material.shader} uses an unknown vertex field. "
+                              f"The exporter does not handle this field, and it will default to all zeros. "
+                              f"If this is OK, disable Strict Export.")
+        if vertices.bone_data is not None:
+            self._extract_bones_from_layer(layers.bone_data_layer, vertices.bone_data)
+        if vertices.weight_data is not None:
+            self._extract_from_color(layers.weight_data_layer, vertices.weight_data)
+        if vertices.col0 is not None:
+            self._extract_from_color(layers.col0_layer, vertices.col0)
+        if vertices.col1 is not None:
+            self._extract_from_color(layers.col1_layer, vertices.col1)
+        if len(vertices.uvs) != len(layers.uv_layers):
+            error.recoverable(
+                f"Shader {material.shader} expected {len(vertices.uvs)} UV layers but found {len(layers.uv_layers)}. "
+                f"Layers that were not found will be filled with 0, and extra layers will be ignored. "
+                f"If this is OK, disable Strict Export")
+        for (i, (comp_count, uv_layer)) in enumerate(layers.uv_layers):
+            self._extract_uv(i, comp_count, uv_layer, vertices.uvs[i], error)
+
+        triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
+
+        return GMDMesh(
+            empty=False,
+            vertices_data=vertices,
+            triangle_indices=triangle_list,
+            triangle_strip_noreset_indices=triangle_strip_noreset,
+            triangle_strip_reset_indices=triangle_strip_reset,
+            attribute_set=material
+        )
+
+    # Build the triangle strip from self.triangles
+    def _build_triangles(self) -> Tuple[array.ArrayType, array.ArrayType, array.ArrayType]:
+        triangle_list = array.array("H")
+        triangle_strip_noreset = array.array("H")
+        triangle_strip_reset = array.array("H")
+
+        for t0, t1, t2 in self.triangles:
+            triangle_list.append(t0)
+            triangle_list.append(t1)
+            triangle_list.append(t2)
+
+            # If we can continue the strip, do so
+            if not triangle_strip_noreset:
+                # Starting the strip
+                triangle_strip_noreset.append(t0)
+                triangle_strip_noreset.append(t1)
+                triangle_strip_noreset.append(t2)
+            elif (triangle_strip_noreset[-2] == t0 and
+                  triangle_strip_noreset[-1] == t1):
+                # Continue the strip
+                triangle_strip_noreset.append(t2)
+            else:
+                # End previous strip, start new strip
+                # Two extra verts to create a degenerate triangle, signalling the end of the strip
+                triangle_strip_noreset.append(triangle_strip_noreset[-1])
+                triangle_strip_noreset.append(t0)
+                # Add the triangle as normal
+                triangle_strip_noreset.append(t0)
+                triangle_strip_noreset.append(t1)
+                triangle_strip_noreset.append(t2)
+
+            # If we can continue the strip, do so
+            if not triangle_strip_reset:
+                # Starting the strip
+                triangle_strip_reset.append(t0)
+                triangle_strip_reset.append(t1)
+                triangle_strip_reset.append(t2)
+            elif (triangle_strip_reset[-2] == t0 and
+                  triangle_strip_reset[-1] == t1):
+                # Continue the strip
+                triangle_strip_reset.append(t2)
+            else:
+                # End previous strip, start new strip
+                # Reset index signalling the end of the strip
+                triangle_strip_reset.append(0xFFFF)
+                # Add the triangle as normal
+                triangle_strip_reset.append(t0)
+                triangle_strip_reset.append(t1)
+                triangle_strip_reset.append(t2)
+
+        return triangle_list, triangle_strip_noreset, triangle_strip_reset
+
+    def _extract_normals(self, mesh: bpy.types.Mesh, normal_w_layer: Optional[bpy.types.FloatColorAttribute],
+                         data: np.ndarray):
+        # Pull normal XYZ data out of the mesh loops
+        for (i, loop_idx) in enumerate(self.loops):
+            n = mesh.loops[loop_idx].normal
+            # Hardcoded (-x, z, y) transposition to go into GMD space
+            data[i, 0] = -n[0]
+            data[i, 1] = n[2]
+            data[i, 2] = n[1]
+            # TODO the old version normalized the normals here?
+            # If we have a W layer, pull the value out of that too. Otherwise it's zero-initialized
+            if normal_w_layer:
+                data[i, 3] = (normal_w_layer.data[loop_idx].color[0] * 2) - 1
+
+    def _extract_tangents_from_layer(self, tangent_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
+        if tangent_layer is None:
+            return  # Data is zero-initialized
+
+        # Copy raw data (in 0..1 range)
+        for (i, loop_idx) in enumerate(self.loops):
+            # TODO watch out for what happens if data[i] has <4 components
+            data[i] = tangent_layer.data[loop_idx].color
+        # Correct data for (-1..1) range
+        data *= 2
+        data -= 1
+
+    def _extract_tangents_from_mesh(self, mesh: bpy.types.Mesh,
+                                    tangent_w_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
+        # Pull normal XYZ data out of the mesh loops
+        for (i, loop_idx) in enumerate(self.loops):
+            t = mesh.loops[loop_idx].tangent
+            # Hardcoded (-x, z, y) transposition to go into GMD space
+            data[i, 0] = -t[0]
+            data[i, 1] = t[2]
+            data[i, 2] = t[1]
+            # If we have a W layer, pull the value out of that too. Otherwise it's zero-initialized
+            if tangent_w_layer:
+                data[i, 3] = (tangent_w_layer.data[loop_idx].color[0] * 2) - 1
+
+    def _extract_from_color(self, col_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
+        if col_layer is None:
+            # Default colors to (1,1,1,1)
+            data.fill(1)
+        else:
+            # Fill in the colors
+            for (i, loop_idx) in enumerate(self.loops):
+                # TODO watch out for what happens if data[i] has <4 components
+                data[i] = col_layer.data[loop_idx].color
+
+    def _extract_bones_from_layer(self, bone_data_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
+        if bone_data_layer is None:
+            # Bone data will be zero inited
+            return
+        for (i, loop_idx) in enumerate(self.loops):
+            # TODO this is a hack. This assumes the bonedata is always a byte-value.
+            # We should change this so that self.layers actually looks at the associated storage and decides how to encode/decode to 0.1.
+            data[i] = bone_data_layer.data[loop_idx].color
+        # Multiply all of them by 255 so they make sense in a byte.
+        data *= 255
+
+    def _extract_uv(self, uv_idx: int, comp_count: int,
+                    uv_layer: Union[bpy.types.MeshUVLoopLayer, bpy.types.FloatColorAttribute], data: np.ndarray,
+                    error: ErrorReporter):
+        if uv_layer is None:
+            return  # UVs default to 0
+        # If component_count == 2 then we should be storing it in a UV layer.
+        # For backwards compatibility, check if the layer actually has a "uv" section
+        if comp_count == 2 and hasattr(uv_layer.data[0], "uv"):
+            for (i, loop_idx) in enumerate(self.loops):
+                data[i] = uv_layer.data[loop_idx].uv
+            # Invert Y to go from blender -> GMD
+            data[:, 1] = 1 - data[:, 1]
+        else:
+            for (i, loop_idx) in enumerate(self.loops):
+                data[i] = uv_layer.data[loop_idx].color[:comp_count]
+            if np.any((data < 0) | (data > 1)):
+                error.recoverable(
+                    f"UV{uv_idx} has values outside of 0 and 1. This should never happen.")
 
 
 TSubmesh = TypeVar("TSubmesh", bound=Submesh)
@@ -348,8 +525,61 @@ class SkinnedSubmesh(Submesh):
     relevant_vertex_groups: Dict[int, int]
 
     def build_skinned(self, mesh: bpy.types.Mesh, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
-                      materials: List[GMDAttributeSet]) -> GMDSkinnedMesh:
-        raise NotImplementedError()
+                      materials: List[GMDAttributeSet], error: ErrorReporter) -> GMDSkinnedMesh:
+        material = materials[self.material_idx]
+        layer_names = AttribSetLayerNames.build_from(material.shader.vertex_buffer_layout, is_skinned=True)
+        layers = layer_names.try_retrieve_from(mesh, error)
+
+        vertices = GMDSkinnedVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
+
+        if vertices.normal is not None:
+            self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
+        if vertices.tangent is not None:
+            if layers.tangent_layer is not None:
+                self._extract_tangents_from_layer(layers.tangent_layer, vertices.tangent)
+            else:
+                self._extract_tangents_from_mesh(mesh, layers.tangent_w_layer, vertices.tangent)
+        # TODO loll we literally don't do anything for unk
+        if vertices.unk is not None:
+            error.recoverable(f"Mesh {mesh}/shader {material.shader} uses an unknown vertex field. "
+                              f"The exporter does not handle this field, and it will default to all zeros. "
+                              f"If this is OK, disable Strict Export.")
+        assert vertices.bone_data is not None
+        assert vertices.weight_data is not None
+        self._extract_boneweights(bone_info, vertices.bone_data, vertices.weight_data)
+        if vertices.col0 is not None:
+            self._extract_from_color(layers.col0_layer, vertices.col0)
+        if vertices.col1 is not None:
+            self._extract_from_color(layers.col1_layer, vertices.col1)
+        if len(vertices.uvs) != len(layers.uv_layers):
+            error.recoverable(
+                f"Shader {material.shader} expected {len(vertices.uvs)} UV layers but found {len(layers.uv_layers)}. "
+                f"Layers that were not found will be filled with 0, and extra layers will be ignored. "
+                f"If this is OK, disable Strict Export")
+        for (i, (comp_count, uv_layer)) in enumerate(layers.uv_layers):
+            self._extract_uv(i, comp_count, uv_layer, vertices.uvs[i], error)
+
+        triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
+
+        return GMDSkinnedMesh(
+            empty=False,
+            vertices_data=vertices,
+            triangle_indices=triangle_list,
+            triangle_strip_noreset_indices=triangle_strip_noreset,
+            triangle_strip_reset_indices=triangle_strip_reset,
+            attribute_set=material
+        )
+
+    def _extract_boneweights(self, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
+                             bone_data: np.ndarray, weight_data: np.ndarray):
+        # See compute_vertex_4weights
+        original_bones, weights, n_weights = bone_info
+        weight_data[:] = weights.take(self.loops)
+        for (i, loop_idx) in enumerate(self.loops):
+            # Remap the bone only for the first N bones it uses.
+            # All others are 0
+            for b_i in range(n_weights[loop_idx]):
+                bone_data[i, b_i] = self.relevant_vertex_groups[original_bones[loop_idx, b_i]]
 
 
 def convert_meshloop_tris_to_skinned_submeshes(
