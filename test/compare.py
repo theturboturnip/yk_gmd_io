@@ -3,7 +3,7 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic
 
 from mathutils import Vector
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
@@ -13,12 +13,48 @@ from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
+from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
 from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 
 T = TypeVar('T')
+
+
+class ComparisonReporter:
+    # If true, "unimportant_mismatch" messages are treated as important
+    strict: bool
+    # List of "expected" mismatch prefixes - any mismatches encountered with these prefixes are ignored
+    filter_out: List[str]
+
+    # List of important mismatches which have been encountered so far
+    important_mismatches: str
+
+    def __init__(self, strict: bool, filter_out: Optional[List[str]]):
+        self.strict = strict
+        self.filter_out = filter_out if filter_out else []
+
+        self.important_mismatches = ""
+
+    def info(self, msg: str):
+        print(msg)
+
+    def unimportant_mismatch(self, msg: str):
+        if self.strict:
+            self.important_mismatch(msg)
+        else:
+            if not any(msg.startswith(x) for x in self.filter_out):
+                print(msg)
+
+    def important_mismatch(self, msg: str):
+        if not any(msg.startswith(x) for x in self.filter_out):
+            self.important_mismatches += msg
+            self.important_mismatches += "\n"
+
+    def raise_mismatches(self):
+        if self.important_mismatches:
+            raise GMDImportExportError(self.important_mismatches)
 
 
 def sort_src_dest_lists(src: Iterable[T], dst: Iterable[T], key: Callable[[T], str]) -> Tuple[List[T], List[T]]:
@@ -138,14 +174,18 @@ class VertSet:
         return self.len
 
 
-class FusedVertVoxelSet:
+TExact = TypeVar('TExact')
+TApprox = TypeVar('TApprox')
+
+
+class VertVoxelSet(Generic[TExact, TApprox]):
     """
     Class for storing sets of vertex data grouped into 3D voxels
     """
     # Mapping of (voxel centre) -> [vert_index for each vert in voxel]
     voxels: DefaultDict[Tuple[int, int, int], List[int]]
-    # List of (exact pos, exact normal, boneweights)
-    verts: List[Tuple[Vector, Vector, Tuple]]
+    # List of (pos, exact data, approx data)
+    verts: List[Tuple[Vector, TExact, TApprox]]
     voxel_size: float
 
     def __init__(self, voxel_size: float = 0.0001):
@@ -153,13 +193,13 @@ class FusedVertVoxelSet:
         self.voxel_size = voxel_size
         self.verts = []
 
-    def add(self, exact_pos: Vector, exact_norm: Vector, rounded_bw: Tuple):
+    def add(self, pos: Vector, exact: TExact, approx: TApprox):
         voxel = (
-            int(exact_pos.x / self.voxel_size), int(exact_pos.y / self.voxel_size), int(exact_pos.z / self.voxel_size))
+            int(pos.x / self.voxel_size), int(pos.y / self.voxel_size), int(pos.z / self.voxel_size))
         self.voxels[voxel].append(len(self.verts))
-        self.verts.append((exact_pos, exact_norm, rounded_bw))
+        self.verts.append((pos, exact, approx))
 
-    def check_one_to_one(self, other: 'FusedVertVoxelSet', pos_epsilon: float = 0.00001):
+    def check_fusions(self, other: 'VertVoxelSet', pos_epsilon: float = 0.00001):
         # AAAH
         # LJ kaito: src: 5483 post-fusion, dst: 6321 post-fusion
         # In LJ kaito, this manifests as creating multiple vertices on the same point that no longer fuse
@@ -178,8 +218,12 @@ class FusedVertVoxelSet:
         assert self.voxel_size == other.voxel_size
         assert self.voxel_size > pos_epsilon
 
-        has_no_equiv_in_other: List[Tuple[Vector, Vector, Tuple]] = []
-        was_unfused_in_other = []
+        # We always need to check at least 3x3x3=27 voxels per vertex to find vertices within pos_epsilon <= voxel_size,
+        # because the vertex could be right at the edge
+        # (if it was in the middle we could just use one, but we don't check)
+
+        has_no_equiv_in_other: List[Tuple[Vector, TExact, TApprox]] = []
+        too_many_equiv_in_other: List[Tuple[Vector, TExact, List[Tuple[int, TApprox]], List[Tuple[int, TApprox]]]] = []
 
         counted_other_verts: Set[int] = set()
         pos_epsilon_sqr = pos_epsilon ** 2
@@ -187,43 +231,45 @@ class FusedVertVoxelSet:
         for voxel_key, verts in self.voxels.items():
             other_search_space = [
                 (other_i, other.verts[other_i])
-                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1, voxel_key[0] + 2)
-                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1, voxel_key[1] + 2)
-                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1, voxel_key[2] + 2)
+                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1)
+                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1)
+                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1)
+                if (x, y, z) in other.voxels
                 for other_i in other.voxels[(x, y, z)]
             ]
             self_search_space = [
                 (self_i, self.verts[self_i])
-                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1, voxel_key[0] + 2)
-                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1, voxel_key[1] + 2)
-                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1, voxel_key[2] + 2)
+                for x in (voxel_key[0] - 1, voxel_key[0], voxel_key[0] + 1)
+                for y in (voxel_key[1] - 1, voxel_key[1], voxel_key[1] + 1)
+                for z in (voxel_key[2] - 1, voxel_key[2], voxel_key[2] + 1)
                 if (x, y, z) in self.voxels
                 for self_i in self.voxels[(x, y, z)]
             ]
 
             for self_vert in verts:
-                self_v_pos, self_v_norm, self_v_rounded_bw = self.verts[self_vert]
+                self_pos, self_exact, self_approx = self.verts[self_vert]
 
                 potential_other_verts = [
-                    (other_fused_idx, tuple(round(n, 3) for n in other_norm) if other_norm else None, other_pos)
-                    for other_fused_idx, (other_pos, other_norm, other_rounded_bw) in other_search_space
-                    if other_rounded_bw == self_v_rounded_bw and
-                       (self_v_pos - other_pos).length_squared < pos_epsilon_sqr
+                    (fi, a)
+                    for fi, (p, e, a) in other_search_space
+                    if e == self_exact and
+                       (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
-                counted_other_verts.update(i for (i, _, _) in potential_other_verts)
+                counted_other_verts.update(i for (i, _) in potential_other_verts)
 
                 potential_self_verts = [
-                    (other_fused_idx, tuple(round(n, 3) for n in other_norm) if other_norm else None, other_pos)
-                    for other_fused_idx, (other_pos, other_norm, other_rounded_bw) in self_search_space
-                    if other_rounded_bw == self_v_rounded_bw and
-                       (self_v_pos - other_pos).length_squared < pos_epsilon_sqr
+                    (fi, a)
+                    for fi, (p, e, a) in self_search_space
+                    if e == self_exact and
+                       (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
+                assert len(potential_self_verts) > 0
 
                 if len(potential_other_verts) == 0:
-                    has_no_equiv_in_other.append((self_v_pos, self_v_norm, self_v_rounded_bw))
+                    has_no_equiv_in_other.append((self_pos, self_exact, self_approx))
                 elif len(potential_other_verts) > len(potential_self_verts):
-                    was_unfused_in_other.append(
-                        (self_v_pos, self_v_rounded_bw, potential_self_verts, potential_other_verts))
+                    too_many_equiv_in_other.append(
+                        (self_pos, self_exact, potential_self_verts, potential_other_verts))
 
         other_vs_with_no_equiv_in_self = [
             other.verts[other_i]
@@ -231,7 +277,7 @@ class FusedVertVoxelSet:
             if other_i not in counted_other_verts
         ]
 
-        return has_no_equiv_in_other, was_unfused_in_other, other_vs_with_no_equiv_in_self
+        return has_no_equiv_in_other, too_many_equiv_in_other, other_vs_with_no_equiv_in_self
 
     def __len__(self):
         return len(self.verts)
@@ -296,7 +342,8 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     return all_verts
 
 
-def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter,
+def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], dst: List[GMDMesh],
+                                            cmp: ComparisonReporter,
                                             context: str) -> bool:
     # The point of this test is to check that reexporting data didn't unfuse some vertices
     # i.e. we want to make sure every fused vertex in src has *exactly* one equivalent fused vertex in dst
@@ -305,7 +352,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
 
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
-    def find_fusion_output_vs(ms: List[GMDMesh]) -> FusedVertVoxelSet:
+    def find_fusion_output_vs(ms: List[GMDMesh]) -> VertVoxelSet:
         unfused_vs: List[GMDVertexBuffer_Generic]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
@@ -313,7 +360,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
             unfused_vs = [m.vertices_data for m in ms]
         fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
 
-        all_verts = FusedVertVoxelSet()
+        all_verts: VertVoxelSet[Tuple, Optional[Tuple]] = VertVoxelSet()
         if skinned:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
@@ -327,8 +374,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                         if bw.weight > 0
                     ) if buf.bone_weights else nul_item,
                 )
-                norm = buf.normal[i].xyz if buf.normal else None
-                all_verts.add(exact_pos, norm, rounded_bw)
+                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                all_verts.add(exact_pos, rounded_bw, norm)
         else:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
@@ -339,8 +386,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                     tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
                     tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
                 )
-                norm = buf.normal[i].xyz if buf.normal else None
-                all_verts.add(exact_pos, norm, rounded_bw)
+                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                all_verts.add(exact_pos, rounded_bw, norm)
 
         return all_verts
 
@@ -351,7 +398,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
 
     # Compare the src fused set with the dst fused set
     (src_vs_with_no_equiv, src_vs_unfused_in_dst, dst_vs_with_no_equiv_in_src) = \
-        src_fused_vs.check_one_to_one(dst_fused_vs)
+        src_fused_vs.check_fusions(dst_fused_vs)
     if src_vs_with_no_equiv or src_vs_unfused_in_dst or dst_vs_with_no_equiv_in_src:
         src_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_vs_with_no_equiv), 5))
         n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _, _ in ss))
@@ -360,7 +407,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
             str(x) for x in
             itertools.islice(sorted([v for v in src_vs_unfused_in_dst]), 5))
         dst_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_vs_with_no_equiv_in_src), 5))
-        error.fatal(
+        cmp.important_mismatch(
             f"{context}src ({src_n_fused_vs} fused vs) and dst ({dst_n_fused_vs} fused vs) (delta {dst_n_fused_vs - src_n_fused_vs}) don't match\n\t"
             f"found {len(src_vs_with_no_equiv)} vs in src with no equiv in dst:\n\t"
             f"{src_with_no_equiv_str}...\n\t"
@@ -372,12 +419,12 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         )
         return False
     if src_n_fused_vs != dst_n_fused_vs:
-        error.recoverable(
-            f"{context}src ({src_n_fused_vs} fused vs) and dst ({dst_n_fused_vs} fused vs) don't match, but we don't know why\n\t")
+        cmp.unimportant_mismatch(f"{context}src ({src_n_fused_vs} fused vs) and dst ({dst_n_fused_vs} fused vs)"
+                                 f"don't match, but we don't know why\n\t")
     return True
 
 
-def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDMesh], error: ErrorReporter,
+def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDMesh], cmp: ComparisonReporter,
                                context: str) -> bool:
     if skinned:
         src_vertices = get_unique_skinned_verts(src)
@@ -392,7 +439,7 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
     if src_but_not_dst_exact or dst_but_not_src_exact:
         src_but_not_dst_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_but_not_dst_exact), 5))
         dst_but_not_src_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(dst_but_not_src_exact), 5))
-        error.fatal(
+        cmp.important_mismatch(
             f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) exact data differs\n\t"
             f"src meshes have {len(src_but_not_dst_exact)} vertices missing in dst:\n\t"
             f"{src_but_not_dst_str}...\n\t"
@@ -412,7 +459,7 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
             f"{str(k)}:\n\t\t" + '\n\t\t'.join(str(x) for x in dst_but_not_src[k])
             for k in itertools.islice(sorted(dst_but_not_src.keys()), 5)
         )
-        error.recoverable(
+        cmp.unimportant_mismatch(
             f"{context}src ({len(src_vertices)} unique verts) and dst ({len(dst_vertices)} unique verts) APPROX data differs\n\t"
             f"src meshes have {len(src_but_not_dst)} vertices missing in dst:\n\t"
             f"{src_but_not_dst_str}...\n\t"
@@ -422,22 +469,23 @@ def compare_same_layout_meshes(skinned: bool, src: List[GMDMesh], dst: List[GMDM
     return True
 
 
-def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: GMDNode, error: ErrorReporter,
+def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: GMDNode, cmp: ComparisonReporter,
                              context: str):
     from math import fabs
 
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
-            error.fatal(f"{context}: field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+            cmp.important_mismatch(
+                f"{context}: field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
 
     def compare_vec_field(f: str):
         src_f = tuple(round(x, 3) for x in getattr(src, f))
         dst_f = tuple(round(x, 3) for x in getattr(dst, f))
         if src_f != dst_f:
             if sum(fabs(s - r) for (s, r) in zip(src_f, dst_f)) > 0.05:
-                error.fatal(f"{context}: vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}: vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                error.recoverable(f"{context}: vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}: vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     def compare_mat_field(f: str):
         src_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(src, f))
@@ -446,9 +494,9 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             src_floats = tuple(x for v in src_f for x in v)
             dst_floats = tuple(x for v in dst_f for x in v)
             if sum(fabs(s - r) for (s, r) in zip(src_floats, dst_floats)) > 0.05:
-                error.fatal(f"{context}: matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}: matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                error.recoverable(f"{context}: matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}: matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
@@ -483,7 +531,7 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             )
 
             if sorted_attrs_src != sorted_attrs_dst:
-                error.fatal(
+                cmp.important_mismatch(
                     f"{context} has different sets of attribute sets:\nsrc:\n\t{sorted_attrs_src}\ndst:{sorted_attrs_dst}\n\t")
 
             if vertices:
@@ -503,58 +551,65 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
                             skinned,
                             src_ms,
                             dst_ms,
-                            error, f"{context}attr set {attr.texture_diffuse} "
+                            cmp, f"{context}attr set {attr.texture_diffuse} "
                     ):
                         identical = False
-                if not compare_same_layout_mesh_vertex_fusions(skinned, src.mesh_list, dst.mesh_list, error, context):
+                if not compare_same_layout_mesh_vertex_fusions(skinned, src.mesh_list, dst.mesh_list, cmp, context):
                     identical = False
                 if identical:
-                    error.info(f"{context} meshes are functionally identical")
+                    cmp.info(f"{context} meshes are functionally identical")
 
 
 def recursive_compare_node_lists(skinned: bool, vertices: bool, src: List[GMDNode], dst: List[GMDNode],
-                                 error: ErrorReporter, context: str):
+                                 cmp: ComparisonReporter, context: str):
     src_names_unordered = set(n.name for n in src)
     dst_names_unordered = set(n.name for n in dst)
     if src_names_unordered != dst_names_unordered:
-        error.fatal(
+        cmp.important_mismatch(
             f"{context} has different sets of children:\nsrc:\n\t{src_names_unordered}\ndst:{dst_names_unordered}\n\t")
 
     src_names = [n.name for n in src]
     dst_names = [n.name for n in dst]
     if src_names != dst_names:
-        error.fatal(f"{context} children in different order:\nsrc:\n\t{src_names}\ndst:{dst_names}\n\t")
+        cmp.important_mismatch(f"{context} children in different order:\nsrc:\n\t{src_names}\ndst:{dst_names}\n\t")
 
     for child_src, child_dst in zip(src, dst):
         child_context = f"{context}{child_src.name} > "
-        compare_single_node_pair(skinned, vertices, child_src, child_dst, error, child_context)
-        recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, error, child_context)
+        compare_single_node_pair(skinned, vertices, child_src, child_dst, cmp, child_context)
+        recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, cmp, child_context)
 
 
-def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool, error: ErrorReporter):
+def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool, strict: bool,
+                  mismatch_filter: Optional[List[str]],
+                  error: ErrorReporter):
     # Load and compare basic information - GMD version, headers
     version_props_src, header_src, file_data_src = read_gmd_structures(file_src, error)
     version_props_dst, header_dst, file_data_dst = read_gmd_structures(file_dst, error)
 
+    cmp = ComparisonReporter(strict, mismatch_filter)
+
     if version_props_src != version_props_dst:
-        error.fatal(f"Version props mismatch\nsrc:\n\t{version_props_src}\ndst:\n\t{version_props_dst}")
+        cmp.important_mismatch(f"Version props mismatch\nsrc:\n\t{version_props_src}\ndst:\n\t{version_props_dst}")
 
     def compare_header_field(f: str):
         if getattr(header_src, f) != getattr(header_dst, f):
-            error.recoverable(
-                f"header: field {f} differs:\nsrc:\n\t{getattr(header_src, f)}\ndst:\n\t{getattr(header_dst, f)}")
+            cmp.unimportant_mismatch(
+                f"header: field {f} differs:\n"
+                f"src:\n\t{getattr(header_src, f)}\n"
+                f"dst:\n\t{getattr(header_dst, f)}"
+            )
 
     compare_header_field("magic")
     # Compare endianness
     if check_are_vertices_big_endian(header_src.vertex_endian_check) != \
             check_are_vertices_big_endian(header_dst.vertex_endian_check):
-        error.recoverable(
+        cmp.unimportant_mismatch(
             f"header: vertex endian differs:\nsrc:\n\t"
             f"{header_src.vertex_endian_check} {check_are_vertices_big_endian(header_src.vertex_endian_check)}\n"
             f"dst:\n\t{header_dst.vertex_endian_check} {check_are_vertices_big_endian(header_dst.vertex_endian_check)}")
     if check_is_file_big_endian(header_src.file_endian_check) != \
             check_is_file_big_endian(header_dst.file_endian_check):
-        error.recoverable(
+        cmp.unimportant_mismatch(
             f"header: file endian differs:\nsrc:\n\t"
             f"{header_src.file_endian_check} {check_is_file_big_endian(header_src.file_endian_check)}\n"
             f"dst:\n\t{header_dst.file_endian_check} {check_is_file_big_endian(header_dst.file_endian_check)}")
@@ -579,10 +634,12 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
                                                          file_data_dst, error)
 
     recursive_compare_node_lists(skinned, vertices, scene_src.overall_hierarchy.roots,
-                                 scene_dst.overall_hierarchy.roots, error, "")
+                                 scene_dst.overall_hierarchy.roots, cmp, "")
+
+    cmp.raise_mismatches()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser("GMD Comparer")
 
     parser.add_argument("file_src", type=Path)
@@ -594,4 +651,8 @@ if __name__ == '__main__':
 
     error = LenientErrorReporter(allowed_categories=set())
 
-    compare_files(args.file_src, args.file_dst, args.skinned, args.vertices, error)
+    compare_files(args.file_src, args.file_dst, args.skinned, args.vertices, False, [], error)
+
+
+if __name__ == '__main__':
+    main()

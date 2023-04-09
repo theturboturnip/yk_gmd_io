@@ -14,6 +14,10 @@ def pytest_addoption(parser):
         help="Path to blender folder, in which to install <addon>",
     )
     parser.addoption(
+        "--blender_ver",
+        help="Blender version number (i.e. 3.2, 3.4) which is where to install the addon"
+    )
+    parser.addoption(
         "--addon",
         help="Path of addon ZIP",
     )
@@ -26,9 +30,14 @@ def pytest_addoption(parser):
         help="Path to output directory, including re-exported GMDs"
     )
     parser.addoption(
-        "--isolate-blender",
+        "--isolate_blender",
         action="store_true",
         help="Should we isolate the blender install from the rest of the system & install the addon directly?"
+    )
+    parser.addoption(
+        "--test_all_skinned",
+        action="store_true",
+        help="Should we test all methods for calculating skinned matrices"
     )
     parser.addoption(
         "--blender_logging",
@@ -57,7 +66,7 @@ def blender(request):
 
 @pytest.fixture
 def isolate_blender(request):
-    return bool(request.config.getoption("--isolate-blender"))
+    return bool(request.config.getoption("--isolate_blender"))
 
 
 def pytest_generate_tests(metafunc):
@@ -65,6 +74,7 @@ def pytest_generate_tests(metafunc):
         model_root_dir = Path(metafunc.config.getoption("model_root_dir"))
         output_dir = Path(metafunc.config.getoption("output_dir"))
         logging = metafunc.config.getoption("blender_logging")
+        test_all_skinned = metafunc.config.getoption("--test_all_skinned")
 
         assert model_root_dir
         assert output_dir
@@ -86,18 +96,19 @@ def pytest_generate_tests(metafunc):
                         skinned_method="CALCULATE",
                         logging=logging
                     ))
-                    gmdtests.append(GMDTest(
-                        src=model,
-                        dst=output_dir / model_dir.name / model.name,
-                        skinned_method="FROM_TARGET_FILE",
-                        logging=logging
-                    ))
-                    gmdtests.append(GMDTest(
-                        src=model,
-                        dst=output_dir / model_dir.name / model.name,
-                        skinned_method="FROM_ORIGINAL_GMD_IMPORT",
-                        logging=logging
-                    ))
+                    if test_all_skinned:
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="FROM_TARGET_FILE",
+                            logging=logging
+                        ))
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="FROM_ORIGINAL_GMD_IMPORT",
+                            logging=logging
+                        ))
                 else:
                     gmdtests.append(GMDTest(
                         src=model,
@@ -118,12 +129,15 @@ def pytest_sessionstart(session):
     before performing collection and entering the run test loop.
     """
     blender = Path(session.config.getoption("blender"))
-    isolate_blender = bool(session.config.getoption("--isolate-blender"))
+    blender_ver = session.config.getoption("blender_ver")
+    isolate_blender = bool(session.config.getoption("--isolate_blender"))
     addon = Path(session.config.getoption("addon"))
 
     if isolate_blender:
+        if not blender_ver:
+            raise RuntimeError("Can't figure out which folder to install the script in - set --blender_ver")
         # Extract the addon into Blender's addons directory
-        addon_extract_path = blender / "3.2" / "scripts" / "addons"
+        addon_extract_path = blender / blender_ver / "scripts" / "addons"
 
         # Delete the old one first
         addon_output_path = (addon_extract_path / "yk_gmd_blender")
@@ -154,11 +168,14 @@ def pytest_sessionfinish(session, exitstatus):
     returning the exit status to the system.
     """
     blender = Path(session.config.getoption("blender"))
-    isolate_blender = bool(session.config.getoption("--isolate-blender"))
+    blender_ver = session.config.getoption("blender_ver")
+    isolate_blender = bool(session.config.getoption("--isolate_blender"))
 
     # Remove the addon
     if isolate_blender:
-        addon_output_path = blender / "3.2" / "scripts" / "addons" / "yk_gmd_blender"
+        if not blender_ver:
+            raise RuntimeError("Can't figure out which folder to install the script in - set --blender_ver")
+        addon_output_path = blender / blender_ver / "scripts" / "addons"
         if addon_output_path.is_dir():
             shutil.rmtree(addon_output_path)
     else:
