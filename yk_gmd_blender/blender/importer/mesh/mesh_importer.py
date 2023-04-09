@@ -5,7 +5,7 @@ from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Skinned, GMDVertexBuffer_Generic
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
@@ -27,7 +27,7 @@ def gmd_meshes_to_bmesh(
     error.debug("MESH", f"vertex layout: {str(gmd_meshes[0].vertices_data.layout)}")
 
     # If necessary, rewrite bone indices to be consistent
-    vertices: Union[List[GMDVertexBuffer_Generic], List[GMDVertexBuffer_Skinned]]
+    vertices: Union[List[GMDVertexBuffer], List[GMDSkinnedVertexBuffer]]
     if is_skinned:
         if not all(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")

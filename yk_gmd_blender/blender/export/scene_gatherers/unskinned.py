@@ -6,7 +6,7 @@ from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key
 from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd
-from yk_gmd_blender.blender.export.mesh_exporter.functions import split_unskinned_blender_mesh_object
+from yk_gmd_blender.blender.export.mesh_exporter.v2 import split_unskinned_blender_mesh_object
 from yk_gmd_blender.blender.export.scene_gatherers.base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate

@@ -1,15 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple, List, Sized, Iterable, Set, overload
+from typing import Optional, Tuple, List, Sized, Iterable, Set
 
 import numpy as np
 
-from mathutils import Vector
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32, c_float16, c_unorm8, U8ConverterPrimitive, \
-    c_u8_Minus1_1
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.structure.common.vector import Vec3Unpacker_of, Vec4Unpacker_of
 
 LITTLE_ENDIAN_F16 = np.dtype("<f2")
 BIG_ENDIAN_F16 = np.dtype(">f2")
@@ -119,41 +114,6 @@ class VecStorage:
         raise RuntimeError(f"Invalid VecStorage called transform_native_fmt_array: {self}")
 
 
-vector_unpackers = {
-    (2, VecCompFmt.Float32): ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float32, 2), forwards=Vector,
-                                          backwards=list),
-    (3, VecCompFmt.Float32): Vec3Unpacker_of(c_float32),
-    (4, VecCompFmt.Float32): Vec4Unpacker_of(c_float32),
-
-    (2, VecCompFmt.Float16): ValueAdaptor(Vector, base_unpacker=FixedSizeArrayUnpacker(c_float16, 2), forwards=Vector,
-                                          backwards=list),
-    (3, VecCompFmt.Float16): Vec3Unpacker_of(c_float16),
-    (4, VecCompFmt.Float16): Vec4Unpacker_of(c_float16),
-
-    (4, VecCompFmt.Byte_0_1): Vec4Unpacker_of(c_unorm8),
-    (4, VecCompFmt.Byte_Minus1_1): Vec4Unpacker_of(c_u8_Minus1_1),
-    # We store bone_data in a Vector, which stores components as floats
-    # Just using Vec4Unpacker_of(c_uint8) requires the incoming data to be int
-    # Instead, use an identity RangeConverterPrimitive to convert it to float without changing the underlying value.
-    # Can still be cast to int if needed, as in BoneWeight.
-    (4, VecCompFmt.Byte_0_255): Vec4Unpacker_of(U8ConverterPrimitive(to_range=(0., 255.0)))
-}
-
-
-@overload
-def make_vector_unpacker(vec_type: VecStorage) -> BaseUnpacker[Vector]: ...
-
-
-@overload
-def make_vector_unpacker(vec_type: None) -> None: ...
-
-
-def make_vector_unpacker(vec_type: Optional[VecStorage]) -> Optional[BaseUnpacker[Vector]]:
-    if vec_type is None:
-        return None
-    return vector_unpackers[(vec_type.n_comps, vec_type.comp_fmt)]
-
-
 # This is effectively a primitive
 @dataclass(frozen=True)
 class BoneWeight:
@@ -169,7 +129,7 @@ BoneWeight4 = Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]
 # This class should be used for all vertex buffer manipulation,
 # then exported as a GMDVertexBuffer_Skinned if used in a Skinned mesh.
 @dataclass(repr=False)
-class GMDVertexBuffer_Generic(Sized):
+class GMDVertexBuffer(Sized):
     layout: 'GMDVertexBufferLayout'
 
     pos: np.ndarray
@@ -184,8 +144,12 @@ class GMDVertexBuffer_Generic(Sized):
 
     @staticmethod
     def build_empty(layout: 'GMDVertexBufferLayout', count: int):
-        alloc_storage = lambda storage: storage.preallocate(count) if storage else None
-        return GMDVertexBuffer_Generic(
+        def alloc_storage(storage: Optional[VecStorage]) -> Optional[np.ndarray]:
+            if storage:
+                return None
+            return storage.preallocate(count)
+
+        return GMDVertexBuffer(
             layout=layout,
 
             pos=layout.pos_storage.preallocate(count),
@@ -209,117 +173,39 @@ class GMDVertexBuffer_Generic(Sized):
     def __len__(self):
         return self.vertex_count()
 
-    def __iadd__(self, other: 'GMDVertexBuffer_Generic') -> 'GMDVertexBuffer_Generic':
-        if other.layout != self.layout:
-            raise TypeError("Tried to combine two vertex buffers which used different layouts")
-
-        self.pos += other.pos
-        if self.weight_data is not None:
-            self.weight_data += other.weight_data
-        if self.bone_data is not None:
-            self.bone_data += other.bone_data
-        if self.normal is not None:
-            self.normal += other.normal
-        if self.tangent is not None:
-            self.tangent += other.tangent
-        if self.unk is not None:
-            self.unk += other.unk
-        if self.col0 is not None:
-            self.col0 += other.col0
-        if self.col1 is not None:
-            self.col1 += other.col1
-        for i, uv in enumerate(self.uvs):
-            uv += other.uvs[i]
-
-        return self
-
-    def extract_as_generic(self, item: slice) -> 'GMDVertexBuffer_Generic':
-        if not isinstance(item, slice):
-            raise IndexError(f"GMDVertexBuffer_Generic.extract_as got {item} but expected slice")
-
-        return GMDVertexBuffer_Generic(
-            layout=self.layout,
-
-            pos=self.pos[item].copy(),
-
-            weight_data=self.weight_data[item].copy() if self.weight_data is not None else None,
-            bone_data=self.bone_data[item].copy() if self.bone_data is not None else None,
-            normal=self.normal[item].copy() if self.normal is not None else None,
-            tangent=self.tangent[item].copy() if self.tangent is not None else None,
-            unk=self.unk[item].copy() if self.unk is not None else None,
-            col0=self.col0[item].copy() if self.col0 is not None else None,
-            col1=self.col1[item].copy() if self.col1 is not None else None,
-            uvs=[
-                uv[item].copy()
-                for uv in self.uvs
-            ],
-        )
-
-    def __getitem__(self, item) -> 'GMDVertexBuffer_Generic':
-        return self.extract_as_generic(item)
-
-    # This doesn't copy the lists and vertices, rather just moves them
-    # TODO - add a moved_out field to this class so we can detect use-after-move?
-    def move_to_skinned(self) -> 'GMDVertexBuffer_Skinned':
-        if not self.layout.assume_skinned:
-            raise RuntimeError("Vertex Layout not built with assume_skinned, cannot convert to skinned")
-        if self.weight_data is None or self.bone_data is None:
-            raise RuntimeError("Bone-weight data for buffer is incomplete, cannot convert to skinned")
-
-        bone_weights = [(
-            BoneWeight(bone=int(bones[0]), weight=weights[0]),
-            BoneWeight(bone=int(bones[1]), weight=weights[1]),
-            BoneWeight(bone=int(bones[2]), weight=weights[2]),
-            BoneWeight(bone=int(bones[3]), weight=weights[3]),
-        ) for bones, weights in zip(self.bone_data, self.weight_data)]
-
-        skinned = GMDVertexBuffer_Skinned(
-            layout=self.layout,
-
-            pos=self.pos,
-
-            bone_weights=bone_weights,
-            bone_data=self.bone_data,
-            weight_data=self.weight_data,
-            normal=self.normal if self.normal is not None else None,
-            tangent=self.tangent if self.tangent is not None else None,
-            unk=self.unk if self.unk is not None else None,
-            col0=self.col0 if self.col0 is not None else None,
-            col1=self.col1 if self.col1 is not None else None,
-            uvs=[
-                uv
-                for uv in self.uvs
-            ],
-        )
-
-        self.pos = np.asarray([])
-        self.bone_data = None
-        self.weight_data = None
-        self.normal = None
-        self.tangent = None
-        self.unk = None
-        self.col0 = None
-        self.col1 = None
-        self.uvs = []
-
-        return skinned
-
-    def extract_as_skinned(self, item: slice) -> 'GMDVertexBuffer_Skinned':
-        return self.extract_as_generic(item).move_to_skinned()
-
 
 # Immutable version of GMDVertexBuffer that includes a bone_weights list
 @dataclass(repr=False)
-class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
-    layout: 'GMDVertexBufferLayout'
-
-    bone_weights: List[BoneWeight4]
-    # Individual bone,weight datas are still here, but must not be None
+class GMDSkinnedVertexBuffer(GMDVertexBuffer):
+    # Individual bone, weight datas are still here, but must not be None
     weight_data: np.ndarray
     bone_data: np.ndarray
 
-    def copy_as_generic(self) -> GMDVertexBuffer_Generic:
-        return GMDVertexBuffer_Generic(
+    @staticmethod
+    def build_empty(layout: 'GMDVertexBufferLayout', count: int):
+        assert layout.weights_storage is not None
+        assert layout.bones_storage is not None
+
+        as_generic = GMDVertexBuffer.build_empty(layout, count)
+        assert as_generic.weight_data is not None
+        assert as_generic.bone_data is not None
+
+        return GMDSkinnedVertexBuffer(
+            layout=layout,
+
+            pos=as_generic.pos,
+            weight_data=as_generic.weight_data,
+            bone_data=as_generic.bone_data,
+            normal=as_generic.normal,
+            tangent=as_generic.tangent,
+            unk=as_generic.unk,
+            col0=as_generic.col0,
+            col1=as_generic.col1,
+            uvs=as_generic.uvs,
+        )
+
+    def copy(self) -> 'GMDSkinnedVertexBuffer':
+        return GMDSkinnedVertexBuffer(
             layout=self.layout,
 
             pos=self.pos.copy(),
@@ -337,56 +223,11 @@ class GMDVertexBuffer_Skinned(GMDVertexBuffer_Generic):
             ],
         )
 
-    def __iadd__(self, other: 'GMDVertexBuffer_Generic') -> 'GMDVertexBuffer_Generic':
-        raise NotImplementedError()
-
-    def extract_as_generic(self, item: slice) -> 'GMDVertexBuffer_Generic':
-        raise NotImplementedError()
-
-    def move_to_skinned(self) -> 'GMDVertexBuffer_Skinned':
-        raise NotImplementedError()
-
-    def extract_as_skinned(self, item: slice) -> 'GMDVertexBuffer_Skinned':
-        raise NotImplementedError()
-
-    def __getitem__(self, item) -> 'GMDVertexBuffer_Skinned':
-        return GMDVertexBuffer_Skinned(
-            layout=self.layout,
-
-            pos=self.pos[item].copy(),
-
-            bone_weights=self.bone_weights[item].copy(),
-            bone_data=self.bone_data[item].copy(),
-            weight_data=self.weight_data[item].copy(),
-            normal=self.normal[item].copy() if self.normal is not None else None,
-            tangent=self.tangent[item].copy() if self.tangent is not None else None,
-            unk=self.unk[item].copy() if self.unk is not None else None,
-            col0=self.col0[item].copy() if self.col0 is not None else None,
-            col1=self.col1[item].copy() if self.col1 is not None else None,
-            uvs=[
-                uv[item].copy()
-                for uv in self.uvs
-            ],
-        )
-
 
 # VertexBufferLayouts are external dependencies (shaders have a fixed layout, which we can't control) so they are frozen
 @dataclass(frozen=True, init=True)
 class GMDVertexBufferLayout:
     assume_skinned: bool
-
-    pos_unpacker: BaseUnpacker[Vector]
-    # For skinned objects, this is for bone weights.
-    # For unskinned objects, this is a generic component.
-    weights_unpacker: Optional[BaseUnpacker[Vector]]
-    # As above, this is bone weights for skinned objects but a generic component on unskinned objects.
-    bones_unpacker: Optional[BaseUnpacker[Vector]]
-    normal_unpacker: Optional[BaseUnpacker[Vector]]
-    tangent_unpacker: Optional[BaseUnpacker[Vector]]
-    unk_unpacker: Optional[BaseUnpacker[Vector]]
-    col0_unpacker: Optional[BaseUnpacker[Vector]]
-    col1_unpacker: Optional[BaseUnpacker[Vector]]
-    uv_unpackers: Tuple[BaseUnpacker[Vector], ...]
 
     pos_storage: VecStorage
     weights_storage: Optional[VecStorage]
@@ -605,16 +446,6 @@ class GMDVertexBufferLayout:
         return GMDVertexBufferLayout(
             assume_skinned=assume_skinned,
 
-            pos_unpacker=make_vector_unpacker(pos_storage),
-            weights_unpacker=make_vector_unpacker(weights_storage),
-            bones_unpacker=make_vector_unpacker(bones_storage),
-            normal_unpacker=make_vector_unpacker(normal_storage),
-            tangent_unpacker=make_vector_unpacker(tangent_storage),
-            unk_unpacker=make_vector_unpacker(unk_storage),
-            col0_unpacker=make_vector_unpacker(col0_storage),
-            col1_unpacker=make_vector_unpacker(col1_storage),
-            uv_unpackers=tuple([make_vector_unpacker(s) for s in uv_storages]),
-
             pos_storage=pos_storage,
             weights_storage=weights_storage,
             bones_storage=bones_storage,
@@ -662,7 +493,7 @@ class GMDVertexBufferLayout:
         return self.numpy_dtype(False).itemsize
 
     def unpack_from(self, big_endian: bool, vertex_count: int,
-                    data: bytes, offset: int) -> Tuple[GMDVertexBuffer_Generic, int]:
+                    data: bytes, offset: int) -> Tuple[GMDVertexBuffer, int]:
         numpy_dtype = self.numpy_dtype(big_endian)
         vertices_np = np.frombuffer(data, numpy_dtype, count=vertex_count, offset=offset)
         offset += vertex_count * numpy_dtype.itemsize
@@ -673,7 +504,7 @@ class GMDVertexBufferLayout:
                 return None
             return storage.transform_native_fmt_array(vertices_np[name])
 
-        vertices: GMDVertexBuffer_Generic = GMDVertexBuffer_Generic(
+        vertices = GMDVertexBuffer(
             layout=self,
 
             pos=self.pos_storage.transform_native_fmt_array(vertices_np["pos"]),
@@ -692,28 +523,30 @@ class GMDVertexBufferLayout:
 
         return vertices, offset
 
-    def pack_into(self, big_endian: bool, vertices: GMDVertexBuffer_Generic, append_to: bytearray):
-        # TODO: Validate that all ranges exist for what we want
-        # TODO: Fill in default data if stuff is missing?
+    def pack_into(self, big_endian: bool, vertices: GMDVertexBuffer, append_to: bytearray):
+        numpy_dtype = self.numpy_dtype(big_endian)
+        vertices_np = np.zeros(len(vertices), numpy_dtype)
 
-        for i in range(vertices.vertex_count()):
-            self.pos_unpacker.pack(big_endian, vertices.pos[i], append_to=append_to)
-            if self.weights_unpacker:
-                self.weights_unpacker.pack(big_endian, vertices.weight_data[i], append_to=append_to)
-            if self.bones_unpacker:
-                self.bones_unpacker.pack(big_endian, vertices.bone_data[i], append_to=append_to)
-            if self.normal_unpacker:
-                self.normal_unpacker.pack(big_endian, vertices.normal[i], append_to=append_to)
-            if self.tangent_unpacker:
-                self.tangent_unpacker.pack(big_endian, vertices.tangent[i], append_to=append_to)
-            if self.unk_unpacker:
-                self.unk_unpacker.pack(big_endian, vertices.unk[i], append_to=append_to)
-            if self.col0_unpacker:
-                self.col0_unpacker.pack(big_endian, vertices.col0[i], append_to=append_to)
-            if self.col1_unpacker:
-                self.col1_unpacker.pack(big_endian, vertices.col1[i], append_to=append_to)
-            for uv_data, uv_packer in zip(vertices.uvs, self.uv_unpackers):
-                uv_packer.pack(big_endian, uv_data[i], append_to=append_to)
+        def store_data(name: str, storage: Optional[VecStorage], data: np.ndarray):
+            nonlocal vertices_np
+            if storage is None or data is None:
+                if (storage is None) != (data is None):
+                    print(f"Whoopsie! Tried to pack_into where field {name} had storage {storage} but data {data}")
+                return None
+            vertices_np[name] = storage.untransform_array(big_endian, data)
+
+        store_data("pos", self.pos_storage, vertices.pos)
+        store_data("weight_data", self.weights_storage, vertices.weight_data)
+        store_data("bone_data", self.bones_storage, vertices.bone_data)
+        store_data("normal", self.normal_storage, vertices.normal)
+        store_data("tangent", self.tangent_storage, vertices.tangent)
+        store_data("unk", self.unk_storage, vertices.unk)
+        store_data("col0", self.col0_storage, vertices.col0)
+        store_data("col1", self.col1_storage, vertices.col1)
+        for (i, (s, d)) in enumerate(zip(self.uv_storages, vertices.uvs)):
+            store_data(f"uv{i}", s, d)
+
+        append_to += vertices_np.tobytes()
 
 
 # Shaders are external dependencies, so they are frozen. You can't change the name of a shader, for example.

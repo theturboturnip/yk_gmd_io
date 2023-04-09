@@ -8,7 +8,7 @@ from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultD
 from mathutils import Vector
 from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -353,7 +353,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
     def find_fusion_output_vs(ms: List[GMDMesh]) -> VertVoxelSet:
-        unfused_vs: List[GMDVertexBuffer_Generic]
+        unfused_vs: List[GMDVertexBuffer]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
         else:
@@ -364,7 +364,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         if skinned:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
-                buf = cast(GMDVertexBuffer_Skinned, unfused_vs[buf_idx])
+                buf = cast(GMDSkinnedVertexBuffer, unfused_vs[buf_idx])
 
                 exact_pos = buf.pos[i]
                 rounded_bw = (

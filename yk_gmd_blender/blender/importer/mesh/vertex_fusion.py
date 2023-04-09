@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
 
 from mathutils import Vector
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, BoneWeight
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 """
@@ -85,7 +85,7 @@ NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 def make_bone_indices_consistent(
         gmd_meshes: List[GMDSkinnedMesh],
-) -> Tuple[List[GMDBone], List[GMDVertexBuffer_Skinned]]:
+) -> Tuple[List[GMDBone], List[GMDSkinnedVertexBuffer]]:
     """
     Creates a list of vertex buffers with consistent bone indices
     i.e. vertices in different buffers use the same indices to refer to the same bones.
@@ -146,7 +146,7 @@ def make_bone_indices_consistent(
 
 
 def fuse_adjacent_vertices(
-        vertices: List[GMDVertexBuffer_Generic]
+        vertices: List[GMDVertexBuffer]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Given a set of vertices, fuse those that are "adjacent" (see vertex_fusion() docs for definition).
@@ -444,7 +444,7 @@ def decide_on_unfusions(
 
 
 def solve_unfusion(
-        vert_bufs: List[GMDVertexBuffer_Generic],
+        vert_bufs: List[GMDVertexBuffer],
         old_fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         unfuse_verts_with: Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
@@ -564,7 +564,7 @@ def solve_unfusion(
 
 def vertex_fusion(
         idx_bufs: List[array.ArrayType],
-        vertices: List[GMDVertexBuffer_Generic]
+        vertices: List[GMDVertexBuffer]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Calculates "vertex fusion" for a set of vertex buffers which will result in a single contiguous list of vertices.
