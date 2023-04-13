@@ -36,6 +36,7 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
     skinned_submeshes: List[SkinnedSubmesh] = []
     for (material_idx, (loops, triangles)) in per_mat_meshloop_lists_and_triangles.items():
         skinned_submeshes += convert_meshloop_tris_to_skinned_submeshes(mesh, loops, triangles, material_idx, bone_info,
+                                                                        vertex_group_mapping,
                                                                         error, max_bones_per_submesh=bone_limit)
 
     return [s.build_skinned(mesh, bone_info, materials, error) for s in skinned_submeshes]
@@ -230,8 +231,8 @@ def compute_vertex_4weights(
         v_n_weights = min(4, len(gs))
         n_weights[v.index] = v_n_weights
         for i in range(v_n_weights):
-            bones[v.index][i] = gs[i].group if gs[i].weight else 0,
-            weights[v.index][i] = min(1.0, gs[i].weight)
+            bones[v.index, i] = gs[i].group if gs[i].weight else 0
+            weights[v.index, i] = min(1.0, gs[i].weight)
         # Sanity checks for meshes with more than 4 ""major"" influences.
         if len(gs) > 4 and any(g.weight > 0.1 for g in gs[4:]):
             error.recoverable(f"Some vertices in mesh {mesh.name} have more than 4 major influences. "
@@ -538,6 +539,8 @@ class SkinnedSubmesh(Submesh):
     """
     # A mapping of (blender vertex group) -> (local bone index).
     relevant_vertex_groups: Dict[int, int]
+    # A mapping of (local bone index) -> (relevant GMD bone)
+    relevant_bones: List[GMDBone]
 
     def build_skinned(self, mesh: bpy.types.Mesh, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
                       materials: List[GMDAttributeSet], error: ErrorReporter) -> GMDSkinnedMesh:
@@ -547,6 +550,7 @@ class SkinnedSubmesh(Submesh):
 
         vertices = GMDSkinnedVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
 
+        self._extract_pos(mesh, vertices.pos)
         if vertices.normal is not None:
             self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
         if vertices.tangent is not None:
@@ -561,7 +565,7 @@ class SkinnedSubmesh(Submesh):
                               f"If this is OK, disable Strict Export.")
         assert vertices.bone_data is not None
         assert vertices.weight_data is not None
-        self._extract_boneweights(bone_info, vertices.bone_data, vertices.weight_data)
+        self._extract_boneweights(mesh, bone_info, vertices.bone_data, vertices.weight_data)
         if vertices.col0 is not None:
             self._extract_from_color(layers.col0_layer, vertices.col0)
         if vertices.col1 is not None:
@@ -582,19 +586,21 @@ class SkinnedSubmesh(Submesh):
             triangle_indices=triangle_list,
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,
-            attribute_set=material
+            attribute_set=material,
+            relevant_bones=self.relevant_bones
         )
 
-    def _extract_boneweights(self, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    def _extract_boneweights(self, mesh: bpy.types.Mesh, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
                              bone_data: np.ndarray, weight_data: np.ndarray):
         # See compute_vertex_4weights
         original_bones, weights, n_weights = bone_info
-        weight_data[:] = weights.take(self.loops)
-        for (i, loop_idx) in enumerate(self.loops):
+        vertices = [mesh.loops[l].vertex_index for l in self.loops]
+        weight_data[:] = weights[vertices, :]
+        for (i, vert_idx) in enumerate(vertices):
             # Remap the bone only for the first N bones it uses.
             # All others are 0
-            for b_i in range(n_weights[loop_idx]):
-                bone_data[i, b_i] = self.relevant_vertex_groups[original_bones[loop_idx, b_i]]
+            for b_i in range(n_weights[vert_idx]):
+                bone_data[i, b_i] = self.relevant_vertex_groups[original_bones[vert_idx, b_i]]
 
 
 def convert_meshloop_tris_to_skinned_submeshes(
@@ -603,6 +609,7 @@ def convert_meshloop_tris_to_skinned_submeshes(
         triangles: List[Tuple[int, int, int]],
         material_idx: int,
         bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
+        vertex_group_mapping: Dict[int, GMDBone],
         error: ErrorReporter,
         max_bones_per_submesh=32,
 ) -> List[SkinnedSubmesh]:
@@ -650,11 +657,16 @@ def convert_meshloop_tris_to_skinned_submeshes(
             vg: i
             for (i, vg) in enumerate(referenced_vgs)
         }
+        relevant_bones = [
+            vertex_group_mapping[vg]
+            for vg in referenced_vgs
+        ]
         skinned_submeshes += convert_meshloop_tris_to_tsubmeshes(
             loops,
             tri_partition,
             lambda loops, triangles: SkinnedSubmesh(loops, triangles, material_idx=material_idx,
-                                                    relevant_vertex_groups=relevant_vertex_groups)
+                                                    relevant_vertex_groups=relevant_vertex_groups,
+                                                    relevant_bones=relevant_bones)
         )
 
     return skinned_submeshes
