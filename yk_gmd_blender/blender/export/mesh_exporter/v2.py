@@ -424,9 +424,12 @@ class Submesh:
         for (i, loop_idx) in enumerate(self.loops):
             # TODO this is a hack. This assumes the bonedata is always a byte-value.
             # We should change this so that self.layers actually looks at the associated storage and decides how to encode/decode to 0.1.
-            data[i] = bone_data_layer.data[loop_idx].color
-        # Multiply all of them by 255 so they make sense in a byte.
-        data *= 255
+            # data[i] is of type uint8, => we have to premultiply to get into the 0..255 range before storing
+            color = bone_data_layer.data[loop_idx].color
+            data[i, 0] = color[0] * 255
+            data[i, 1] = color[1] * 255
+            data[i, 2] = color[2] * 255
+            data[i, 3] = color[3] * 255
 
     def _extract_uv(self, uv_idx: int, comp_count: int,
                     uv_layer: Union[bpy.types.MeshUVLoopLayer, bpy.types.FloatColorAttribute], data: np.ndarray,
@@ -439,7 +442,9 @@ class Submesh:
             for (i, loop_idx) in enumerate(self.loops):
                 data[i] = uv_layer.data[loop_idx].uv
             # Invert Y to go from blender -> GMD
-            data[:, 1] = 1 - data[:, 1]
+            # NOTE this relies on storing the data as float32 - if it's stored as float16, we'd be doing (1 - f16(x))
+            # instead of f16(1 - x), which is sometimes different.
+            data[:, 1] = 1.0 - data[:, 1]
         else:
             for (i, loop_idx) in enumerate(self.loops):
                 data[i] = uv_layer.data[loop_idx].color[:comp_count]
