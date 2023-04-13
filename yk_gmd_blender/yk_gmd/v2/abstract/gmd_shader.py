@@ -145,7 +145,7 @@ class GMDVertexBuffer(Sized):
     @staticmethod
     def build_empty(layout: 'GMDVertexBufferLayout', count: int):
         def alloc_storage(storage: Optional[VecStorage]) -> Optional[np.ndarray]:
-            if storage:
+            if storage is None:
                 return None
             return storage.preallocate(count)
 
@@ -162,7 +162,7 @@ class GMDVertexBuffer(Sized):
             col0=alloc_storage(layout.col0_storage),
             col1=alloc_storage(layout.col1_storage),
             uvs=[
-                alloc_storage(s)
+                s.preallocate(count)
                 for s in layout.uv_storages
             ],
         )
@@ -172,6 +172,46 @@ class GMDVertexBuffer(Sized):
 
     def __len__(self):
         return self.vertex_count()
+
+    def copy_as_generic(self, s: slice = slice(None)) -> 'GMDVertexBuffer':
+        return GMDVertexBuffer(
+            layout=self.layout,
+
+            pos=self.pos[s].copy(),
+
+            bone_data=self.bone_data[s].copy() if self.bone_data is not None else None,
+            weight_data=self.weight_data[s].copy() if self.weight_data is not None else None,
+            normal=self.normal[s].copy() if self.normal is not None else None,
+            tangent=self.tangent[s].copy() if self.tangent is not None else None,
+            unk=self.unk[s].copy() if self.unk is not None else None,
+            col0=self.col0[s].copy() if self.col0 is not None else None,
+            col1=self.col1[s].copy() if self.col1 is not None else None,
+            uvs=[
+                uv[s].copy()
+                for uv in self.uvs
+            ],
+        )
+
+    def copy_as_skinned(self, s: slice = slice(None)) -> 'GMDSkinnedVertexBuffer':
+        assert self.bone_data is not None
+        assert self.weight_data is not None
+        return GMDSkinnedVertexBuffer(
+            layout=self.layout,
+
+            pos=self.pos[s].copy(),
+
+            bone_data=self.bone_data[s].copy(),
+            weight_data=self.weight_data[s].copy(),
+            normal=self.normal[s].copy() if self.normal is not None else None,
+            tangent=self.tangent[s].copy() if self.tangent is not None else None,
+            unk=self.unk[s].copy() if self.unk is not None else None,
+            col0=self.col0[s].copy() if self.col0 is not None else None,
+            col1=self.col1[s].copy() if self.col1 is not None else None,
+            uvs=[
+                uv[s].copy()
+                for uv in self.uvs
+            ],
+        )
 
 
 # Immutable version of GMDVertexBuffer that includes a bone_weights list
@@ -202,25 +242,6 @@ class GMDSkinnedVertexBuffer(GMDVertexBuffer):
             col0=as_generic.col0,
             col1=as_generic.col1,
             uvs=as_generic.uvs,
-        )
-
-    def copy(self) -> 'GMDSkinnedVertexBuffer':
-        return GMDSkinnedVertexBuffer(
-            layout=self.layout,
-
-            pos=self.pos.copy(),
-
-            bone_data=self.bone_data.copy(),
-            weight_data=self.weight_data.copy(),
-            normal=self.normal.copy() if self.normal is not None else None,
-            tangent=self.tangent.copy() if self.tangent is not None else None,
-            unk=self.unk.copy() if self.unk is not None else None,
-            col0=self.col0.copy() if self.col0 is not None else None,
-            col1=self.col1.copy() if self.col1 is not None else None,
-            uvs=[
-                uv.copy()
-                for uv in self.uvs
-            ],
         )
 
 
@@ -527,7 +548,7 @@ class GMDVertexBufferLayout:
         numpy_dtype = self.numpy_dtype(big_endian)
         vertices_np = np.zeros(len(vertices), numpy_dtype)
 
-        def store_data(name: str, storage: Optional[VecStorage], data: np.ndarray):
+        def store_data(name: str, storage: Optional[VecStorage], data: Optional[np.ndarray]):
             nonlocal vertices_np
             if storage is None or data is None:
                 if (storage is None) != (data is None):

@@ -432,7 +432,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     relevant_bones=cast(List[GMDBone], relevant_bones),
 
-                    vertices_data=vertex_buffer.extract_as_skinned(vertex_slice),
+                    vertices_data=vertex_buffer.copy_as_skinned(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,
@@ -444,7 +444,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 meshes.append(GMDMesh(
                     empty=(self.vertex_import_mode == VertexImportMode.NO_VERTICES),
 
-                    vertices_data=vertex_buffer.extract_as_generic(vertex_slice),
+                    vertices_data=vertex_buffer.copy_as_generic(vertex_slice),
 
                     triangle_indices=triangle_indices,
                     triangle_strip_noreset_indices=triangle_strip_noreset_indices,

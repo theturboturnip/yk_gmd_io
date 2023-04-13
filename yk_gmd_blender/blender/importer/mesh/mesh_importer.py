@@ -59,15 +59,15 @@ def gmd_meshes_to_bmesh(
             # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
             # Just using .xyz would make blender apply a translation
             vert.normal = (gmd_to_blender_world @ (Vector(buf.normal[i][:3]).resized(4))).xyz
-        if deform:
-            for bone_weight in buf.bone_weights[i]:
-                if bone_weight.weight > 0:
-                    if bone_weight.bone >= len(relevant_bones):
+        if is_skinned:
+            for bone, weight in zip(buf.bone_data[i], buf.weight_data[i]):
+                if weight > 0:
+                    if bone >= len(relevant_bones):
                         error.debug("BONES", f"bone out of bounds - "
-                                             f"bone {bone_weight.bone} in {[b.name for b in relevant_bones]}")
+                                             f"bone {bone} in {[b.name for b in relevant_bones]}")
                         error.debug("BONES", f"submesh len = {len(buf)}")
-                    vertex_group_index = vertex_group_indices[relevant_bones[bone_weight.bone].name]
-                    vert[deform][vertex_group_index] = bone_weight.weight
+                    vertex_group_index = vertex_group_indices[relevant_bones[bone].name]
+                    vert[deform][vertex_group_index] = weight
 
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
