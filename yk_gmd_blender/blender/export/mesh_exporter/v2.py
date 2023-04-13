@@ -267,6 +267,7 @@ class Submesh:
 
         vertices = GMDVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
 
+        self._extract_pos(mesh, vertices.pos)
         if vertices.normal is not None:
             self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
         if vertices.tangent is not None:
@@ -357,6 +358,15 @@ class Submesh:
                 triangle_strip_reset.append(t2)
 
         return triangle_list, triangle_strip_noreset, triangle_strip_reset
+
+    def _extract_pos(self, mesh: bpy.types.Mesh, data: np.ndarray):
+        for (i, loop_idx) in enumerate(self.loops):
+            pos = mesh.vertices[mesh.loops[loop_idx].vertex_index].co
+            # Hardcoded (-x, z, y) transposition to go into GMD space
+            data[i, 0] = -pos[0]
+            data[i, 1] = pos[2]
+            data[i, 2] = pos[1]
+            # data[i, 3] = 0
 
     def _extract_normals(self, mesh: bpy.types.Mesh, normal_w_layer: Optional[bpy.types.FloatColorAttribute],
                          data: np.ndarray):
