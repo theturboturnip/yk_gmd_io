@@ -19,7 +19,7 @@ class VecCompFmt(Enum):
     Float16 = 3  # 16-bit IEEE float
     Float32 = 4  # 32-bit IEEE float
 
-    def size_bytes(self):
+    def native_size_bytes(self):
         if self in [VecCompFmt.Byte_0_1, VecCompFmt.Byte_Minus1_1, VecCompFmt.Byte_0_255]:
             return 1
         elif self == VecCompFmt.Float16:
@@ -40,9 +40,9 @@ class VecCompFmt(Enum):
     def numpy_transformed_dtype(self):
         if self == VecCompFmt.Byte_0_255:
             return np.uint8
-        elif self == VecCompFmt.Float16:
-            return np.float16
+
         else:
+            # Upgrade Float16 to Float32 so we can manipulate it without rounding error
             return np.float32
 
 
@@ -54,8 +54,8 @@ class VecStorage:
     def __post_init__(self):
         assert 1 <= self.n_comps <= 4
 
-    def size_bytes(self):
-        return self.comp_fmt.size_bytes() * self.n_comps
+    def native_size_bytes(self):
+        return self.comp_fmt.native_size_bytes() * self.n_comps
 
     def numpy_native_dtype(self, big_endian: bool):
         return np.dtype((self.comp_fmt.numpy_native_dtype(big_endian), self.n_comps))
@@ -75,7 +75,8 @@ class VecStorage:
             # Always make a copy, even if the byte order is the same as we want.
             # The Blender side wants to do bone remapping etc. so we want a mutable version.
             # src is backed by `bytes` -> is immutable.
-            return src.astype(expected_dtype, casting='equiv', copy=True)
+            # Float16 gets upgraded to float32 on transform to avoid rounding errors, so use same_kind instead of equiv
+            return src.astype(expected_dtype, casting='same_kind', copy=True)
         elif self.comp_fmt == VecCompFmt.Byte_0_1:
             # src must have dtype == vector of uint8
             # it's always safe to cast uint8 -> float16 and float32, they can represent all values
@@ -99,16 +100,21 @@ class VecStorage:
             if transformed.dtype == expected_dtype:  # If the byte order is the same, passthru
                 return transformed
             else:  # else make a copy with transformed byte order
-                return transformed.astype(expected_dtype, casting='equiv')
+                # Float16 is transformed as float32 to avoid rounding errors, so use same_kind instead of equiv
+                return transformed.astype(expected_dtype, casting='same_kind')
         elif self.comp_fmt == VecCompFmt.Byte_0_1:
             # (0, 1) -> (0, 255) by multiplying by 255
             data = transformed * 255.0
+            # Do rounding here because the cast doesn't do it right
+            np.around(data, out=data)
             # storage = float, casting to int cannot preserve values -> use 'unsafe'
             return data.astype(expected_dtype, casting='unsafe')
         elif self.comp_fmt == VecCompFmt.Byte_Minus1_1:
             # (-1, 1) to (0, 1) by adding 1, dividing by 2
             # (0, 1) to (0, 255) by multiplying by 255
             data = ((transformed + 1.0) / 2.0) * 255.0
+            # Do rounding here because the cast doesn't do it right
+            np.around(data, out=data)
             # storage = float, casting to int cannot preserve values -> use 'unsafe'
             return data.astype(expected_dtype, casting='unsafe')
         raise RuntimeError(f"Invalid VecStorage called transform_native_fmt_array: {self}")
@@ -484,7 +490,7 @@ class GMDVertexBufferLayout:
         names = ["pos"]
         formats = [self.pos_storage.numpy_native_dtype(big_endian)]
         offsets = [0]
-        curr_offset = self.pos_storage.size_bytes()
+        curr_offset = self.pos_storage.native_size_bytes()
 
         def register_storage(name: str, storage: Optional[VecStorage]):
             nonlocal curr_offset
@@ -492,7 +498,7 @@ class GMDVertexBufferLayout:
                 names.append(name)
                 formats.append(storage.numpy_native_dtype(big_endian))
                 offsets.append(curr_offset)
-                curr_offset += storage.size_bytes()
+                curr_offset += storage.native_size_bytes()
 
         register_storage("weights", self.weights_storage)
         register_storage("bones", self.bones_storage)
