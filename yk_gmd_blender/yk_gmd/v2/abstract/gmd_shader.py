@@ -563,8 +563,8 @@ class GMDVertexBufferLayout:
             vertices_np[name] = storage.untransform_array(big_endian, data)
 
         store_data("pos", self.pos_storage, vertices.pos)
-        store_data("weight_data", self.weights_storage, vertices.weight_data)
-        store_data("bone_data", self.bones_storage, vertices.bone_data)
+        store_data("weights", self.weights_storage, vertices.weight_data)
+        store_data("bones", self.bones_storage, vertices.bone_data)
         store_data("normal", self.normal_storage, vertices.normal)
         store_data("tangent", self.tangent_storage, vertices.tangent)
         store_data("unk", self.unk_storage, vertices.unk)
