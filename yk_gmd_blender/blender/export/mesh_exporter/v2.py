@@ -1,13 +1,14 @@
 import array
-from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Set, TypeVar, NewType, Callable, Optional, Union
+from typing import List, Dict, Tuple, Set, TypeVar, Callable, NewType
 from typing import cast
 
 import numpy as np
 
 import bpy
-from yk_gmd_blender.blender.common import AttribSetLayerNames
+from yk_gmd_blender.blender.export.mesh_exporter.extractor import compute_vertex_4weights, loop_indices_for_material, \
+    extract_vertices_for_skinned_material, generate_vertex_byteslices, MeshLoopIdx, \
+    extract_vertices_for_unskinned_material
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
@@ -29,17 +30,41 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
         if group.name in bone_name_map
     }
 
-    error.debug("MESH", f"Exporting skinned meshes for {object.name}")
-    per_mat_meshloop_lists_and_triangles = material_split_meshloops_and_triangles(mesh)
     bone_info = compute_vertex_4weights(mesh, relevant_vertex_groups=set(vertex_group_mapping.keys()), error=error)
 
+    error.debug("MESH", f"Exporting skinned meshes for {object.name}")
     skinned_submeshes: List[SkinnedSubmesh] = []
-    for (material_idx, (loops, triangles)) in per_mat_meshloop_lists_and_triangles.items():
-        skinned_submeshes += convert_meshloop_tris_to_skinned_submeshes(mesh, loops, triangles, material_idx, bone_info,
-                                                                        vertex_group_mapping,
-                                                                        error, max_bones_per_submesh=bone_limit)
 
-    return [s.build_skinned(mesh, bone_info, materials, error) for s in skinned_submeshes]
+    for (attr_set_idx, attr_set) in enumerate(materials):
+        # Get the set of MeshLoopIdxs that are related to this material
+        loops_with_dupes = loop_indices_for_material(mesh, attr_set_idx)
+        # Generate a vertex buffer with data for all of them
+        base_vertices = extract_vertices_for_skinned_material(mesh, attr_set, loops_with_dupes, bone_info, error)
+        # Convert them to bytes and deduplicate them
+        vertex_bytes = generate_vertex_byteslices(base_vertices, big_endian=False)
+        deduped_verts, loop_idx_to_deduped_verts_idx = dedupe_loops(loops_with_dupes, vertex_bytes)
+        # Generate the submeshes
+        skinned_submeshes += convert_meshloop_tris_to_skinned_submeshes(
+            # Basic info included in every generated submesh
+            attr_set,
+            base_vertices,
+            # The mesh, so it can determine the vertex groups for each triangle
+            mesh,
+            # Deduped verts and associated mapping from mesh loops
+            deduped_verts,
+            loop_idx_to_deduped_verts_idx,
+            # Relevant triangles
+            [t for t in mesh.loop_triangles if t.material_index == attr_set_idx],
+            # Per-mesh bone info TODO should use this instead of mesh
+            bone_info,
+            vertex_group_mapping,
+            # Error reporting
+            error,
+            # Config
+            max_bones_per_submesh=255  # bone_limit
+        )
+
+    return [s.build_skinned() for s in skinned_submeshes]
 
 
 def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,
@@ -47,12 +72,25 @@ def split_unskinned_blender_mesh_object(context: bpy.types.Context, object: bpy.
     mesh = prepare_mesh(context, object, check_needs_tangent(materials))
 
     error.debug("MESH", f"Exporting unskinned meshes for {object.name}")
-    per_mat_meshloop_lists_and_triangles = material_split_meshloops_and_triangles(mesh)
     submeshes: List[Submesh] = []
-    for (material_idx, (loops, triangles)) in per_mat_meshloop_lists_and_triangles.items():
-        submeshes += convert_meshloop_tris_to_unskinned_submeshes(loops, triangles, material_idx)
+    for (attr_set_idx, attr_set) in enumerate(materials):
+        # Get the set of MeshLoopIdxs that are related to this material
+        loops_with_dupes = loop_indices_for_material(mesh, attr_set_idx)
+        # Generate a vertex buffer with data for all of them
+        base_vertices = extract_vertices_for_unskinned_material(mesh, attr_set, loops_with_dupes, error)
+        # Convert them to bytes and deduplicate them
+        vertex_bytes = generate_vertex_byteslices(base_vertices, big_endian=False)
+        deduped_verts, loop_idx_to_deduped_verts_idx = dedupe_loops(loops_with_dupes, vertex_bytes)
+        # Generate the submeshes
+        submeshes += convert_meshloop_tris_to_unskinned_submeshes(
+            attr_set,
+            base_vertices,
+            deduped_verts,
+            loop_idx_to_deduped_verts_idx,
+            [t for t in mesh.loop_triangles if t.material_index == attr_set_idx],
+        )
 
-    return [s.build_unskinned(mesh, materials, error) for s in submeshes]
+    return [s.build_unskinned() for s in submeshes]
 
 
 def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tangent: bool) -> bpy.types.Mesh:
@@ -86,161 +124,62 @@ def check_needs_tangent(materials: List[GMDAttributeSet]) -> bool:
     return any(m.shader.vertex_buffer_layout.tangent_storage for m in materials)
 
 
-MeshLoopIdx = NewType("MeshLoopIdx", int)
+# Int alias representing offsets into material_vertices.
+# When creating meshes, we first split them by material and generate a vertex buffer `material_vertices`
+# with data for all loops associated with triangles associated with each material.
+# This type represents an index into that vertex buffer.
+MaterialVertIdx = NewType("MaterialVertIdx", int)
+
+# Int alias representing offsets into the "deduped vertices" list.
+# Once a vertex buffer has been created for each material,
+# we "deduplicate" each buffer and create a canonical list deduped_verts: List[MaterialVertIdx]
+# such that there are no two (i1, i2) in deduped_verts such that material_vertices[i1] == material_vertices[i2].
+# This type represents an index into deduped_verts.
+DedupedVertIdx = NewType("DedupedVertIdx", int)
+
+# Int alias representing offsets into a submesh's vertices
+# When splitting a mesh into submeshes, a subset of the total vertices are assigned to each submesh.
+# The triangles for each submesh must use indices relative to that subset.
+# This type represents an index into a submesh's vertex subset.
+SubmeshVertIdx = NewType("SubmeshVertIdx", int)
+
+# Alias representing a triangle indexed relative to a submesh
+SubmeshTri = NewType("SubmeshTri", Tuple[SubmeshVertIdx, SubmeshVertIdx, SubmeshVertIdx])
 
 
-def material_split_meshloops_and_triangles(mesh: bpy.types.Mesh) -> Dict[int, Tuple[
-    List[MeshLoopIdx],
-    List[Tuple[int, int, int]]
-]]:
+def dedupe_loops(loops_with_dupes: List[MeshLoopIdx], vertex_bytes: List[bytes]) -> Tuple[
+    List[MaterialVertIdx],
+    Dict[MeshLoopIdx, DedupedVertIdx]
+]:
     """
-    Given a bpy Mesh, return a list of "unique" MeshLoop indices and the triangle indices *within that list*
-    for the triangles for each material index.
+    Returns
 
-    "unique" here means each each MeshLoop index maps directly to a single vertex in the final buffer.
-    :param mesh:
-    :return:
+    1. "deduped_verts" a list of indices into loops_with_dupes and vertex bytes, such that there are no two values
+    (i1, i2) in the list where vertex_bytes[i1] == vertex_bytes[i2]
+    2. a mapping of MeshLoopIdx -> index in exported_loops
+    i.e. if vertex_bytes[0] == vertex_bytes[1] == vertex_bytes[2], and deduped_verts[x] == (0, 1, or 2)
+    0, 1, and 2 map to x.
+    This is useful because deduped_verts defines the layout of the final vertex buffer, so this mapping converts
+    triangles in blender-index-space to per-material-index-space.
     """
+    assert len(loops_with_dupes) == len(vertex_bytes)
 
-    combined_meshloop_idxs_triangles: Dict[int, Tuple[
-        List[MeshLoopIdx],
-        List[Tuple[int, int, int]]
-    ]] = defaultdict(lambda: ([], []))
+    vertex_bytes_to_no_dupe_loop_idx: Dict[bytes, DedupedVertIdx] = {}
 
-    # Mapping of (material idx, vertex idx referenced by a smooth triangle) ->
-    # (index of a matching "meshloop idx" in meshloop_idxs[material idx])
-    smooth_vert_idxs: Dict[Tuple[int, int], int] = {}
+    deduped_verts: List[MaterialVertIdx] = []
+    loop_idx_to_deduped_verts_idx: Dict[MeshLoopIdx, DedupedVertIdx] = {}
+    for i, (loop_idx, vertex) in enumerate(zip(loops_with_dupes, vertex_bytes)):
+        # See if this vertex data has already been encountered
+        no_dupe_loop_idx = vertex_bytes_to_no_dupe_loop_idx.get(vertex)
+        # If not, it's not a dupe - push it to deduped_verts and register in vertex_bytes_to...
+        if no_dupe_loop_idx is None:
+            no_dupe_loop_idx = DedupedVertIdx(len(deduped_verts))
+            deduped_verts.append(MaterialVertIdx(i))
+            vertex_bytes_to_no_dupe_loop_idx[vertex] = no_dupe_loop_idx
+        # Either way, we now know where this mesh loop maps to inside deduped_verts
+        loop_idx_to_deduped_verts_idx[loop_idx] = no_dupe_loop_idx
 
-    # Map (smooth meshloop idx) to (index of a matching "meshloop idx" in meshloop_idxs[material_idx]),
-    # adding it if it isn't already there.
-    # The meshloop idx may match a previously used smooth meshloop idx if they point to the same vertex.
-    def add_or_reuse_smooth_meshloop_idx(material_idx: int, meshloop_idx: int) -> int:
-        vert_data = (material_idx, mesh.loops[meshloop_idx].vertex_index)
-        preexisting_idx = smooth_vert_idxs.get(vert_data)
-        if preexisting_idx is None:
-            meshloop_idxs = combined_meshloop_idxs_triangles[material_idx][0]
-            new_idx = len(meshloop_idxs)
-            smooth_vert_idxs[vert_data] = new_idx
-            meshloop_idxs.append(MeshLoopIdx(meshloop_idx))
-            return new_idx
-        else:
-            return preexisting_idx
-
-    # Mapping of (material idx, vertex idx, normal referenced by not-smooth triangle) ->
-    # (index of a matching "meshloop idx" in meshloop_idxs[material_idx])
-    #
-    # This is for the sake of deduping e.g. common vertices in a flat-shaded quad, NOT for deduping vertices that happen
-    # to have identical data.
-    hard_vert_idxs: Dict[Tuple[int, int, Tuple[float, float, float]], int] = {}
-
-    # Map (flat meshloop idx) to (index of a matching "meshloop idx" in meshloop_idxs[material_idx]),
-    # adding it if it isn't already there.
-    # The meshloop idx may match a previously used flat meshloop idx if they point to the same vertex
-    # and have the same normal.
-    def add_or_reuse_flat_meshloop_idx(material_idx: int, meshloop_idx: int) -> int:
-        loop = mesh.loops[meshloop_idx]
-        vert_data = (material_idx, loop.vertex_index, loop.normal)
-        preexisting_idx = hard_vert_idxs.get(vert_data)
-        if preexisting_idx is None:
-            meshloop_idxs = combined_meshloop_idxs_triangles[material_idx][0]
-            new_idx = len(meshloop_idxs)
-            hard_vert_idxs[vert_data] = new_idx
-            meshloop_idxs.append(MeshLoopIdx(meshloop_idx))
-            return new_idx
-        else:
-            return preexisting_idx
-
-    for t in mesh.loop_triangles:
-        material_idx = t.material_index
-        triangles: List[Tuple[int, int, int]] = combined_meshloop_idxs_triangles[material_idx][1]
-        if t.use_smooth:
-            triangles.append((
-                add_or_reuse_smooth_meshloop_idx(material_idx, t.loops[0]),
-                add_or_reuse_smooth_meshloop_idx(material_idx, t.loops[1]),
-                add_or_reuse_smooth_meshloop_idx(material_idx, t.loops[2]),
-            ))
-        else:
-            triangles.append((
-                add_or_reuse_flat_meshloop_idx(material_idx, t.loops[0]),
-                add_or_reuse_flat_meshloop_idx(material_idx, t.loops[1]),
-                add_or_reuse_flat_meshloop_idx(material_idx, t.loops[2]),
-            ))
-
-    return combined_meshloop_idxs_triangles
-
-
-def compute_vertex_4weights(
-        mesh: bpy.types.Mesh,
-        relevant_vertex_groups: Set[int],
-        error: ErrorReporter
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Given a bpy Mesh, find the top 4 bones and weights of each vertex.
-    Returns two ndarrays, one for bones and one for weights.
-    bones[vertex][i] = 0 if weights[vertex][i] is 0, else = the index of a vertex group in relevant_vertex_groups.
-    weights[vertex][i] = float in [0, 1].
-    n_weights[vertex] = the number of active weights for the vertex (max 4).
-    e.g. if n_weights[v] = 3, bones[v][3] == weights[v][3] == 0 but weights[v][0..2] are nonzero.
-    bones[vertex] and weights[vertex] are sorted in descending weight e.g.
-    bones[v] = [0, 1, 2, 3]
-    weights[v] = [0.5, 0.3, 0.1, 0.1]
-
-    :param relevant_vertex_groups: A set of relevant (mesh vertex group index) values. Weights for other groups are ignored.
-    :return:
-    """
-
-    # Right now we store the bone indices (which can be 0..all bones that touch the mesh) inside a uint16.
-    # Once they're split up into submeshes the max is 255 to fit into a uint8, but I *think* >255 bones per overall mesh
-    # is accepted.
-    # We should never need to up this limit unless RGG do something really dumb.
-    if max(relevant_vertex_groups) > 65535:
-        error.fatal(
-            f"Mesh {mesh.name} has vertex group indices > 65535. This is not supported. Use fewer bones please.")
-    bones = np.zeros((len(mesh.vertices), 4), np.uint16)
-    weights = np.zeros((len(mesh.vertices), 4), np.float32)
-    n_weights = np.zeros(len(mesh.vertices), np.uint8)
-
-    has_warned_about_weights_over_one = False
-
-    for v in mesh.vertices:
-        # For each vertex: take all boneweights that are part of this armature,
-        # sort them in descending order of weight,
-        # do sanity checks for values > 1 and < 0,
-        # and put the first 4 values into the bones/weights array.
-        # If there are fewer than 4 values, the others default to 0.
-        gs = sorted(
-            [
-                g
-                for g in v.groups
-                if g.group in relevant_vertex_groups
-            ],
-            key=lambda g: g.weight,
-            reverse=True
-        )
-
-        # Check if weights are greater than 1 or lower than 0
-        if gs and gs[0].weight > 1 and not has_warned_about_weights_over_one:
-            error.recoverable(f"Some weights in mesh {mesh.name} are greater than 1. "
-                              f"These can't be exported - try normalizing your weights, or turn off Strict Export "
-                              f"to clamp it to 1")
-            has_warned_about_weights_over_one = True
-        if gs and gs[-1].weight < 0:
-            error.fatal(f"Some weights in mesh {mesh.name} are smaller than 0 - this is impossible.")
-
-        # For each of the top four elements of bws, push it into bones/weights
-        v_n_weights = min(4, len(gs))
-        n_weights[v.index] = v_n_weights
-        for i in range(v_n_weights):
-            bones[v.index, i] = gs[i].group if gs[i].weight else 0
-            weights[v.index, i] = min(1.0, gs[i].weight)
-        # Sanity checks for meshes with more than 4 ""major"" influences.
-        if len(gs) > 4 and any(g.weight > 0.1 for g in gs[4:]):
-            error.recoverable(f"Some vertices in mesh {mesh.name} have more than 4 major influences. "
-                              f"A major influence is a bone with weight greater than 0.1. "
-                              f"The exporter can only export 4 influences per vertex, so animation on this model may "
-                              f"look odd. Turn off Strict Export if this is acceptable.")
-
-    return bones, weights, n_weights
+    return deduped_verts, loop_idx_to_deduped_verts_idx
 
 
 @dataclass(frozen=True)
@@ -250,52 +189,21 @@ class Submesh:
     Contains at most 65536 "vertices".
     """
 
-    # Indices of the meshloops to turn into vertices.
-    loops: List[MeshLoopIdx]
+    # The material for the submesh
+    attr_set: GMDAttributeSet
+    # The buffer of all vertices for that material
+    base_vertices: GMDVertexBuffer
+    # Indices of the data to turn into vertices.
+    verts: List[MaterialVertIdx]
     # Triangle definitions, with indexes *that index into self.meshloop_idxs*
-    triangles: List[Tuple[int, int, int]]
-    # The index of the material in the top-level blender mesh.
-    material_idx: int
+    triangles: List[SubmeshTri]
 
     def __post_init__(self):
-        if len(self.loops) > 65536:
+        if len(self.verts) > 65536:
             raise RuntimeError("Created a Submesh with more than 65536 vertices.")
 
-    def build_unskinned(self, mesh: bpy.types.Mesh, materials: List[GMDAttributeSet], error: ErrorReporter) -> GMDMesh:
-        material = materials[self.material_idx]
-        layer_names = AttribSetLayerNames.build_from(material.shader.vertex_buffer_layout, is_skinned=False)
-        layers = layer_names.try_retrieve_from(mesh, error)
-
-        vertices = GMDVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
-
-        self._extract_pos(mesh, vertices.pos)
-        if vertices.normal is not None:
-            self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
-        if vertices.tangent is not None:
-            if layers.tangent_layer is not None:
-                self._extract_tangents_from_layer(layers.tangent_layer, vertices.tangent)
-            else:
-                self._extract_tangents_from_mesh(mesh, layers.tangent_w_layer, vertices.tangent)
-        # TODO loll we literally don't do anything for unk
-        if vertices.unk is not None:
-            error.recoverable(f"Mesh {mesh}/shader {material.shader} uses an unknown vertex field. "
-                              f"The exporter does not handle this field, and it will default to all zeros. "
-                              f"If this is OK, disable Strict Export.")
-        if vertices.bone_data is not None:
-            self._extract_bones_from_layer(layers.bone_data_layer, vertices.bone_data)
-        if vertices.weight_data is not None:
-            self._extract_from_color(layers.weight_data_layer, vertices.weight_data)
-        if vertices.col0 is not None:
-            self._extract_from_color(layers.col0_layer, vertices.col0)
-        if vertices.col1 is not None:
-            self._extract_from_color(layers.col1_layer, vertices.col1)
-        if len(vertices.uvs) != len(layers.uv_layers):
-            error.recoverable(
-                f"Shader {material.shader} expected {len(vertices.uvs)} UV layers but found {len(layers.uv_layers)}. "
-                f"Layers that were not found will be filled with 0, and extra layers will be ignored. "
-                f"If this is OK, disable Strict Export")
-        for (i, (comp_count, uv_layer)) in enumerate(layers.uv_layers):
-            self._extract_uv(i, comp_count, uv_layer, vertices.uvs[i], error)
+    def build_unskinned(self) -> GMDMesh:
+        vertices = self.base_vertices.copy_scatter(self.verts)
 
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
 
@@ -305,7 +213,7 @@ class Submesh:
             triangle_indices=triangle_list,
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,
-            attribute_set=material
+            attribute_set=self.attr_set
         )
 
     # Build the triangle strip from self.triangles
@@ -360,175 +268,96 @@ class Submesh:
 
         return triangle_list, triangle_strip_noreset, triangle_strip_reset
 
-    def _extract_pos(self, mesh: bpy.types.Mesh, data: np.ndarray):
-        for (i, loop_idx) in enumerate(self.loops):
-            pos = mesh.vertices[mesh.loops[loop_idx].vertex_index].co
-            # Hardcoded (-x, z, y) transposition to go into GMD space
-            data[i, 0] = -pos[0]
-            data[i, 1] = pos[2]
-            data[i, 2] = pos[1]
-            # data[i, 3] = 0
-
-    def _extract_normals(self, mesh: bpy.types.Mesh, normal_w_layer: Optional[bpy.types.FloatColorAttribute],
-                         data: np.ndarray):
-        # Pull normal XYZ data out of the mesh loops
-        for (i, loop_idx) in enumerate(self.loops):
-            n = mesh.loops[loop_idx].normal
-            # Hardcoded (-x, z, y) transposition to go into GMD space
-            data[i, 0] = -n[0]
-            data[i, 1] = n[2]
-            data[i, 2] = n[1]
-            # TODO the old version normalized the normals here?
-            # If we have a W layer, pull the value out of that too. Otherwise it's zero-initialized
-            if normal_w_layer:
-                data[i, 3] = (normal_w_layer.data[loop_idx].color[0] * 2) - 1
-
-    def _extract_tangents_from_layer(self, tangent_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
-        if tangent_layer is None:
-            return  # Data is zero-initialized
-
-        # Copy raw data (in 0..1 range)
-        for (i, loop_idx) in enumerate(self.loops):
-            # TODO watch out for what happens if data[i] has <4 components
-            data[i] = tangent_layer.data[loop_idx].color
-        # Correct data for (-1..1) range
-        data *= 2
-        data -= 1
-
-    def _extract_tangents_from_mesh(self, mesh: bpy.types.Mesh,
-                                    tangent_w_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
-        # Pull normal XYZ data out of the mesh loops
-        for (i, loop_idx) in enumerate(self.loops):
-            t = mesh.loops[loop_idx].tangent
-            # Hardcoded (-x, z, y) transposition to go into GMD space
-            data[i, 0] = -t[0]
-            data[i, 1] = t[2]
-            data[i, 2] = t[1]
-            # If we have a W layer, pull the value out of that too. Otherwise it's zero-initialized
-            if tangent_w_layer:
-                data[i, 3] = (tangent_w_layer.data[loop_idx].color[0] * 2) - 1
-
-    def _extract_from_color(self, col_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
-        if col_layer is None:
-            # Default colors to (1,1,1,1)
-            data.fill(1)
-        else:
-            # Fill in the colors
-            for (i, loop_idx) in enumerate(self.loops):
-                # TODO watch out for what happens if data[i] has <4 components
-                data[i] = col_layer.data[loop_idx].color
-
-    def _extract_bones_from_layer(self, bone_data_layer: Optional[bpy.types.FloatColorAttribute], data: np.ndarray):
-        if bone_data_layer is None:
-            # Bone data will be zero inited
-            return
-        for (i, loop_idx) in enumerate(self.loops):
-            # TODO this is a hack. This assumes the bonedata is always a byte-value.
-            # We should change this so that self.layers actually looks at the associated storage and decides how to encode/decode to 0.1.
-            # data[i] is of type uint8, => we have to premultiply to get into the 0..255 range before storing
-            color = bone_data_layer.data[loop_idx].color
-            data[i, 0] = color[0] * 255
-            data[i, 1] = color[1] * 255
-            data[i, 2] = color[2] * 255
-            data[i, 3] = color[3] * 255
-
-    def _extract_uv(self, uv_idx: int, comp_count: int,
-                    uv_layer: Union[bpy.types.MeshUVLoopLayer, bpy.types.FloatColorAttribute], data: np.ndarray,
-                    error: ErrorReporter):
-        if uv_layer is None:
-            return  # UVs default to 0
-        # If component_count == 2 then we should be storing it in a UV layer.
-        # For backwards compatibility, check if the layer actually has a "uv" section
-        if comp_count == 2 and hasattr(uv_layer.data[0], "uv"):
-            for (i, loop_idx) in enumerate(self.loops):
-                data[i] = uv_layer.data[loop_idx].uv
-            # Invert Y to go from blender -> GMD
-            # NOTE this relies on storing the data as float32 - if it's stored as float16, we'd be doing (1 - f16(x))
-            # instead of f16(1 - x), which is sometimes different.
-            data[:, 1] = 1.0 - data[:, 1]
-        else:
-            for (i, loop_idx) in enumerate(self.loops):
-                data[i] = uv_layer.data[loop_idx].color[:comp_count]
-            if np.any((data < 0) | (data > 1)):
-                error.recoverable(
-                    f"UV{uv_idx} has values outside of 0 and 1. This should never happen.")
-
 
 TSubmesh = TypeVar("TSubmesh", bound=Submesh)
 
 
 def convert_meshloop_tris_to_tsubmeshes(
-        loops: List[MeshLoopIdx],
-        triangles: List[Tuple[int, int, int]],
+        deduped_verts: List[MaterialVertIdx],
+        loop_idx_to_deduped_verts_idx: Dict[MeshLoopIdx, DedupedVertIdx],
+        triangles: List[bpy.types.MeshLoopTriangle],
         submesh_generator: Callable[
             [
-                List[MeshLoopIdx],
-                List[Tuple[int, int, int]]
+                List[MaterialVertIdx],
+                List[SubmeshTri]
             ],
             TSubmesh
         ]
 ) -> List[TSubmesh]:
     submeshes = []
 
-    toplevel_vert_to_pending_vert_idx: Dict[MeshLoopIdx, int] = {}
-    pending_loops: List[MeshLoopIdx] = []
-    pending_tris: List[Tuple[int, int, int]] = []
+    deduped_verts_idx_to_pending_vert_idx: Dict[DedupedVertIdx, SubmeshVertIdx] = {}
+    pending_verts: List[MaterialVertIdx] = []
+    pending_tris: List[SubmeshTri] = []
 
-    def get_or_insert_pending_vert(vert: MeshLoopIdx) -> int:
-        nonlocal pending_loops, pending_tris, toplevel_vert_to_pending_vert_idx
-        idx = toplevel_vert_to_pending_vert_idx.get(vert)
-        if idx is None:
-            idx = len(pending_loops)
-            toplevel_vert_to_pending_vert_idx[vert] = idx
-            pending_loops.append(vert)
-        return idx
+    def get_or_insert_pending_vert(deduped_verts_idx: DedupedVertIdx) -> SubmeshVertIdx:
+        nonlocal pending_verts, pending_tris, deduped_verts_idx_to_pending_vert_idx
+        # See if this deduped vertex has already appeared in the pending submesh
+        pending_idx = deduped_verts_idx_to_pending_vert_idx.get(deduped_verts_idx)
+        if pending_idx is None:
+            # if it hasn't, push it to pending_verts...
+            pending_idx = SubmeshVertIdx(len(pending_verts))
+            pending_verts.append(deduped_verts[deduped_verts_idx])
+            # ... and register its index
+            deduped_verts_idx_to_pending_vert_idx[deduped_verts_idx] = pending_idx
+        # Either way, the deduped vert is definitely in the pending submesh now.
+        return pending_idx
 
     def push_submesh_and_reset_pending():
-        nonlocal pending_loops, pending_tris, toplevel_vert_to_pending_vert_idx
-        submeshes.append(submesh_generator(pending_loops, pending_tris))
-        pending_loops = []
+        nonlocal pending_verts, pending_tris, deduped_verts_idx_to_pending_vert_idx
+        submeshes.append(submesh_generator(pending_verts, pending_tris))
+        pending_verts = []
         pending_tris = []
-        toplevel_vert_to_pending_vert_idx = {}
+        deduped_verts_idx_to_pending_vert_idx = {}
 
     for t in triangles:
+        t_no_dupes = (
+            loop_idx_to_deduped_verts_idx[MeshLoopIdx(t.loops[0])],
+            loop_idx_to_deduped_verts_idx[MeshLoopIdx(t.loops[1])],
+            loop_idx_to_deduped_verts_idx[MeshLoopIdx(t.loops[2])],
+        )
+
         # We have a maximum of 65536 vertices.
         # At most, adding a new triangle can only add 3 loops to the "pending" buffer.
         # also, adding a triangle may add 0 loops - if they're all used already.
         # So if we have 65533 loops, check to see how many we would add.
-        if len(pending_loops) >= (65536 - 3):
+        if len(pending_verts) >= (65536 - 3):
             # We have to be careful, we might grow beyond the buffer
             num_to_add = 0
-            if loops[t[0]] not in toplevel_vert_to_pending_vert_idx:
+            if deduped_verts[t_no_dupes[0]] not in deduped_verts_idx_to_pending_vert_idx:
                 num_to_add += 1
-            if loops[t[1]] not in toplevel_vert_to_pending_vert_idx:
+            if deduped_verts[t_no_dupes[1]] not in deduped_verts_idx_to_pending_vert_idx:
                 num_to_add += 1
-            if loops[t[2]] not in toplevel_vert_to_pending_vert_idx:
+            if deduped_verts[t_no_dupes[2]] not in deduped_verts_idx_to_pending_vert_idx:
                 num_to_add += 1
-            if len(pending_loops) + num_to_add > 65536:
+            if len(pending_verts) + num_to_add > 65536:
                 # Push the current loops into a Submesh struct and reset the pending
                 push_submesh_and_reset_pending()
         # We can add any triangle to the buffer, it's guaranteed to result in a buffer with <65536 loops
-        pending_tris.append((
-            get_or_insert_pending_vert(loops[t[0]]),
-            get_or_insert_pending_vert(loops[t[1]]),
-            get_or_insert_pending_vert(loops[t[2]]),
-        ))
+        pending_tris.append(SubmeshTri((
+            get_or_insert_pending_vert(t_no_dupes[0]),
+            get_or_insert_pending_vert(t_no_dupes[1]),
+            get_or_insert_pending_vert(t_no_dupes[2]),
+        )))
 
-    if pending_loops or pending_tris:
+    if pending_verts or pending_tris:
         push_submesh_and_reset_pending()
 
     return submeshes
 
 
 def convert_meshloop_tris_to_unskinned_submeshes(
-        loops: List[MeshLoopIdx],
-        triangles: List[Tuple[int, int, int]],
-        material_idx: int
+        attr_set: GMDAttributeSet,
+        base_vertices: GMDVertexBuffer,
+        deduped_verts: List[MaterialVertIdx],
+        loop_idx_to_deduped_verts_idx: Dict[MeshLoopIdx, DedupedVertIdx],
+        triangles: List[bpy.types.MeshLoopTriangle],
 ) -> List[Submesh]:
     return convert_meshloop_tris_to_tsubmeshes(
-        loops,
+        deduped_verts,
+        loop_idx_to_deduped_verts_idx,
         triangles,
-        lambda loops, triangles: Submesh(loops, triangles, material_idx=material_idx)
+        lambda loops, triangles: Submesh(attr_set, base_vertices, loops, triangles)
     )
 
 
@@ -537,46 +366,27 @@ class SkinnedSubmesh(Submesh):
     """
     A submesh with extra data for skinning e.g. vertex groups.
     """
+    # The base vertex buffer must be skinned
+    base_vertices: GMDSkinnedVertexBuffer
     # A mapping of (blender vertex group) -> (local bone index).
     relevant_vertex_groups: Dict[int, int]
     # A mapping of (local bone index) -> (relevant GMD bone)
     relevant_bones: List[GMDBone]
 
-    def build_skinned(self, mesh: bpy.types.Mesh, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
-                      materials: List[GMDAttributeSet], error: ErrorReporter) -> GMDSkinnedMesh:
-        material = materials[self.material_idx]
-        layer_names = AttribSetLayerNames.build_from(material.shader.vertex_buffer_layout, is_skinned=True)
-        layers = layer_names.try_retrieve_from(mesh, error)
-
-        vertices = GMDSkinnedVertexBuffer.build_empty(material.shader.vertex_buffer_layout, len(self.loops))
-
-        self._extract_pos(mesh, vertices.pos)
-        if vertices.normal is not None:
-            self._extract_normals(mesh, layers.normal_w_layer, vertices.normal)
-        if vertices.tangent is not None:
-            if layers.tangent_layer is not None:
-                self._extract_tangents_from_layer(layers.tangent_layer, vertices.tangent)
-            else:
-                self._extract_tangents_from_mesh(mesh, layers.tangent_w_layer, vertices.tangent)
-        # TODO loll we literally don't do anything for unk
-        if vertices.unk is not None:
-            error.recoverable(f"Mesh {mesh}/shader {material.shader} uses an unknown vertex field. "
-                              f"The exporter does not handle this field, and it will default to all zeros. "
-                              f"If this is OK, disable Strict Export.")
-        assert vertices.bone_data is not None
-        assert vertices.weight_data is not None
-        self._extract_boneweights(mesh, bone_info, vertices.bone_data, vertices.weight_data)
-        if vertices.col0 is not None:
-            self._extract_from_color(layers.col0_layer, vertices.col0)
-        if vertices.col1 is not None:
-            self._extract_from_color(layers.col1_layer, vertices.col1)
-        if len(vertices.uvs) != len(layers.uv_layers):
-            error.recoverable(
-                f"Shader {material.shader} expected {len(vertices.uvs)} UV layers but found {len(layers.uv_layers)}. "
-                f"Layers that were not found will be filled with 0, and extra layers will be ignored. "
-                f"If this is OK, disable Strict Export")
-        for (i, (comp_count, uv_layer)) in enumerate(layers.uv_layers):
-            self._extract_uv(i, comp_count, uv_layer, vertices.uvs[i], error)
+    def build_skinned(self) -> GMDSkinnedMesh:
+        # Copy vertices out of vertex buffer
+        vertices = self.base_vertices.copy_scatter(self.verts)
+        # Where vertices.weight_data > 0, remap vertices.bone_data with self.relevant_vertex_groups
+        for i in range(len(vertices)):
+            for j in range(4):
+                if vertices.weight_data[i, j] > 0:
+                    if vertices.bone_data[i, j] not in self.relevant_vertex_groups:
+                        print(i, j,
+                              self.verts[i], vertices.bone_data[i], vertices.weight_data[i],
+                              self.base_vertices.bone_data[self.verts[i]],
+                              self.base_vertices.weight_data[self.verts[i]],
+                              list(self.relevant_vertex_groups.keys()))
+                    vertices.bone_data[i, j] = self.relevant_vertex_groups[vertices.bone_data[i, j]]
 
         triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
 
@@ -586,28 +396,18 @@ class SkinnedSubmesh(Submesh):
             triangle_indices=triangle_list,
             triangle_strip_noreset_indices=triangle_strip_noreset,
             triangle_strip_reset_indices=triangle_strip_reset,
-            attribute_set=material,
+            attribute_set=self.attr_set,
             relevant_bones=self.relevant_bones
         )
 
-    def _extract_boneweights(self, mesh: bpy.types.Mesh, bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
-                             bone_data: np.ndarray, weight_data: np.ndarray):
-        # See compute_vertex_4weights
-        original_bones, weights, n_weights = bone_info
-        vertices = [mesh.loops[l].vertex_index for l in self.loops]
-        weight_data[:] = weights[vertices, :]
-        for (i, vert_idx) in enumerate(vertices):
-            # Remap the bone only for the first N bones it uses.
-            # All others are 0
-            for b_i in range(n_weights[vert_idx]):
-                bone_data[i, b_i] = self.relevant_vertex_groups[original_bones[vert_idx, b_i]]
-
 
 def convert_meshloop_tris_to_skinned_submeshes(
+        attr_set: GMDAttributeSet,
+        base_vertices: GMDSkinnedVertexBuffer,
         mesh: bpy.types.Mesh,
-        loops: List[MeshLoopIdx],
-        triangles: List[Tuple[int, int, int]],
-        material_idx: int,
+        deduped_verts: List[MaterialVertIdx],
+        loop_idx_to_deduped_verts_idx: Dict[MeshLoopIdx, DedupedVertIdx],
+        triangles: List[bpy.types.MeshLoopTriangle],
         bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
         vertex_group_mapping: Dict[int, GMDBone],
         error: ErrorReporter,
@@ -619,10 +419,10 @@ def convert_meshloop_tris_to_skinned_submeshes(
 
     vert_groups, weights, n_weights = bone_info
 
-    def find_triangle_vertex_groups(t: Tuple[int, int, int]) -> Set[int]:
-        v0 = mesh.loops[loops[t[0]]].vertex_index
-        v1 = mesh.loops[loops[t[1]]].vertex_index
-        v2 = mesh.loops[loops[t[2]]].vertex_index
+    def find_triangle_vertex_groups(t: bpy.types.MeshLoopTriangle) -> Set[int]:
+        v0 = mesh.loops[t.loops[0]].vertex_index
+        v1 = mesh.loops[t.loops[1]].vertex_index
+        v2 = mesh.loops[t.loops[2]].vertex_index
 
         vgs = set(vert_groups[v0, 0:n_weights[v0]])
         vgs.update(vert_groups[v1, 0:n_weights[v1]])
@@ -630,11 +430,12 @@ def convert_meshloop_tris_to_skinned_submeshes(
         return vgs
 
     # First, partition the triangles into groups that use at most max_bones_per_submesh bones.
+    # Don't remap the triangle indices yet
     triangle_partitions: List[Tuple[
-        List[Tuple[int, int, int]],  # A group of triangles
+        List[bpy.types.MeshLoopTriangle],  # A group of raw Blender triangles
         Set[int]  # the vertex groups they reference
     ]] = []
-    pending_tris: List[Tuple[int, int, int]] = []
+    pending_tris: List[bpy.types.MeshLoopTriangle] = []
     pending_vgs: Set[int] = set()
     for t in triangles:
         triangle_vgs = find_triangle_vertex_groups(t)
@@ -652,6 +453,7 @@ def convert_meshloop_tris_to_skinned_submeshes(
 
     skinned_submeshes: List[SkinnedSubmesh] = []
     for tri_partition, referenced_vgs in triangle_partitions:
+        # Second, find the relevant vertex groups and bones for each partition
         assert len(referenced_vgs) <= max_bones_per_submesh
         relevant_vertex_groups = {
             vg: i
@@ -661,10 +463,17 @@ def convert_meshloop_tris_to_skinned_submeshes(
             vertex_group_mapping[vg]
             for vg in referenced_vgs
         ]
+        expected_vgs: Set[int] = set()
+        for t in tri_partition:
+            expected_vgs.update(find_triangle_vertex_groups(t))
+        assert referenced_vgs == expected_vgs
+        # Then run convert_meshloop_tris_to_tsubmeshes to split meshes over the 65535 limit
+        # and normalize the blender triangles
         skinned_submeshes += convert_meshloop_tris_to_tsubmeshes(
-            loops,
+            deduped_verts,
+            loop_idx_to_deduped_verts_idx,
             tri_partition,
-            lambda loops, triangles: SkinnedSubmesh(loops, triangles, material_idx=material_idx,
+            lambda loops, triangles: SkinnedSubmesh(attr_set, base_vertices, loops, triangles,
                                                     relevant_vertex_groups=relevant_vertex_groups,
                                                     relevant_bones=relevant_bones)
         )

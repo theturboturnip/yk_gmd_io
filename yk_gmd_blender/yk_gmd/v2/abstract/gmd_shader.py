@@ -179,6 +179,25 @@ class GMDVertexBuffer(Sized):
     def __len__(self):
         return self.vertex_count()
 
+    def copy_scatter(self, indices: Iterable[int]) -> 'GMDVertexBuffer':
+        return GMDVertexBuffer(
+            layout=self.layout,
+
+            pos=self.pos[indices, :].copy(),
+
+            bone_data=self.bone_data[indices, :].copy() if self.bone_data is not None else None,
+            weight_data=self.weight_data[indices, :].copy() if self.weight_data is not None else None,
+            normal=self.normal[indices, :].copy() if self.normal is not None else None,
+            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,
+            unk=self.unk[indices, :].copy() if self.unk is not None else None,
+            col0=self.col0[indices, :].copy() if self.col0 is not None else None,
+            col1=self.col1[indices, :].copy() if self.col1 is not None else None,
+            uvs=[
+                uv[indices, :].copy()
+                for uv in self.uvs
+            ],
+        )
+
     def copy_as_generic(self, s: slice = slice(None)) -> 'GMDVertexBuffer':
         return GMDVertexBuffer(
             layout=self.layout,
@@ -248,6 +267,25 @@ class GMDSkinnedVertexBuffer(GMDVertexBuffer):
             col0=as_generic.col0,
             col1=as_generic.col1,
             uvs=as_generic.uvs,
+        )
+
+    def copy_scatter(self, indices: Iterable[int]) -> 'GMDSkinnedVertexBuffer':
+        return GMDSkinnedVertexBuffer(
+            layout=self.layout,
+
+            pos=self.pos[indices, :].copy(),
+
+            bone_data=self.bone_data[indices, :].copy(),
+            weight_data=self.weight_data[indices, :].copy(),
+            normal=self.normal[indices, :].copy() if self.normal is not None else None,
+            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,
+            unk=self.unk[indices, :].copy() if self.unk is not None else None,
+            col0=self.col0[indices, :].copy() if self.col0 is not None else None,
+            col1=self.col1[indices, :].copy() if self.col1 is not None else None,
+            uvs=[
+                uv[indices, :].copy()
+                for uv in self.uvs
+            ],
         )
 
 
