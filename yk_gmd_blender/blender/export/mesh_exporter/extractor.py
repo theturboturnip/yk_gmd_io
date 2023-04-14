@@ -1,3 +1,4 @@
+import dataclasses
 from typing import List, Tuple, Optional, Union, Set
 
 import numpy as np
@@ -6,7 +7,7 @@ import bpy
 from yk_gmd_blender.blender.common import AttribSetLayerNames
 from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import MeshLoopIdx
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, VecStorage, VecCompFmt
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
 
 
@@ -92,7 +93,14 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
     layer_names = AttribSetLayerNames.build_from(attr_set.shader.vertex_buffer_layout, is_skinned=True)
     layers = layer_names.try_retrieve_from(mesh, error)
 
-    vertices = GMDSkinnedVertexBuffer.build_empty(attr_set.shader.vertex_buffer_layout, len(loops))
+    # We may need to store more than 255 bone indices in this larger buffer.
+    # => replace the bones layout with one that uses 16-bit uints.
+    expanded_bones_layout = dataclasses.replace(
+        attr_set.shader.vertex_buffer_layout,
+        bones_storage=VecStorage(VecCompFmt.U16, 4)
+    )
+
+    vertices = GMDSkinnedVertexBuffer.build_empty(expanded_bones_layout, len(loops))
 
     _extract_pos(loops, mesh, vertices.pos)
     if vertices.normal is not None:
