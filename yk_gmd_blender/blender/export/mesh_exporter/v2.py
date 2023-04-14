@@ -1,14 +1,16 @@
 import array
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Set, TypeVar, Callable, NewType
+from typing import List, Dict, Tuple, Set, TypeVar, Callable
 from typing import cast
 
 import numpy as np
 
 import bpy
 from yk_gmd_blender.blender.export.mesh_exporter.extractor import compute_vertex_4weights, loop_indices_for_material, \
-    extract_vertices_for_skinned_material, generate_vertex_byteslices, MeshLoopIdx, \
+    extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
+from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import dedupe_loops, MaterialVertIdx, SubmeshTri, \
+    DedupedVertIdx, SubmeshVertIdx, MeshLoopIdx
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
@@ -122,64 +124,6 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tan
 
 def check_needs_tangent(materials: List[GMDAttributeSet]) -> bool:
     return any(m.shader.vertex_buffer_layout.tangent_storage for m in materials)
-
-
-# Int alias representing offsets into material_vertices.
-# When creating meshes, we first split them by material and generate a vertex buffer `material_vertices`
-# with data for all loops associated with triangles associated with each material.
-# This type represents an index into that vertex buffer.
-MaterialVertIdx = NewType("MaterialVertIdx", int)
-
-# Int alias representing offsets into the "deduped vertices" list.
-# Once a vertex buffer has been created for each material,
-# we "deduplicate" each buffer and create a canonical list deduped_verts: List[MaterialVertIdx]
-# such that there are no two (i1, i2) in deduped_verts such that material_vertices[i1] == material_vertices[i2].
-# This type represents an index into deduped_verts.
-DedupedVertIdx = NewType("DedupedVertIdx", int)
-
-# Int alias representing offsets into a submesh's vertices
-# When splitting a mesh into submeshes, a subset of the total vertices are assigned to each submesh.
-# The triangles for each submesh must use indices relative to that subset.
-# This type represents an index into a submesh's vertex subset.
-SubmeshVertIdx = NewType("SubmeshVertIdx", int)
-
-# Alias representing a triangle indexed relative to a submesh
-SubmeshTri = NewType("SubmeshTri", Tuple[SubmeshVertIdx, SubmeshVertIdx, SubmeshVertIdx])
-
-
-def dedupe_loops(loops_with_dupes: List[MeshLoopIdx], vertex_bytes: List[bytes]) -> Tuple[
-    List[MaterialVertIdx],
-    Dict[MeshLoopIdx, DedupedVertIdx]
-]:
-    """
-    Returns
-
-    1. "deduped_verts" a list of indices into loops_with_dupes and vertex bytes, such that there are no two values
-    (i1, i2) in the list where vertex_bytes[i1] == vertex_bytes[i2]
-    2. a mapping of MeshLoopIdx -> index in exported_loops
-    i.e. if vertex_bytes[0] == vertex_bytes[1] == vertex_bytes[2], and deduped_verts[x] == (0, 1, or 2)
-    0, 1, and 2 map to x.
-    This is useful because deduped_verts defines the layout of the final vertex buffer, so this mapping converts
-    triangles in blender-index-space to per-material-index-space.
-    """
-    assert len(loops_with_dupes) == len(vertex_bytes)
-
-    vertex_bytes_to_no_dupe_loop_idx: Dict[bytes, DedupedVertIdx] = {}
-
-    deduped_verts: List[MaterialVertIdx] = []
-    loop_idx_to_deduped_verts_idx: Dict[MeshLoopIdx, DedupedVertIdx] = {}
-    for i, (loop_idx, vertex) in enumerate(zip(loops_with_dupes, vertex_bytes)):
-        # See if this vertex data has already been encountered
-        no_dupe_loop_idx = vertex_bytes_to_no_dupe_loop_idx.get(vertex)
-        # If not, it's not a dupe - push it to deduped_verts and register in vertex_bytes_to...
-        if no_dupe_loop_idx is None:
-            no_dupe_loop_idx = DedupedVertIdx(len(deduped_verts))
-            deduped_verts.append(MaterialVertIdx(i))
-            vertex_bytes_to_no_dupe_loop_idx[vertex] = no_dupe_loop_idx
-        # Either way, we now know where this mesh loop maps to inside deduped_verts
-        loop_idx_to_deduped_verts_idx[loop_idx] = no_dupe_loop_idx
-
-    return deduped_verts, loop_idx_to_deduped_verts_idx
 
 
 @dataclass(frozen=True)

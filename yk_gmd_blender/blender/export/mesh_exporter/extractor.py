@@ -1,15 +1,13 @@
-from typing import List, Tuple, Optional, Union, Set, NewType
+from typing import List, Tuple, Optional, Union, Set
 
 import numpy as np
 
 import bpy
 from yk_gmd_blender.blender.common import AttribSetLayerNames
+from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import MeshLoopIdx
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-
-# Int alias representing indices into bpy.types.Mesh().loops
-MeshLoopIdx = NewType("MeshLoopIdx", int)
 
 
 def generate_vertex_byteslices(vertex_buffer: GMDVertexBuffer, big_endian: bool) -> List[bytes]:
