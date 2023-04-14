@@ -7,7 +7,7 @@ from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSki
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, eq=False)
 class GMDMesh:
     empty: bool
 
@@ -24,7 +24,7 @@ class GMDMesh:
             raise TypeError(f"GMDMesh {self} has <3 vertices, at least 3 are required for a visible mesh")
 
 
-@dataclass(repr=False)
+@dataclass(repr=False, eq=False)
 class GMDSkinnedMesh(GMDMesh):
     vertices_data: GMDSkinnedVertexBuffer
     relevant_bones: List[GMDBone]

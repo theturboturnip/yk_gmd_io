@@ -134,7 +134,7 @@ BoneWeight4 = Tuple[BoneWeight, BoneWeight, BoneWeight, BoneWeight]
 # Some unskinned objects use the "weights" and "bones" categories for different things, which this supports.
 # This class should be used for all vertex buffer manipulation,
 # then exported as a GMDVertexBuffer_Skinned if used in a Skinned mesh.
-@dataclass(repr=False)
+@dataclass(repr=False, eq=False)
 class GMDVertexBuffer(Sized):
     layout: 'GMDVertexBufferLayout'
 
@@ -221,7 +221,7 @@ class GMDVertexBuffer(Sized):
 
 
 # Immutable version of GMDVertexBuffer that includes a bone_weights list
-@dataclass(repr=False)
+@dataclass(repr=False, eq=False)
 class GMDSkinnedVertexBuffer(GMDVertexBuffer):
     # Individual bone, weight datas are still here, but must not be None
     weight_data: np.ndarray
