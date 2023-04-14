@@ -1,5 +1,5 @@
 import dataclasses
-from typing import List, Tuple, Optional, Union, Set
+from typing import List, Tuple, Optional, Union, Set, Mapping
 
 import numpy as np
 
@@ -87,20 +87,24 @@ def extract_vertices_for_unskinned_material(mesh: bpy.types.Mesh, attr_set: GMDA
 def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAttributeSet,
                                           loops: List[MeshLoopIdx],
                                           bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
-                                          error: ErrorReporter) -> GMDSkinnedVertexBuffer:
+                                          error: ErrorReporter,
+                                          bone_remapper: Optional[Mapping[int, int]] = None) -> GMDSkinnedVertexBuffer:
     assert attr_set.shader.assume_skinned
 
     layer_names = AttribSetLayerNames.build_from(attr_set.shader.vertex_buffer_layout, is_skinned=True)
     layers = layer_names.try_retrieve_from(mesh, error)
 
-    # We may need to store more than 255 bone indices in this larger buffer.
-    # => replace the bones layout with one that uses 16-bit uints.
-    expanded_bones_layout = dataclasses.replace(
-        attr_set.shader.vertex_buffer_layout,
-        bones_storage=VecStorage(VecCompFmt.U16, 4)
-    )
+    if bone_remapper is None:
+        # We may need to store more than 255 bone indices in this larger buffer.
+        # => replace the bones layout with one that uses 16-bit uints.
+        layout = dataclasses.replace(
+            attr_set.shader.vertex_buffer_layout,
+            bones_storage=VecStorage(VecCompFmt.U16, 4)
+        )
+    else:
+        layout = attr_set.shader.vertex_buffer_layout
 
-    vertices = GMDSkinnedVertexBuffer.build_empty(expanded_bones_layout, len(loops))
+    vertices = GMDSkinnedVertexBuffer.build_empty(layout, len(loops))
 
     _extract_pos(loops, mesh, vertices.pos)
     if vertices.normal is not None:
@@ -117,7 +121,7 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
                           f"If this is OK, disable Strict Export.")
     assert vertices.bone_data is not None
     assert vertices.weight_data is not None
-    _extract_skinned_boneweights(loops, mesh, bone_info, vertices.bone_data, vertices.weight_data)
+    _extract_skinned_boneweights(loops, mesh, bone_info, bone_remapper, vertices.bone_data, vertices.weight_data)
     if vertices.col0 is not None:
         _extract_from_color(loops, layers.col0_layer, vertices.col0)
     if vertices.col1 is not None:
@@ -312,9 +316,19 @@ def _extract_uv(loops: List[MeshLoopIdx], uv_idx: int, comp_count: int,
 
 def _extract_skinned_boneweights(loops: List[MeshLoopIdx], mesh: bpy.types.Mesh,
                                  bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
+                                 bone_remapper: Optional[Mapping[int, int]],
                                  bone_data: np.ndarray, weight_data: np.ndarray):
     bones, weights, n_weights = bone_info
 
     vertices = [mesh.loops[l].vertex_index for l in loops]
     weight_data[:] = weights[vertices, :]
-    bone_data[:] = bones[vertices, :]
+    unmapped_bones = bones[vertices, :]
+    if bone_remapper is None:
+        np.copyto(bone_data, unmapped_bones, casting="safe")
+    else:
+        # Where vertices.weight_data > 0, remap vertices.bone_data with self.relevant_vertex_groups
+        for i in range(len(vertices)):
+            for j in range(4):
+                if weight_data[i, j] > 0:
+                    bone_data[i, j] = bone_remapper[unmapped_bones[i, j]]
+                # Other bone_data elements are 0-initialized
