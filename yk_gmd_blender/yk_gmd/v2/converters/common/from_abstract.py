@@ -124,7 +124,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     # Depth-first indexing
     # Track touched nodes in set T(n)?
     root_gmd_nodes = scene.overall_hierarchy.roots
-    for i, gmd_node in enumerate(depth_first_iterate(root_gmd_nodes)):
+    for i, (_, gmd_node) in enumerate(depth_first_iterate(root_gmd_nodes)):
         # stackop = none
         # if has parent and all other children of your parent have been touched - stackop += pop
         # the depth_first_iterate iterates through children in order

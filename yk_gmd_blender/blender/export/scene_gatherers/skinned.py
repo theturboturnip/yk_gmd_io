@@ -161,12 +161,12 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             self.export_skinned_object(context, skinned_object)
 
         self.error.debug("GATHER", f"NODE REPORT")
-        for node in depth_first_iterate(self.node_roots):
+        for _, node in depth_first_iterate(self.node_roots):
             self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
         if self.config.debug_compare_matrices:
             self.error.debug("GATHER", f"MATRIX COMPARISONS")
-            for node in depth_first_iterate(self.node_roots):
+            for _, node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
                     self.error.debug("GATHER", f"{node.name} vs original scene")
                     self.error.debug("GATHER",

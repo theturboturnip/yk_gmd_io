@@ -84,7 +84,7 @@ if __name__ == '__main__':
     print(scene)
 
     # if args.skinned:
-    for node in scene.overall_hierarchy.depth_first_iterate():
+    for node in scene.overall_hierarchy:
         node: GMDBone = node
         print(f" ---- BONE {node.name} ---- PARENT {node.parent.name if node.parent is not None else None}")
         print("pos", round_vec(node.pos))

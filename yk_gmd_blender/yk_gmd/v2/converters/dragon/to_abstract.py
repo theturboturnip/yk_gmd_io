@@ -1,7 +1,6 @@
 import time
 
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import HierarchyData, GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import GMDAbstractor_Common
 from yk_gmd_blender.yk_gmd.v2.structure.dragon.file import FileData_Dragon
 
@@ -65,5 +64,5 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
         return GMDScene(
             name=self.file_data.name.text,
             flags=tuple(self.file_data.flags),
-            overall_hierarchy=HierarchyData[GMDNode](roots),
+            overall_hierarchy=HierarchyData(roots),
         )

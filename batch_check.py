@@ -143,7 +143,7 @@ def check_vertex_layouts(args):
     # vertex_buffer_layouts = set()
 
     def process_meshes(_, file_data: FileData_YK1, scene: GMDScene):
-        for node in scene.overall_hierarchy.depth_first_iterate():
+        for node in scene.overall_hierarchy:
             if node.node_type == NodeType.UnskinnedMesh and isinstance(node, GMDUnskinnedObject):
                 for mesh in node.mesh_list:
                     vbl = mesh.attribute_set.shader.vertex_buffer_layout
@@ -163,7 +163,7 @@ def check_bonecounts(args):
 
     def process_meshes(path: str, file_data: FileData_YK1, scene: GMDScene):
         max_bonecount = 0
-        for node in scene.overall_hierarchy.depth_first_iterate():
+        for node in scene.overall_hierarchy:
             if node.node_type == NodeType.SkinnedMesh and isinstance(node, GMDSkinnedObject):
                 for mesh in node.mesh_list:
                     if len(mesh.relevant_bones) > max_bonecount:
