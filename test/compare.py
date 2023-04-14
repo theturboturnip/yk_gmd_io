@@ -250,16 +250,16 @@ class VertVoxelSet(Generic[TExact, TApprox]):
                 self_pos, self_exact, self_approx = self.verts[self_vert]
 
                 potential_other_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in other_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in other_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
                 counted_other_verts.update(i for (i, _) in potential_other_verts)
 
                 potential_self_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in self_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in self_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
@@ -317,7 +317,7 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
         for i in set(gmd_mesh.triangle_strip_noreset_indices):
-            assert buf.bone_data and buf.weight_data
+            assert (buf.bone_data is not None) and (buf.weight_data is not None)
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
@@ -405,8 +405,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         src_fused_vs.check_fusions(dst_fused_vs)
     if src_vs_with_no_equiv or src_vs_unfused_in_dst or dst_vs_with_no_equiv_in_src:
         src_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_vs_with_no_equiv), 5))
-        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _, _ in ss))
-        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _, _ in ds))
+        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _ in ss))
+        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _ in ds))
         src_unfused_str = '\n\t'.join(
             str(x) for x in
             itertools.islice(sorted([v for v in src_vs_unfused_in_dst]), 5))
