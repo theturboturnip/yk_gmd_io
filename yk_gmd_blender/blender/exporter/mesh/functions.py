@@ -12,11 +12,11 @@ from yk_gmd_blender.blender.exporter.mesh.extractor import compute_vertex_4weigh
 from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
     convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
     MeshLoopIdx, DedupedVertIdx, SubmeshTri
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDSkinnedVertexBuffer
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 
 
 def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,

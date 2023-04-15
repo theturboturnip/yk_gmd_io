@@ -9,14 +9,14 @@ from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, HierarchyData
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.material import MaterialStruct_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.material import MaterialStruct_YK1
+from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
+from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
+from yk_gmd_blender.gmdlib.structure.version import GMDVersion
+from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1
 
 
 @dataclass(frozen=True)

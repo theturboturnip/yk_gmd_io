@@ -12,11 +12,11 @@ from yk_gmd_blender.blender.coordinate_converter import transform_position_blend
 from yk_gmd_blender.blender.exporter.mesh.functions import split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.exporter.scene_gatherers.base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
+from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.structure.common.node import NodeType
 
 
 @dataclass(frozen=True)

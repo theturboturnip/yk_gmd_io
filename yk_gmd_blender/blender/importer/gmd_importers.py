@@ -14,12 +14,12 @@ from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
 from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
 from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene_from_filedata_object, \
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
+from yk_gmd_blender.gmdlib.io import read_abstract_scene_from_filedata_object, \
     read_gmd_structures
-from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties, GMDVersion
+from yk_gmd_blender.gmdlib.structure.version import VersionProperties, GMDVersion
 
 
 class BaseImportGMD:

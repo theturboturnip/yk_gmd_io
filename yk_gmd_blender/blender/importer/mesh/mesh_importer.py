@@ -4,9 +4,9 @@ import bmesh
 from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 
 
 def gmd_meshes_to_bmesh(

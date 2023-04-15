@@ -11,12 +11,12 @@ from yk_gmd_blender.blender.exporter.scene_gatherers.base import GMDSceneGathere
 from yk_gmd_blender.blender.exporter.scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer, \
     GMDSkinnedSceneGathererConfig
 from yk_gmd_blender.blender.exporter.scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import check_version_writeable, write_abstract_scene_out, \
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import VertexImportMode, FileImportMode
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
+from yk_gmd_blender.gmdlib.io import check_version_writeable, write_abstract_scene_out, \
     read_gmd_structures, read_abstract_scene_from_filedata_object
-from yk_gmd_blender.yk_gmd.v2.structure.version import GMDVersion, VersionProperties
+from yk_gmd_blender.gmdlib.structure.version import GMDVersion, VersionProperties
 
 
 class BaseExportGMD(Operator, ExportHelper):
