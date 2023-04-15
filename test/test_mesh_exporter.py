@@ -1,6 +1,6 @@
 import pytest
 
-from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import MeshLoopIdx, dedupe_loops
+from yk_gmd_blender.meshlib.export_submeshing import MeshLoopIdx, dedupe_loops
 
 
 @pytest.mark.order(3)

@@ -9,7 +9,7 @@ import bpy
 from yk_gmd_blender.blender.export.mesh_exporter.extractor import compute_vertex_4weights, loop_indices_for_material, \
     extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
-from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import dedupe_loops, \
+from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
     convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
     MeshLoopIdx, DedupedVertIdx, SubmeshTri
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet

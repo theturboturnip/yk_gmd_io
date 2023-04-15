@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic, Sequence
 
 from mathutils import Vector
-from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone

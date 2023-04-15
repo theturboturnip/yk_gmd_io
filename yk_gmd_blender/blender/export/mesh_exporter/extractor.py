@@ -5,7 +5,7 @@ import numpy as np
 
 import bpy
 from yk_gmd_blender.blender.common import AttribSetLayerNames
-from yk_gmd_blender.blender.export.mesh_exporter.index_juggling import MeshLoopIdx
+from yk_gmd_blender.meshlib.export_submeshing import MeshLoopIdx
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, VecStorage, VecCompFmt
 from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
