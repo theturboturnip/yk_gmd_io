@@ -52,7 +52,7 @@ def test_dedupe_with_no_dupes_with_material_offsets():
         bytes([5]),
     ]
     deduped_verts, deduped_dict = dedupe_loops(loops_with_dupes, vertices)
-    assert deduped_verts == [0, 1, 2, 3, 4, 5]
+    assert deduped_verts == [100, 101, 102, 103, 104, 105]
     assert deduped_dict == {
         100: 0,
         101: 1,
@@ -82,7 +82,7 @@ def test_dedupe_with_dupes_with_material_offsets():
         bytes([1]),
     ]
     deduped_verts, deduped_dict = dedupe_loops(loops_with_dupes, vertices)
-    assert deduped_verts == [0, 3]
+    assert deduped_verts == [100, 103]
     assert deduped_dict == {
         100: 0,
         101: 0,
