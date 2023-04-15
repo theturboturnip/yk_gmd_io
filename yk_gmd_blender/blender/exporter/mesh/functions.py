@@ -6,7 +6,7 @@ from typing import cast
 import numpy as np
 
 import bpy
-from yk_gmd_blender.blender.exporter.mesh_exporter.extractor import compute_vertex_4weights, loop_indices_for_material, \
+from yk_gmd_blender.blender.exporter.mesh.extractor import compute_vertex_4weights, loop_indices_for_material, \
     extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
 from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
