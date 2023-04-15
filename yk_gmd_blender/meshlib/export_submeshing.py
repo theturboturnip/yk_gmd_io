@@ -78,8 +78,11 @@ def convert_meshloop_tris_to_tsubmeshes(
                 List[SubmeshTri]
             ],
             TSubmesh
-        ]
+        ],
+        max_verts_per_submesh=65536
 ) -> List[TSubmesh]:
+    assert max_verts_per_submesh >= 3
+
     submeshes = []
 
     deduped_verts_idx_to_pending_vert_idx: Dict[DedupedVertIdx, SubmeshVertIdx] = {}
@@ -113,11 +116,11 @@ def convert_meshloop_tris_to_tsubmeshes(
             loop_idx_to_deduped_verts_idx[t[2]],
         )
 
-        # We have a maximum of 65536 vertices.
+        # We have a maximum of `max_verts_per_submesh` vertices.
         # At most, adding a new triangle can only add 3 loops to the "pending" buffer.
         # also, adding a triangle may add 0 loops - if they're all used already.
-        # So if we have 65533 loops, check to see how many we would add.
-        if len(pending_verts) >= (65536 - 3):
+        # So if we have `max_verts_per_submesh-3` loops, check to see how many we would add.
+        if len(pending_verts) >= (max_verts_per_submesh - 3):
             # We have to be careful, we might grow beyond the buffer
             num_to_add = 0
             if deduped_verts[t_no_dupes[0]] not in deduped_verts_idx_to_pending_vert_idx:
@@ -126,7 +129,7 @@ def convert_meshloop_tris_to_tsubmeshes(
                 num_to_add += 1
             if deduped_verts[t_no_dupes[2]] not in deduped_verts_idx_to_pending_vert_idx:
                 num_to_add += 1
-            if len(pending_verts) + num_to_add > 65536:
+            if len(pending_verts) + num_to_add > max_verts_per_submesh:
                 # Push the current loops into a Submesh struct and reset the pending
                 push_submesh_and_reset_pending()
         # We can add any triangle to the buffer, it's guaranteed to result in a buffer with <65536 loops
@@ -138,8 +141,5 @@ def convert_meshloop_tris_to_tsubmeshes(
 
     if pending_verts or pending_tris:
         push_submesh_and_reset_pending()
-
-    if len(submeshes) > 2:
-        print(f"WOOOOOO MANY ({len(submeshes)}) SUBMESHES")
 
     return submeshes
