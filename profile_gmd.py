@@ -21,7 +21,7 @@ def profile(func: Callable[..., T], *args, **kwargs) -> T:
         profiler.disable()
         stats = pstats.Stats(profiler)
         stats.sort_stats("cumtime")
-        stats.print_stats()
+        stats.print_stats(10)
     return retval
 
 
