@@ -8,7 +8,7 @@ from yk_gmd_blender.blender.materials import YakuzaPropertyGroup, YakuzaProperty
     MATERIAL_OT_yakuza_update_expected_layers
 from .common import YakuzaHierarchyNodeData, OBJECT_PT_yakuza_hierarchy_node_data_panel, \
     BONE_PT_yakuza_hierarchy_node_data_panel, YakuzaFileRootData, OBJECT_PT_yakuza_file_root_data_panel
-from .export.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, menu_func_export_unskinned, \
+from .exporter.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, menu_func_export_unskinned, \
     ExportUnskinnedGMD
 from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
     ImportUnskinnedGMD

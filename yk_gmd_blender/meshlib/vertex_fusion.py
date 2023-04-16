@@ -3,9 +3,9 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Set, DefaultDict, Iterable, Sequence
 
 from mathutils import Vector
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
 
 """
 This module handles vertex fusion - the process of deciding which vertices in a vertex buffer

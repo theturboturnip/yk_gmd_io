@@ -8,7 +8,7 @@ import pytest
 
 import compare
 from conftest import GMDTest
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
+from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
 
 # Filter out specific fatal errors for specific files
 COMPARE_FILTER = {

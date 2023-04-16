@@ -9,9 +9,9 @@ from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
 from yk_gmd_blender.blender.common import AttribSetLayerNames
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter
+from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout
+from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter
 
 
 class YakuzaPropertyGroup(PropertyGroup):
