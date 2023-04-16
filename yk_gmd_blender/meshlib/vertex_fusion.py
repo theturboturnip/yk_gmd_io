@@ -1,10 +1,10 @@
 import array
 from collections import defaultdict
-from typing import List, Dict, Tuple, Set, DefaultDict, Iterable
+from typing import List, Dict, Tuple, Set, DefaultDict, Iterable, Sequence
 
 from mathutils import Vector
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned, BoneWeight
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 
 """
@@ -85,7 +85,7 @@ NotRemappedTri = Tuple[int, Tri]  # originating mesh index + 3 vertex indices
 
 def make_bone_indices_consistent(
         gmd_meshes: List[GMDSkinnedMesh],
-) -> Tuple[List[GMDBone], List[GMDVertexBuffer_Skinned]]:
+) -> Tuple[List[GMDBone], List[GMDSkinnedVertexBuffer]]:
     """
     Creates a list of vertex buffers with consistent bone indices
     i.e. vertices in different buffers use the same indices to refer to the same bones.
@@ -114,31 +114,26 @@ def make_bone_indices_consistent(
                 relevant_bones.append(bone)
             bone_index_mapping[i] = relevant_bones.index(bone)
 
-        def remap_weight(bone_weight: BoneWeight):
+        def remap_weight(bone: int, weight: float) -> int:
             # If the weight is 0 the bone is unused, so map it to a consistent 0.
-            if bone_weight.weight == 0:
-                return BoneWeight(0, weight=0.0)
+            if weight == 0:
+                return 0
             else:
-                return BoneWeight(bone_index_mapping[bone_weight.bone], bone_weight.weight)
+                return bone_index_mapping[bone]
 
         # Copy the vertex buffer
-        verts_to_remap = gmd_mesh.vertices_data[:]
+        verts_to_remap = gmd_mesh.vertices_data.copy_as_skinned()
         # Remap the bones in the vertices
         for i_vtx in range(len(verts_to_remap)):
-            old_weights = verts_to_remap.bone_weights[i_vtx]
-            new_weights = (
-                remap_weight(old_weights[0]),
-                remap_weight(old_weights[1]),
-                remap_weight(old_weights[2]),
-                remap_weight(old_weights[3]),
+            old_weights = verts_to_remap.weight_data[i_vtx]
+            old_bones = verts_to_remap.bone_data[i_vtx]
+            new_bones = (
+                remap_weight(old_bones[0], old_weights[0]),
+                remap_weight(old_bones[1], old_weights[1]),
+                remap_weight(old_bones[2], old_weights[2]),
+                remap_weight(old_bones[3], old_weights[3]),
             )
-            verts_to_remap.bone_weights[i_vtx] = new_weights
-            verts_to_remap.bone_data[i_vtx] = Vector((
-                new_weights[0].bone,
-                new_weights[1].bone,
-                new_weights[2].bone,
-                new_weights[3].bone,
-            ))
+            verts_to_remap.bone_data[i_vtx] = Vector(new_bones)
         remapped_vertices.append(verts_to_remap)
 
     # Done, return the full list of relevant bones.
@@ -146,7 +141,7 @@ def make_bone_indices_consistent(
 
 
 def fuse_adjacent_vertices(
-        vertices: List[GMDVertexBuffer_Generic]
+        vertices: Sequence[GMDVertexBuffer]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Given a set of vertices, fuse those that are "adjacent" (see vertex_fusion() docs for definition).
@@ -176,10 +171,10 @@ def fuse_adjacent_vertices(
     for i_buf, buf in enumerate(vertices):
         for i in range(len(buf)):
             vert_info = (
-                buf.pos[i].xyz.copy().freeze(),
-                buf.normal[i].xyz.copy().freeze() if buf.normal else None,
-                buf.bone_data[i].copy().freeze() if buf.bone_data else None,
-                buf.weight_data[i].copy().freeze() if buf.weight_data else None,
+                Vector(buf.pos[i][:3]).freeze(),
+                Vector(buf.normal[i][:3]).freeze() if buf.normal is not None else None,
+                Vector(buf.bone_data[i]).freeze() if buf.bone_data is not None else None,
+                Vector(buf.weight_data[i]).freeze() if buf.weight_data is not None else None,
             )
             if vert_info in vert_indices:
                 # Fuse this into a previous vertex
@@ -444,7 +439,7 @@ def decide_on_unfusions(
 
 
 def solve_unfusion(
-        vert_bufs: List[GMDVertexBuffer_Generic],
+        vert_bufs: Sequence[GMDVertexBuffer],
         old_fused_idx_to_buf_idx: List[List[NotRemappedVertIdx]],
         unfuse_verts_with: Dict[NotRemappedVertIdx, Set[NotRemappedVertIdx]]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
@@ -564,7 +559,7 @@ def solve_unfusion(
 
 def vertex_fusion(
         idx_bufs: List[array.ArrayType],
-        vertices: List[GMDVertexBuffer_Generic]
+        vertices: Sequence[GMDVertexBuffer]
 ) -> Tuple[List[List[NotRemappedVertIdx]], List[List[VertIdx]], List[List[bool]]]:
     """
     Calculates "vertex fusion" for a set of vertex buffers which will result in a single contiguous list of vertices.

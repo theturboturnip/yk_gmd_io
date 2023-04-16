@@ -23,8 +23,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         # Skeletons can't have duplicate bones, but objects can.
         # We remove the Blender-enforced duplicate suffix e.g. "object.001" on export,
         # so nothing will break if we import duplicates
-        if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                isinstance(node, GMDSkinnedObject)]) != 0:
+        if any(isinstance(node, GMDSkinnedObject) for node in self.gmd_scene.overall_hierarchy):
             self.error.recoverable(
                 f"This import method cannot import skinnned objects. Please use the [Skinned] variant")
 
@@ -46,14 +45,17 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         collection.objects.link(root_obj)
 
         # Still create the vertex group list, so we create the vertex groups, but don't actually deform anything
-        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                             isinstance(node, GMDBone)]
+        vertex_group_list = [
+            node.name
+            for node in self.gmd_scene.overall_hierarchy
+            if isinstance(node, GMDBone)
+        ]
         vertex_group_indices = {
             name: i
             for i, name in enumerate(vertex_group_list)
         }
 
-        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+        for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if isinstance(gmd_node, GMDUnskinnedObject):
                 overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
@@ -64,10 +66,8 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             if gmd_node.parent:
                 # Parenting an object to another object is easy
                 node_obj.parent = gmd_objects[id(gmd_node.parent)]
-                sibling_order = gmd_node.parent.children.index(gmd_node)
             else:
                 node_obj.parent = root_obj
-                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
 
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz

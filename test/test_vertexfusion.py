@@ -4,16 +4,17 @@ from typing import List, Tuple
 import pytest
 
 from mathutils import Vector
-from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, fuse_adjacent_vertices, \
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, fuse_adjacent_vertices, \
     detect_fully_fused_triangles, decide_on_unfusions, solve_unfusion
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, VecStorage, \
+    VecCompFmt
 
 
-def mock_vertex_buffer(pos: List[Vector]) -> GMDVertexBuffer_Generic:
+def mock_vertex_buffer(pos: List[Vector]) -> GMDVertexBuffer:
     layout = GMDVertexBufferLayout.make_vertex_buffer_layout(
         assume_skinned=False,
 
-        pos_storage=VecStorage.Vec3Full,
+        pos_storage=VecStorage(VecCompFmt.Float32, 3),
         weights_storage=None,
         bones_storage=None,
         normal_storage=None,
@@ -25,7 +26,7 @@ def mock_vertex_buffer(pos: List[Vector]) -> GMDVertexBuffer_Generic:
 
         packing_flags=0,
     )
-    return GMDVertexBuffer_Generic(
+    return GMDVertexBuffer(
         layout=layout,
 
         pos=pos,

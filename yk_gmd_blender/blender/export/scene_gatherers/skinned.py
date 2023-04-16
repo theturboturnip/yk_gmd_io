@@ -9,7 +9,7 @@ from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key
 from yk_gmd_blender.blender.coordinate_converter import transform_position_blender_to_gmd, \
     transform_rotation_blender_to_gmd
-from yk_gmd_blender.blender.export.mesh_exporter.functions import split_skinned_blender_mesh_object
+from yk_gmd_blender.blender.export.mesh_exporter.v2 import split_skinned_blender_mesh_object
 from yk_gmd_blender.blender.export.scene_gatherers.base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene, depth_first_iterate
@@ -161,12 +161,12 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             self.export_skinned_object(context, skinned_object)
 
         self.error.debug("GATHER", f"NODE REPORT")
-        for node in depth_first_iterate(self.node_roots):
+        for _, node in depth_first_iterate(self.node_roots):
             self.error.debug("GATHER", f"{node.name} - {node.node_type}")
 
         if self.config.debug_compare_matrices:
             self.error.debug("GATHER", f"MATRIX COMPARISONS")
-            for node in depth_first_iterate(self.node_roots):
+            for _, node in depth_first_iterate(self.node_roots):
                 if node.name in self.original_scene.overall_hierarchy.elem_from_name:
                     self.error.debug("GATHER", f"{node.name} vs original scene")
                     self.error.debug("GATHER",

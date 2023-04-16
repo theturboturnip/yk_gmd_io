@@ -3,12 +3,12 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic, Sequence
 
 from mathutils import Vector
-from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned
+from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
 from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -130,7 +130,7 @@ class VertSet:
         """
         return set(self.verts.keys()).difference(other.verts.keys())
 
-    def difference(self, other: 'VertSet') -> Dict[Tuple, Tuple[VertApproxData]]:
+    def difference(self, other: 'VertSet') -> Dict[Tuple, Tuple[VertApproxData, ...]]:
         """
         Return the difference of two vert-sets as a set.
         (i.e. all elements that are in this set but not the others.)
@@ -143,7 +143,7 @@ class VertSet:
         :return: Set of (vert_exact, vert_approx) tuples not found in the other set
         """
 
-        verts: Dict[Tuple, Tuple[VertApproxData]] = {}
+        verts: Dict[Tuple, Tuple[VertApproxData, ...]] = {}
 
         key_set = set(self.verts.keys())
 
@@ -250,16 +250,16 @@ class VertVoxelSet(Generic[TExact, TApprox]):
                 self_pos, self_exact, self_approx = self.verts[self_vert]
 
                 potential_other_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in other_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in other_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
                 counted_other_verts.update(i for (i, _) in potential_other_verts)
 
                 potential_self_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in self_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in self_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
@@ -292,20 +292,20 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
-                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
-                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
-                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
-                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
-                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    round(buf.normal[i][3], 4) if buf.normal is not None else nul_item,
+                    round(buf.tangent[i][3], 4) if buf.tangent is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk is not None else nul_item,
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "b",
-                    tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
+                    tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data is not None else nul_item,
                     "w",
-                    tuple(round(x, 2) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                    tuple(round(x, 2) for x in buf.weight_data[i]) if buf.weight_data is not None else nul_item,
                 ),
                 VertApproxData.new(
-                    normal=buf.normal[i] if buf.normal else None,
-                    tangent=buf.tangent[i] if buf.tangent else None
+                    normal=Vector(buf.normal[i]) if buf.normal is not None else None,
+                    tangent=Vector(buf.tangent[i]) if buf.tangent is not None else None
                 )
             )
     return all_verts
@@ -317,26 +317,26 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
         for i in set(gmd_mesh.triangle_strip_noreset_indices):
-            assert buf.bone_data and buf.weight_data
+            assert (buf.bone_data is not None) and (buf.weight_data is not None)
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
-                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
-                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
-                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
-                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
-                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    round(buf.normal[i][3], 4) if buf.normal is not None else nul_item,
+                    round(buf.tangent[i][3], 4) if buf.tangent is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk is not None else nul_item,
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "bw",
                     tuple(
                         (gmd_mesh.relevant_bones[int(b)].name, round(w, 3))
                         for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
                         if w > 0
-                    ) if buf.bone_data and buf.weight_data else nul_item,
+                    ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
                 ),
                 VertApproxData.new(
-                    normal=buf.normal[i] if buf.normal else None,
-                    tangent=buf.tangent[i] if buf.tangent else None
+                    normal=Vector(buf.normal[i]) if buf.normal is not None else None,
+                    tangent=Vector(buf.tangent[i]) if buf.tangent is not None else None
                 )
             )
     return all_verts
@@ -353,40 +353,44 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
     def find_fusion_output_vs(ms: List[GMDMesh]) -> VertVoxelSet:
-        unfused_vs: List[GMDVertexBuffer_Generic]
+        relevant_bones: Optional[List[GMDBone]]
+        unfused_vs: Sequence[GMDVertexBuffer]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
         else:
+            relevant_bones = None
             unfused_vs = [m.vertices_data for m in ms]
         fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
 
+        rounded_bw: tuple
+
         all_verts: VertVoxelSet[Tuple, Optional[Tuple]] = VertVoxelSet()
-        if skinned:
+        if relevant_bones is not None:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
-                buf = cast(GMDVertexBuffer_Skinned, unfused_vs[buf_idx])
+                buf = cast(GMDSkinnedVertexBuffer, unfused_vs[buf_idx])
 
-                exact_pos = buf.pos[i]
+                exact_pos = Vector(buf.pos[i])
                 rounded_bw = (
                     tuple(
-                        (relevant_bones[int(bw.bone)].name, round(bw.weight, 4))
-                        for bw in buf.bone_weights[i]
-                        if bw.weight > 0
-                    ) if buf.bone_weights else nul_item,
+                        (relevant_bones[int(bone)].name, round(weight, 4))
+                        for bone, weight in zip(buf.bone_data[i], buf.weight_data[i])
+                        if weight > 0
+                    ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
                 )
-                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
                 all_verts.add(exact_pos, rounded_bw, norm)
         else:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
                 buf = unfused_vs[buf_idx]
 
-                exact_pos = buf.pos[i]
+                exact_pos = Vector(buf.pos[i])
                 rounded_bw = (
-                    tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                    tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                    tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data is not None else nul_item,
+                    tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data is not None else nul_item,
                 )
-                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
                 all_verts.add(exact_pos, rounded_bw, norm)
 
         return all_verts
@@ -401,8 +405,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         src_fused_vs.check_fusions(dst_fused_vs)
     if src_vs_with_no_equiv or src_vs_unfused_in_dst or dst_vs_with_no_equiv_in_src:
         src_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_vs_with_no_equiv), 5))
-        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _, _ in ss))
-        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _, _ in ds))
+        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _ in ss))
+        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _ in ds))
         src_unfused_str = '\n\t'.join(
             str(x) for x in
             itertools.islice(sorted([v for v in src_vs_unfused_in_dst]), 5))
