@@ -27,7 +27,8 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
     def make_bone_hierarchy(
             self,
             context: bpy.types.Context,
-            collection: bpy.types.Collection
+            collection: bpy.types.Collection,
+            old_anim_skeleton_compat: bool,
     ) -> Tuple[bpy.types.Object, Dict[int, str]]:
         """
         Make an Armature representing all of the GMD *NODES* in the imported scene hierarchy.
@@ -54,8 +55,6 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
         node_yakuza_world_space_matrices: Dict[int, Matrix] = {}
         node_id_to_blender_bone_name: Dict[int, str] = {}
 
-        OLD_ANIM_SKELETON_COMPAT = True
-
         for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             self.error.debug("BONES", f"node {gmd_node.name}")
             self.error.debug("BONES", f"Actual Data\n{gmd_node.pos}\t{gmd_node.rot}\t{gmd_node.scale}")
@@ -73,7 +72,7 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            if OLD_ANIM_SKELETON_COMPAT and isinstance(gmd_node, GMDBone):
+            if old_anim_skeleton_compat and isinstance(gmd_node, GMDBone):
                 # Compatibility with the anim_skeleton property removed in
                 # https://github.com/theturboturnip/yk_gmd_io/commit/24577b5190ec4031683b7a0b025e8ca61925af88
                 # This was removed because "Newer versions of the animation importer don't need it",

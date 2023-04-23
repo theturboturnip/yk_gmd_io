@@ -289,6 +289,10 @@ def menu_func_import_unskinned(self, context):
 # Abstract base class for importers that use GMDAnimationSceneCreator.
 # Only abstract function is the one that specifies file import mode.
 class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
+    old_anim_skeleton_compat: BoolProperty(name="Old Anim Compat Skeleton",
+                                           description="If True, will build the armature with legacy behaviour. Not sure if this is useful.",
+                                           default=False)
+
     def draw(self, context):
         layout = self.layout
 
@@ -303,6 +307,7 @@ class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
         layout.prop(self, 'import_materials')
         layout.prop(self, 'material_naming')
         layout.prop(self, 'fuse_vertices')
+        layout.prop(self, 'old_anim_skeleton_compat')
 
     def execute(self, context):
         error = self.create_logger()
@@ -356,7 +361,8 @@ class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
         gmd_collection = scene_creator.make_collection(context)
 
         self.report({"INFO"}, "Importing bone hierarchy...")
-        gmd_armature, node_id_to_blender_bone_name = scene_creator.make_bone_hierarchy(context, gmd_collection)
+        gmd_armature, node_id_to_blender_bone_name = scene_creator.make_bone_hierarchy(context, gmd_collection,
+                                                                                       self.old_anim_skeleton_compat)
         self.report({"INFO"}, "Importing objects...")
         scene_creator.make_objects(context, gmd_collection, gmd_armature, node_id_to_blender_bone_name)
 
