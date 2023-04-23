@@ -28,7 +28,6 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             self,
             context: bpy.types.Context,
             collection: bpy.types.Collection,
-            old_anim_skeleton_compat: bool,
     ) -> Tuple[bpy.types.Object, Dict[int, str]]:
         """
         Make an Armature representing all of the GMD *NODES* in the imported scene hierarchy.
@@ -73,14 +72,15 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
             bone.use_deform = True
-            if old_anim_skeleton_compat and isinstance(gmd_node, GMDBone):
+            if isinstance(gmd_node, GMDBone):
                 # Compatibility with the anim_skeleton property removed in
                 # https://github.com/theturboturnip/yk_gmd_io/commit/24577b5190ec4031683b7a0b025e8ca61925af88
                 # This was removed because "Newer versions of the animation importer don't need it",
-                # but people have asked for it back. Might be a placebo, TODO needs testing.
+                # but people have asked for it back.
                 bone.head = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 0))
                 bone.tail = self.gmd_to_blender_world @ gmd_node.matrix.inverted() @ Vector((0, 0, 1))
                 bone.length = 0.0001
+                # Do not under any circumstances connect to the parent
                 bone.use_connect = False
             else:
                 bone.head = self.gmd_to_blender_world @ gmd_node.world_pos.xyz
@@ -103,7 +103,7 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
                         f"Disable Strict Import to continue."
                     )
 
-            # If your head is close to your parent's tail, turn on "connected to parent"
+            # If the original node was parented, give it a parent
             if gmd_node.parent:
                 bone.parent = armature.edit_bones[gmd_node.parent.name]
             else:
@@ -216,8 +216,6 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
-            # mesh_obj.matrix_world = node_world_space_matrices[id(gmd_node)]
-            # mesh_obj.scale = gmd_node.scale.xzy
 
             node_obj.yakuza_hierarchy_node_data.inited = True
             node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis

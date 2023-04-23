@@ -42,8 +42,8 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export_skinned)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export_unskinned)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import_skinned)
-    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_animation_skinned)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import_unskinned)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import_animation_skinned)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import_animation_unskinned)
     bpy.types.TOPBAR_MT_file_external_data.append(menu_func_yk_image_relink)
 
@@ -69,6 +69,6 @@ def unregister():
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export_unskinned)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export_skinned)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_animation_unskinned)
-    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_unskinned)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_animation_skinned)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_unskinned)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import_skinned)
