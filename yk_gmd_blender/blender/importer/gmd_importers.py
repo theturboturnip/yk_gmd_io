@@ -114,7 +114,7 @@ class BaseImportGMD:
 class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_skinned"
-    bl_label = "Import Yakuza Skinned GMD"
+    bl_label = "Import Yakuza Skinned GMD for Modelling"
 
     import_hierarchy: BoolProperty(name="Import Hierarchy",
                                    description="If True, will import the full node hierarchy including skeleton bones. "
@@ -205,7 +205,7 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
 
 def menu_func_import_skinned(self, context):
-    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza Skinned GMD [Characters] (.gmd)")
+    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza Skinned GMD for Modelling [Characters] (.gmd)")
 
 
 class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
@@ -291,7 +291,7 @@ def menu_func_import_unskinned(self, context):
 class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
     old_anim_skeleton_compat: BoolProperty(name="Old Anim Compat Skeleton",
                                            description="If True, will build the armature with legacy behaviour. Not sure if this is useful.",
-                                           default=False)
+                                           default=True)
 
     def draw(self, context):
         layout = self.layout
@@ -381,7 +381,7 @@ class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD):
 class ImportAnimationSkinnedGMD(BaseImportAnimationGMD):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_animation_skinned"
-    bl_label = "Import Yakuza GMD [Skinned/Animation-Friendly]"
+    bl_label = "Import Yakuza Skinned GMD for Animation"
 
     def file_import_mode(self) -> FileImportMode:
         return FileImportMode.SKINNED
@@ -394,4 +394,5 @@ def menu_func_import_animation_unskinned(self, context):
 
 # TODO - we probably don't need this one! Waiting for the YMC member to let me know
 def menu_func_import_animation_skinned(self, context):
-    self.layout.operator(ImportAnimationSkinnedGMD.bl_idname, text="Yakuza GMD [Skinned/Animation-Friendly] (.gmd)")
+    self.layout.operator(ImportAnimationSkinnedGMD.bl_idname,
+                         text="Yakuza Skinned GMD for Animation [Characters] (.gmd)")
