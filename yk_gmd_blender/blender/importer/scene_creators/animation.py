@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Set
 
 import bpy
 from mathutils import Quaternion, Matrix, Vector
@@ -167,6 +167,19 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
 
         gmd_objects: Dict[int, bpy.types.Object] = {}
 
+        bones_parenting_meshes: Set[int] = set()
+        for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+            if isinstance(gmd_node, GMDBone):
+                continue
+
+            # This is a mesh
+            # Check all parents and put them in the bones_parenting_meshes column
+            parent = gmd_node.parent
+            while parent is not None:
+                if isinstance(parent, GMDBone):
+                    bones_parenting_meshes.add(id(parent))
+                parent = parent.parent
+
         for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
                 # Build the mesh, providing the vertex group indices in case it's a skinned object
@@ -189,9 +202,12 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
                     all_vertex_indices = tuple(range(len(node_obj.data.vertices)))
                     vertex_group.add(all_vertex_indices, 1, "REPLACE")
             else:
-                # Create an empty
-                node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)
-                node_obj.empty_display_size = 0.05
+                if id(gmd_node) in bones_parenting_meshes:
+                    # Create an empty if it has non-bones as children
+                    node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)
+                    node_obj.empty_display_size = 0.05
+                else:
+                    continue
 
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
@@ -223,5 +239,6 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
                 node_obj.parent = armature_object
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
+            print(id(gmd_node), node_obj)
             gmd_objects[id(gmd_node)] = node_obj
             collection.objects.link(node_obj)
