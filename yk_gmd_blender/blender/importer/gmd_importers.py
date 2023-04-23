@@ -1,4 +1,3 @@
-import abc
 import os
 
 from bpy.props import (StringProperty,
@@ -289,7 +288,7 @@ def menu_func_import_unskinned(self, context):
 
 # Abstract base class for importers that use GMDAnimationSceneCreator.
 # Only abstract function is the one that specifies file import mode.
-class BaseImportAnimationGMD(abc.ABC):
+class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
     def draw(self, context):
         layout = self.layout
 
@@ -364,7 +363,7 @@ class BaseImportAnimationGMD(abc.ABC):
         self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
 
 
-class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD, BaseImportGMD, Operator, ImportHelper):
+class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_animation_unskinned"
     bl_label = "Import Yakuza GMD [Unskinned/Animation-Friendly]"
@@ -373,7 +372,7 @@ class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD, BaseImportGMD, Operato
         return FileImportMode.UNSKINNED
 
 
-class ImportAnimationSkinnedGMD(BaseImportAnimationGMD, BaseImportGMD, Operator, ImportHelper):
+class ImportAnimationSkinnedGMD(BaseImportAnimationGMD):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_animation_skinned"
     bl_label = "Import Yakuza GMD [Skinned/Animation-Friendly]"
