@@ -114,7 +114,7 @@ class BaseImportGMD:
 class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_skinned"
-    bl_label = "Import Yakuza GMD [Characters/Skinned]"
+    bl_label = "Import Yakuza Skinned GMD"
 
     import_hierarchy: BoolProperty(name="Import Hierarchy",
                                    description="If True, will import the full node hierarchy including skeleton bones. "
@@ -205,13 +205,13 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
 
 def menu_func_import_skinned(self, context):
-    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza GMD [Characters/Skinned] (.gmd)")
+    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza Skinned GMD [Characters] (.gmd)")
 
 
 class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_unskinned"
-    bl_label = "Import Yakuza GMD [Stages/Weapons/Unskinned]"
+    bl_label = "Import Yakuza Unskinned GMD for Modelling"
 
     def draw(self, context):
         layout = self.layout
@@ -283,7 +283,7 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
 
 def menu_func_import_unskinned(self, context):
-    self.layout.operator(ImportUnskinnedGMD.bl_idname, text="Yakuza GMD [Stages/Weapons/Unskinned] (.gmd)")
+    self.layout.operator(ImportUnskinnedGMD.bl_idname, text="Yakuza Unskinned GMD for Modelling [Props/Stages] (.gmd)")
 
 
 # Abstract base class for importers that use GMDAnimationSceneCreator.
@@ -372,7 +372,7 @@ class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
 class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_animation_unskinned"
-    bl_label = "Import Yakuza GMD [Unskinned/Animation-Friendly]"
+    bl_label = "Import Yakuza Unskinned GMD for Animation"
 
     def file_import_mode(self) -> FileImportMode:
         return FileImportMode.UNSKINNED
@@ -388,8 +388,10 @@ class ImportAnimationSkinnedGMD(BaseImportAnimationGMD):
 
 
 def menu_func_import_animation_unskinned(self, context):
-    self.layout.operator(ImportAnimationUnskinnedGMD.bl_idname, text="Yakuza GMD [Unskinned/Animation-Friendly] (.gmd)")
+    self.layout.operator(ImportAnimationUnskinnedGMD.bl_idname,
+                         text="Yakuza Unskinned GMD for Animation [Props/Stages] (.gmd)")
 
 
+# TODO - we probably don't need this one! Waiting for the YMC member to let me know
 def menu_func_import_animation_skinned(self, context):
     self.layout.operator(ImportAnimationSkinnedGMD.bl_idname, text="Yakuza GMD [Skinned/Animation-Friendly] (.gmd)")
