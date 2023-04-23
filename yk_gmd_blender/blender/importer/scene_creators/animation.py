@@ -66,8 +66,9 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
                 parent_matrix_unrotated = Matrix.Identity(4)
 
             this_bone_matrix_unrotated = parent_matrix_unrotated @ Matrix.Translation(gmd_node.pos.xyz)
-            head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0, 0, 0))
             node_yakuza_world_space_matrices[id(gmd_node)] = this_bone_matrix_unrotated
+
+            head_no_rot = self.gmd_to_blender_world @ this_bone_matrix_unrotated @ Vector((0, 0, 0))
 
             bone = armature.edit_bones.new(f"{gmd_node.name}")
             bone.use_relative_parent = False
@@ -164,60 +165,63 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             for i, name in enumerate(skinned_vertex_group_list)
         }
 
-        gmd_objects = {}
+        gmd_objects: Dict[int, bpy.types.Object] = {}
 
-        for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
-            if not isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
-                continue
+        for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+            if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
+                # Build the mesh, providing the vertex group indices in case it's a skinned object
+                overall_mesh = self.build_object_mesh(collection, gmd_node,
+                                                      skinned_vertex_group_indices)
+                node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
 
-            # Build the mesh, providing the vertex group indices in case it's a skinned object
-            overall_mesh = self.build_object_mesh(collection, gmd_node, skinned_vertex_group_indices)
+                # Objects use an Armature modifier to deform them.
+                modifier = node_obj.modifiers.new(type='ARMATURE', name="Armature")
+                modifier.object = armature_object
 
-            # Create the final object representing this GMDNode
-            mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
+                # Skinned objects are deformed by the GMDBones
+                if isinstance(gmd_node, GMDSkinnedObject):
+                    for name in skinned_vertex_group_list:
+                        node_obj.vertex_groups.new(name=name)
+                else:
+                    # Unskinned objects are mapped to a single bone just for them
+                    vertex_group = node_obj.vertex_groups.new(name=node_id_to_blender_bone_name[id(gmd_node)])
+                    # Set the vertex weights to max for all vertices
+                    all_vertex_indices = tuple(range(len(node_obj.data.vertices)))
+                    vertex_group.add(all_vertex_indices, 1, "REPLACE")
+            else:
+                # Create an empty
+                node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)
+                node_obj.empty_display_size = 0.05
 
             # Set the GMDNode position, rotation, scale
-            mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
+            node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
             # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
+            node_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
-            mesh_obj.scale = gmd_node.scale.xzy
+            node_obj.scale = gmd_node.scale.xzy
+            # mesh_obj.matrix_world = node_world_space_matrices[id(gmd_node)]
+            # mesh_obj.scale = gmd_node.scale.xzy
 
-            if gmd_node.parent:
-                sibling_order = gmd_node.parent.children.index(gmd_node)
-            else:
-                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
-
-            mesh_obj.yakuza_hierarchy_node_data.inited = True
-            mesh_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
-            if isinstance(gmd_node, GMDUnskinnedObject):
-                mesh_obj.yakuza_hierarchy_node_data.imported_matrix = \
+            node_obj.yakuza_hierarchy_node_data.inited = True
+            node_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
+            if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
+                node_obj.yakuza_hierarchy_node_data.imported_matrix = \
                     list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
                         gmd_node.matrix[3])
             else:
-                mesh_obj.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
-            mesh_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
+                node_obj.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
+            node_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
             # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
             # This means you can insert new objects between other ones more easily
-            mesh_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
+            node_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
 
-            # Objects are parented to the armature, with an Armature modifier to deform them.
-            mesh_obj.parent = armature_object
-            modifier = mesh_obj.modifiers.new(type='ARMATURE', name="Armature")
-            modifier.object = armature_object
-
-            # Skinned objects are deformed by the GMDBones
-            if isinstance(gmd_node, GMDSkinnedObject):
-                for name in skinned_vertex_group_list:
-                    mesh_obj.vertex_groups.new(name=name)
+            if gmd_node.parent:
+                # Parenting an object to another object is easy
+                node_obj.parent = gmd_objects[id(gmd_node.parent)]
             else:
-                # Unskinned objects are mapped to a single bone just for them
-                vertex_group = mesh_obj.vertex_groups.new(name=node_id_to_blender_bone_name[id(gmd_node)])
-                # Set the vertex weights to max for all vertices
-                all_vertex_indices = tuple(range(len(mesh_obj.data.vertices)))
-                vertex_group.add(all_vertex_indices, 1, "REPLACE")
+                node_obj.parent = armature_object
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
-            gmd_objects[id(gmd_node)] = mesh_obj
-            collection.objects.link(mesh_obj)
+            gmd_objects[id(gmd_node)] = node_obj
+            collection.objects.link(node_obj)
