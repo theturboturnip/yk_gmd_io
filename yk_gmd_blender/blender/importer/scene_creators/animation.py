@@ -132,9 +132,12 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
             bone = armature.bones[node_id_to_blender_bone_name[id(gmd_node)]]
             bone.yakuza_hierarchy_node_data.inited = True
             bone.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
-            bone.yakuza_hierarchy_node_data.imported_matrix = \
-                list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
-                    gmd_node.matrix[3])
+            if isinstance(gmd_node, (GMDBone, GMDUnskinnedObject)):
+                bone.yakuza_hierarchy_node_data.imported_matrix = \
+                    list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
+                        gmd_node.matrix[3])
+            else:
+                bone.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
             bone.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
             bone.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
             bone.yakuza_hierarchy_node_data.bone_local_rot = transform_rotation_gmd_to_blender(gmd_node.rot)
@@ -189,8 +192,12 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
 
             mesh_obj.yakuza_hierarchy_node_data.inited = True
             mesh_obj.yakuza_hierarchy_node_data.anim_axis = gmd_node.anim_axis
-            # gmd_node is a skinned object, doesn't have a matrix
-            mesh_obj.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
+            if isinstance(gmd_node, GMDUnskinnedObject):
+                mesh_obj.yakuza_hierarchy_node_data.imported_matrix = \
+                    list(gmd_node.matrix[0]) + list(gmd_node.matrix[1]) + list(gmd_node.matrix[2]) + list(
+                        gmd_node.matrix[3])
+            else:
+                mesh_obj.yakuza_hierarchy_node_data.imported_matrix = [0] * 16
             mesh_obj.yakuza_hierarchy_node_data.flags_json = json.dumps(gmd_node.flags)
             # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
             # This means you can insert new objects between other ones more easily
