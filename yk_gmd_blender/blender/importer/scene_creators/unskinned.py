@@ -42,6 +42,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
         root_obj.yakuza_file_root_data.is_valid_root = True
         root_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
         root_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
+        root_obj.yakuza_file_root_data.import_mode = "UNSKINNED"
         collection.objects.link(root_obj)
 
         # Still create the vertex group list, so we create the vertex groups, but don't actually deform anything

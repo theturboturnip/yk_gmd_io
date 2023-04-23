@@ -57,6 +57,17 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         # Find armature - should only be one, and should be named {name}_armature (see common for expected name)
         selected_armature, selected_collection = super().detect_export_collection(context)
 
+        if selected_armature.yakuza_file_root_data.is_valid_root \
+                and selected_armature.yakuza_file_root_data.import_mode != "SKINNED":
+            if selected_armature.yakuza_file_root_data.import_mode == "UNSKINNED":
+                self.error.recoverable("File was imported in unskinned mode, can't export as skinned.\n"
+                                       "Try exporting in unskinned mode.")
+            elif selected_armature.yakuza_file_root_data.import_mode == "ANIMATION":
+                self.error.recoverable("File was imported in animation mode, export will likely go wrong.\n"
+                                       "Disable Strict Export if you really know what you're doing.")
+            else:
+                self.error.info("File root data wasn't marked as skinned, export may go wrong.")
+
         if not selected_armature or selected_armature.type != "ARMATURE":
             self.error.fatal(f"Please select the armature for the skinned file you want to export!")
 
