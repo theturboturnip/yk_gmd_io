@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, cast, Tuple
 
 import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
+from mathutils import Vector
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
@@ -13,6 +14,7 @@ from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUn
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
 from yk_gmd_blender.gmdlib.structure.version import GMDVersion
@@ -127,6 +129,12 @@ class BaseGMDSceneGatherer(abc.ABC):
             # Take the flags from the target file
             self.flags = self.original_scene.flags
             self.error.info(f"Taking flags from target file")
+
+    def gmd_bounding_box(self, object: bpy.types.Object) -> GMDBoundingBox:
+        return GMDBoundingBox.from_points(
+            Vector((-x, z, y))
+            for x, y, z in object.bound_box
+        )
 
     def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material,
                                               referencing_object: bpy.types.Object) -> GMDAttributeSet:

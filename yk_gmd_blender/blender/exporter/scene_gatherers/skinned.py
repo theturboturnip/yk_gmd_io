@@ -335,7 +335,9 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
             world_pos=Vector((0, 0, 0, 1)),
             anim_axis=object.yakuza_hierarchy_node_data.anim_axis,
-            flags=flags
+            flags=flags,
+
+            bbox=self.gmd_bounding_box(object)
         )
         self.node_roots.append(gmd_object)
 

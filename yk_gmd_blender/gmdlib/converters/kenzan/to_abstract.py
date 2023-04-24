@@ -34,9 +34,14 @@ class GMDAbstractor_Kenzan(GMDAbstractor_Common[FileData_Kenzan]):
 
         self.error.debug("TIME", f"Time after build_materials_from_structs: {time.time() - start_time}")
 
+        object_bboxes = [
+            o.bbox.abstractify()
+            for o in self.file_data.obj_arr
+        ]
         abstract_nodes = self.build_node_hierarchy_from_structs(self.file_data.node_arr,
                                                                 self.file_data.node_name_arr,
-                                                                self.file_data.matrix_arr)
+                                                                self.file_data.matrix_arr,
+                                                                object_bboxes)
 
         self.error.debug("TIME", f"Time after build_skeleton_bones_from_structs: {time.time() - start_time}")
 

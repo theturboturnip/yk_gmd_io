@@ -1,13 +1,9 @@
-from typing import Iterable
-
 from mathutils import Quaternion, Vector
-from yk_gmd_blender.structurelib.base import PackingValidationError
-from yk_gmd_blender.structurelib.primitives import c_uint16
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDUnk12
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
 from yk_gmd_blender.gmdlib.converters.common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
@@ -22,59 +18,17 @@ from yk_gmd_blender.gmdlib.structure.yk1.file import FileData_YK1
 from yk_gmd_blender.gmdlib.structure.yk1.mesh import MeshStruct_YK1
 from yk_gmd_blender.gmdlib.structure.yk1.object import ObjectStruct_YK1
 from yk_gmd_blender.gmdlib.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
+from yk_gmd_blender.structurelib.base import PackingValidationError
+from yk_gmd_blender.structurelib.primitives import c_uint16
 
 
-def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_YK1:
-    box_rotation = Quaternion()
-    box_rotation.identity()
-
-    center = (min_pos + max_pos) / 2
-    box_extents = (max_pos - center)
-    sphere_radius = (box_extents).length
-
+def yk1_bounds_from_gmd(gmd_bounds: GMDBoundingBox) -> BoundsDataStruct_YK1:
     return BoundsDataStruct_YK1(
-        center=center,
-        sphere_radius=sphere_radius,
-        box_extents=box_extents,
-        box_rotation=box_rotation
+        center=gmd_bounds.center,
+        sphere_radius=gmd_bounds.sphere_radius,
+        box_extents=gmd_bounds.aabb_extents,
+        box_rotation=Quaternion()
     )
-
-
-def bounds_of(mesh) -> BoundsDataStruct_YK1:
-    min_pos = Vector((-1000, -1000, -1000))
-    max_pos = Vector((+1000, +1000, +1000))
-
-    return bounds_from_minmax(min_pos, max_pos)
-
-
-def combine_bounds(bounds: Iterable[BoundsDataStruct_YK1]) -> BoundsDataStruct_YK1:
-    min_pos = Vector((-1000, -1000, -1000))
-    max_pos = Vector((+1000, +1000, +1000))
-
-    for bound in bounds:
-        min_for_bound = bound.center - bound.box_extents
-        max_for_bound = bound.center - bound.box_extents
-
-        if min_pos is None:
-            min_pos = min_for_bound
-            max_pos = max_for_bound
-        else:
-            min_pos.x = min(min_for_bound.x, min_pos.x)
-            min_pos.y = min(min_for_bound.y, min_pos.y)
-            min_pos.z = min(min_for_bound.z, min_pos.z)
-
-            max_pos.x = max(max_for_bound.x, max_pos.x)
-            max_pos.y = max(max_for_bound.y, max_pos.y)
-            max_pos.z = max(max_for_bound.z, max_pos.z)
-
-    # TODO - This is for the sake of hierarchy objects which have no meshes themselves, but presumably have children with meshes.
-    # Will these BBOXes need to be calculated with those other ones in mind?
-    # Will these BBOXes need to be calculated with object position in mind?
-    # if min_pos is None:
-    #     min_pos = Vector((0, 0, 0, 0))
-    #     max_pos = Vector((0, 0, 0, 0))
-
-    return bounds_from_minmax(min_pos, max_pos)
 
 
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
@@ -263,8 +217,6 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     drawlist_bytearray = bytearray()
     touched_meshes = set()
     for i, obj in enumerate(rearranged_data.ordered_objects):
-
-        mesh_bounds = combine_bounds([bounds_of(gmd_mesh) for gmd_mesh in obj.mesh_list])
         node_index = rearranged_data.node_id_to_node_index[id(obj)]
 
         drawlist_rel_ptr = len(drawlist_bytearray)
@@ -283,11 +235,11 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             node_index_2=node_index,  # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
             drawlist_rel_ptr=drawlist_rel_ptr,
 
-            bbox=mesh_bounds,
+            bbox=yk1_bounds_from_gmd(obj.bbox),
         ))
     if len(touched_meshes) != len(mesh_arr):
         error.fatal(f"Didn't export drawlists for all meshes")
-    overall_bounds = combine_bounds(obj.bbox for obj in obj_arr)
+    overall_bounds = GMDBoundingBox.combine((obj.bbox, obj.world_pos.xyz) for obj in rearranged_data.ordered_objects)
 
     material_arr = []
     for gmd_material in rearranged_data.ordered_materials:
@@ -347,7 +299,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
         name=ChecksumStrStruct.make_from_str(scene.name),
 
-        overall_bounds=overall_bounds,
+        overall_bounds=yk1_bounds_from_gmd(overall_bounds),
 
         node_arr=node_arr,
         obj_arr=obj_arr,
