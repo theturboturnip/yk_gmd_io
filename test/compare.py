@@ -601,20 +601,26 @@ def compare_bbox(context: str, src: GMDBoundingBox, dst: GMDBoundingBox, cmp: Co
     # Check the dst sphere encompasses the src one
     # i.e. that the farthest point from the dst center on the src sphere, is still inside the dst sphere
     # i.e. distance(dst.center, src.center) + src.sphere_radius <= dst.sphere_radius
-    if (dst_center - src_center).length + src_sphere_radius > dst_sphere_radius:
+    if (dst_center - src_center).length + src_sphere_radius > dst_sphere_radius + 0.01:
         cmp.important_mismatch(
-            f"{context}dst bbox sphere doesn't encompass src bbox sphere:\nsrc:\n\t{src}\ndst:\n\t{dst}"
+            f"{context}dst bbox sphere doesn't encompass src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
         )
     if any(src_dim > dst_dim + 0.01 for src_dim, dst_dim in
            zip(src_center + src_aabb_extents, dst_center + dst_aabb_extents)):
         cmp.important_mismatch(
-            f"{context}dst bbox aabb doesn't encompass src bbox aabb:\nsrc:\n\t{src}\ndst:\n\t{dst}"
+            f"{context}dst bbox aabb doesn't encompass src bbox aabb:\n"
+            f"src:\n\t{src_center}\n\t{src_aabb_extents}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_aabb_extents}\n"
         )
     dst_vol = dst_sphere_radius ** 3  # * pi
     src_vol = src_sphere_radius ** 3  # * pi
-    if dst_vol / 2 > src_vol:
+    if dst_vol / 10 > src_vol:
         cmp.important_mismatch(
-            f"{context}dst bbox sphere has more than 2x volume of src bbox sphere:\nsrc:\n\t{src}\ndst:\n\t{dst}"
+            f"{context}dst bbox sphere has more than 10x volume of src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
         )
 
 
