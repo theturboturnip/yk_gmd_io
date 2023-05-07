@@ -379,7 +379,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                     ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
                 )
                 norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
-                all_verts.add(exact_pos, rounded_bw, norm)
+                tang = tuple(round(n, 3) for n in buf.tangent[i][:3]) if buf.tangent is not None else None
+                all_verts.add(exact_pos, rounded_bw, (norm, tang))
         else:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
@@ -391,7 +392,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
                     tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data is not None else nul_item,
                 )
                 norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
-                all_verts.add(exact_pos, rounded_bw, norm)
+                tang = tuple(round(n, 3) for n in buf.tangent[i][:3]) if buf.tangent is not None else None
+                all_verts.add(exact_pos, rounded_bw, (norm, tang))
 
         return all_verts
 
