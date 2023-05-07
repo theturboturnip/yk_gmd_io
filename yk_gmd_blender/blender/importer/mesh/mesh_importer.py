@@ -1,6 +1,8 @@
+import array
 from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
+import bpy.types
 from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
@@ -10,12 +12,15 @@ from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indice
 
 
 def gmd_meshes_to_bmesh(
+        name: str,
         gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]],
         vertex_group_indices: Dict[str, int],
         attr_set_material_idx_mapping: Dict[int, int],
         gmd_to_blender_world: Matrix,
         fuse_vertices: bool,
-        error: ErrorReporter):
+        custom_split_normals: bool,
+        error: ErrorReporter
+) -> bpy.types.Mesh:
     if len(gmd_meshes) == 0:
         error.fatal("Called gmd_meshes_to_bmesh with 0 meshes!")
     if len([m for m in gmd_meshes if m.empty]) > 0:
@@ -52,7 +57,7 @@ def gmd_meshes_to_bmesh(
     if deform and (relevant_bones is None):
         error.fatal(f"Mismatch between deform/is_skinned, and the existence of relevant_bones")
 
-    # Add a single vertex's (position, bone weights) to the BMesh
+    # Add a single vertex's (position, normal, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
         yk_pos = buf.pos[i]
         vert = bm.verts.new((-yk_pos[0], yk_pos[2], yk_pos[1]))
@@ -218,4 +223,46 @@ def gmd_meshes_to_bmesh(
                         if any(x < 0 or x > 1 for x in original_uv):
                             error.recoverable(f"Data in UV{uv_i} is outside the range of values Blender can store. "
                                               f"Expected values between 0 and 1, got {original_uv}")
-    return bm
+
+    overall_mesh = bpy.data.meshes.new(name)
+    error.debug("OBJ", f"\tOverall mesh vert count: {len(bm.verts)}")
+    bm.to_mesh(overall_mesh)
+
+    # Use custom split normals on the final mesh to ensure the exact normals from the source file are used here.
+    # We make a few assumptions:
+    # 1. the vertices from bm.verts are in the same order in overall_mesh.vertices
+    # 2. the normals from bm.verts are not modified between setting them and now
+    #
+    # bpy.types.Mesh custom split normals are per-vertex-loop i.e. per face corner.
+    # => for each face corner, look up the original vertex index and use that to determine the new normal.
+    #
+    # Code for setting split normals is based on the FBX importer:
+    # https://github.com/sobotka/blender-addons/blob/master/io_scene_fbx/import_fbx.py#L1336
+    if custom_split_normals:
+        overall_mesh.create_normals_split()
+        # clnors = [ vert0normalX, vert0normalY, vert0normalZ, vert1normalX, ...]
+        clnors = array.array('f', [0.0] * (len(overall_mesh.loops) * 3))
+        for i_loop, loop in enumerate(overall_mesh.loops):
+            nor: Vector = bm.verts[loop.vertex_index].normal
+            nor.normalize()
+            clnors[i_loop * 3 + 0] = nor.x
+            clnors[i_loop * 3 + 1] = nor.y
+            clnors[i_loop * 3 + 2] = nor.z
+
+        # This is a really weird setup.
+        # tuple(                      # expand the iterator of (float, float, float)
+        #   zip(                      # zip the three iterators together to create iter of (float, float, float)
+        #     *                       # unpack the tuple of \/
+        #       (iter(clnors),) * 3   # creates a tuple of (clnors_iter, clnors_iter, clnors_iter)
+        #   )
+        # )
+        # It creates three references to the same iterator, and zip() goes through them in order
+        overall_mesh.normals_split_custom_set(tuple(zip(*(iter(clnors),) * 3)))
+        overall_mesh.use_auto_smooth = True
+        overall_mesh.free_normals_split()
+    else:
+        overall_mesh.calc_normals()
+
+    bm.free()
+
+    return overall_mesh
