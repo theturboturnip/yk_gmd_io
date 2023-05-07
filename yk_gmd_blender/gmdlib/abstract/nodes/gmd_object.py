@@ -25,7 +25,6 @@ class GMDBoundingBox:
     def from_min_max(min: Vector, max: Vector) -> 'GMDBoundingBox':
         center = (max + min) / 2
         aabb_extents = (max - min) / 2
-        print(min, max, "->", center, aabb_extents)
         return GMDBoundingBox(
             center,
             sphere_radius=aabb_extents.length,
