@@ -4,7 +4,7 @@ import re
 from typing import Optional, Tuple, cast
 
 import bpy
-from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, IntProperty
+from bpy.props import FloatProperty, FloatVectorProperty, StringProperty, BoolProperty, IntProperty, IntVectorProperty
 from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
 from yk_gmd_blender.blender.common import AttribSetLayerNames
@@ -12,7 +12,6 @@ from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout
 from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter
-
 
 class YakuzaPropertyGroup(PropertyGroup):
     """
@@ -147,13 +146,13 @@ class YakuzaTexturePropertyGroup(PropertyGroup):
 
 # Inspired by XNALara importer code - https://github.com/johnzero7/XNALaraMesh/blob/eaccfddf39aef8d3cb60a50c05f2585398fe26ca/material_creator.py#L527
 
-YAKUZA_SHADER_NODE_GROUP = "Yakuza Shader"
+YAKUZA_SHADER_NODE_GROUP = "Neo Yakuza Shader"
 
-DEFAULT_DIFFUSE_COLOR = (0.9, 0.9, 0.9, 1)
+DEFAULT_DIFFUSE_COLOR = (1, 1, 1, 1)
 DEFAULT_UNUSED_COLOR = (0, 0, 0, 1)
-# TODO: Some normal maps use the G/A channels for normals instead of the R/B. Figure out how to handle that
 DEFAULT_NORMAL_COLOR = (0.5, 0.5, 1, 1)
-DEFAULT_MULTI_COLOR = (0, 0, 1, 1)
+DEFAULT_MULTI_COLOR = (0, 1, 0, 1)
+DEFAULT_Z_COLOR = (0.5, 1, 0.5, 1)
 
 
 def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
@@ -168,6 +167,10 @@ def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, fl
 
     # Create an image where the Blender name = the file name i.e. the name + extension.
     image = bpy.data.images.new(filename, 128, 128, alpha=True)
+    
+    # set all imported textures to non-color, this makes making shaders easier so you dont have to set every non-di
+    # texture to noncolor. _di textures are simply just multiplied by themselves - this is how the ingame shaders do it
+    image.colorspace_settings.name = "Non-Color" 
 
     # Set up the Yakuza Data for this texture to contain the GMD name i.e. the name without an extension.
     image.yakuza_data.inited = True
@@ -212,6 +215,8 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (0, 0, 0, 1))
     elif tex_name == "dummy_white":
         image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (1, 1, 1, 1))
+    elif tex_name == "default_z":
+        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_Z_COLOR)
     elif tex_name == "dummy_multi":
         image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_MULTI_COLOR)
     elif tex_name == "dummy_nmap":
@@ -226,6 +231,7 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
         else:
             # The texture does exist, load it!
             image = bpy.data.images.load(tex_filepath, check_existing=True)
+            image.colorspace_settings.name = "Non-Color"
             image.yakuza_data.inited = True
             image.yakuza_data.yk_name = tex_name
             image_node.image = image
@@ -262,7 +268,48 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.material_json = json.dumps(vars(attribute_set.material.origin_data))
 
     # Set the skin shader to 1 if the shader is a skin shader
-    yakuza_inputs["Skin Shader"].default_value = 1.0 if "[skin]" in attribute_set.shader.name else 0.0
+    yakuza_inputs["Skin shader"].default_value = 1.0 if "[skin]" in attribute_set.shader.name else 0.0
+    
+    # variable for checking if de or oe
+    engine = 1.0 if material.yakuza_data.material_origin_type == 4 else 0.0
+    
+    yakuza_inputs["Engine"].default_value = engine
+
+    # variable for checking if oe clothes shader (MT blue channel is used to blend the pattern textures in this case,
+    # instead of multiplying the specular power)
+    rdrt_shaders = ["[rd]", "[rt]", "[rs]", "_m2"]
+
+    yakuza_inputs["Is OE cloth shader"].default_value = 1.0 if any([x in attribute_set.shader.name
+                                                                    for x in rdrt_shaders]) and engine == 0 else 0.0
+    
+    # variable for checking if glossiness should be inverted
+    yakuza_inputs["[rough]"].default_value = 1.0 if "[rough]" in attribute_set.shader.name else 0.0
+    
+    # variable for checking if the shader actually utilizes the rd or rt slots as those, if not then it
+    # shouldnt be previewed. useful for skin materials in both OE and DE.
+    yakuza_inputs["Disable RD/RT"].default_value = 0.0 if any([x in attribute_set.shader.name for x in rdrt_shaders]) \
+        else 1.0
+    
+    #check if asset shader
+    yakuza_inputs["Asset shader"].default_value = 1.0 if re.search(r'^r_', attribute_set.shader.name) or \
+                                                         re.search(r'^rs_', attribute_set.shader.name) else 0.0
+    #check if imperfection
+    yakuza_inputs["Imperfection"].default_value = 1.0 if "h2dz" in attribute_set.shader.name else 0.0
+
+    #opacity
+    yakuza_inputs["Opacity"].default_value = attribute_set.material.origin_data.opacity / 255
+    
+    #oe shader params
+    yakuza_inputs["Specular color"].default_value[0] = attribute_set.material.origin_data.specular[0]/255
+    yakuza_inputs["Specular color"].default_value[1] = attribute_set.material.origin_data.specular[1]/255
+    yakuza_inputs["Specular color"].default_value[2] = attribute_set.material.origin_data.specular[2]/255
+    yakuza_inputs["Specular power"].default_value = attribute_set.material.origin_data.power
+    yakuza_inputs["Is Y3 [rs] shader"].default_value = 1.0 if "[rd]" not in attribute_set.shader.name and "[rs]" \
+                                                              in attribute_set.shader.name else 0.0
+
+    sp_shaders = ["ds", "st_", "2s"]
+    yakuza_inputs["SP shader"].default_value = 1.0 if any([x in attribute_set.shader.name for x in sp_shaders]) \
+                                                      and engine == 0 else 0.0
 
     # Convenience function for creating a texture node for an Optional texture
     def set_texture(set_into: NodeSocketColor, tex_name: Optional[str],
@@ -279,19 +326,38 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
 
     # Create the diffuse texture
     diffuse_tex, next_y = set_texture(yakuza_inputs["texture_diffuse"], attribute_set.texture_diffuse)
-    if diffuse_tex and re.search(r'^s_b', attribute_set.shader.name):
-        # The shader name starts with s_b so we know it's transparent
-        # Link the texture alpha with the Yakuza Shader, and make the material do alpha blending.
-        material.node_tree.links.new(diffuse_tex.outputs["Alpha"], yakuza_inputs["Diffuse Alpha"])
-        material.blend_method = "BLEND"
+    
+    transparent_shaders = ["_a", "_b", "_c", "_d", "_m", "_p"]
+
+
+    if diffuse_tex:
+        # Link the texture alpha with the Yakuza Shader, and make the material do hashed or blended alpha
+        # (depending on shader), and set shadow method to none.
+        for i in transparent_shaders:
+            regex_test = "^.(" + re.escape(i) + ").+|^..(" + re.escape(i) + ").+"
+
+            if re.search(regex_test, attribute_set.shader.name):
+                material.node_tree.links.new(diffuse_tex.outputs["Alpha"], yakuza_inputs["Diffuse Alpha"])
+                if "_c" in attribute_set.shader.name:
+                    material.blend_method = "HASHED"
+                else:
+                    material.blend_method = "BLEND"
+                material.shadow_method = "NONE"
+            
     # Attach the other textures.
-    _, next_y = set_texture(yakuza_inputs["texture_multi"], attribute_set.texture_multi, next_y, DEFAULT_MULTI_COLOR)
-    _, next_y = set_texture(yakuza_inputs["texture_normal"], attribute_set.texture_normal, next_y, DEFAULT_NORMAL_COLOR)
-    _, next_y = set_texture(yakuza_inputs["texture_refl"], attribute_set.texture_refl, next_y)
-    _, next_y = set_texture(yakuza_inputs["texture_unk1"], attribute_set.texture_unk1, next_y)
-    _, next_y = set_texture(yakuza_inputs["texture_rs"], attribute_set.texture_rs, next_y)
-    _, next_y = set_texture(yakuza_inputs["texture_rt"], attribute_set.texture_rt, next_y)
-    _, next_y = set_texture(yakuza_inputs["texture_rd"], attribute_set.texture_rd, next_y)
+    multi_tex, next_y = set_texture(yakuza_inputs["texture_multi"], attribute_set.texture_multi, next_y, DEFAULT_MULTI_COLOR)
+    if multi_tex:
+        material.node_tree.links.new(multi_tex.outputs["Alpha"], yakuza_inputs["Multi Alpha"])
+    normal_tex, next_y = set_texture(yakuza_inputs["texture_normal"], attribute_set.texture_normal, next_y, DEFAULT_NORMAL_COLOR)
+    if normal_tex:
+        material.node_tree.links.new(normal_tex.outputs["Alpha"], yakuza_inputs["Normal Alpha"])
+    _, next_y = set_texture(yakuza_inputs["texture_refl"], attribute_set.texture_refl, next_y, DEFAULT_Z_COLOR)
+    _, next_y = set_texture(yakuza_inputs["texture_rm"], attribute_set.texture_rm, next_y, DEFAULT_Z_COLOR)
+    _, next_y = set_texture(yakuza_inputs["texture_rs"], attribute_set.texture_rs, next_y, DEFAULT_NORMAL_COLOR)
+    rt_tex, next_y = set_texture(yakuza_inputs["texture_rt"], attribute_set.texture_rt, next_y, DEFAULT_NORMAL_COLOR)
+    if rt_tex:
+        material.node_tree.links.new(rt_tex.outputs["Alpha"], yakuza_inputs["RT Alpha"])
+    _, next_y = set_texture(yakuza_inputs["texture_rd"], attribute_set.texture_rd, next_y, DEFAULT_DIFFUSE_COLOR)
 
 
 def get_yakuza_shader_node_group():
@@ -300,149 +366,26 @@ def get_yakuza_shader_node_group():
     :return: The Yakuza Shader node group.
     """
 
-    # If it already exists, return it.
+    #check if it already exists
     if YAKUZA_SHADER_NODE_GROUP in bpy.data.node_groups:
+        print("neo yakuza shader already exists")
         return bpy.data.node_groups[YAKUZA_SHADER_NODE_GROUP]
+    else:
+        # get yakuza shader from an external .blend file instead, saves a ton of time writing code
+        print("neo yakuza shader doesnt exist yet")
+        shader_location = os.path.dirname(os.path.splitext(__file__)[0]) + "\\yakuza_shader.blend\\NodeTree\\"
+        bpy.ops.wm.append(filename=YAKUZA_SHADER_NODE_GROUP, directory=shader_location)
+        shader = bpy.data.node_groups[YAKUZA_SHADER_NODE_GROUP]
 
-    # Create the node group
-    shader = bpy.data.node_groups.new(name=YAKUZA_SHADER_NODE_GROUP, type="ShaderNodeTree")
-    shader.nodes.clear()
-
-    # Convenience function to avoid typing out shader.links.new all the time
-    link = shader.links.new
-
-    # Use FloatFactor for a [0, 1] range float
-    # can't use boolean here because it doesn't work with the "subsurface scattering" float input on the shader.
-    shader_is_skin = shader.inputs.new("NodeSocketFloatFactor", "Skin Shader")
-    shader_is_skin.min_value = 0
-    shader_is_skin.max_value = 1.0
-    shader_is_skin.default_value = 0
-
-    # Define the texture inputs that are actually used
-    shader_diffuse = shader.inputs.new("NodeSocketColor", "texture_diffuse")
-    shader_diffuse.default_value = DEFAULT_DIFFUSE_COLOR
-    shader_alpha = shader.inputs.new("NodeSocketFloat", "Diffuse Alpha")
-    shader_alpha.default_value = 1.0
-    shader_multi = shader.inputs.new("NodeSocketColor", "texture_multi")
-    shader_multi.default_value = DEFAULT_MULTI_COLOR
-    # Define the texture inputs that aren't used
-    shader_normal = shader.inputs.new("NodeSocketColor", "texture_normal")
-    shader_normal.default_value = DEFAULT_NORMAL_COLOR
-    shader_refl = shader.inputs.new("NodeSocketColor", "texture_refl")
-    shader_refl.default_value = DEFAULT_UNUSED_COLOR
-    shader_unk1 = shader.inputs.new("NodeSocketColor", "texture_unk1")
-    shader_unk1.default_value = DEFAULT_UNUSED_COLOR
-    shader_rs = shader.inputs.new("NodeSocketColor", "texture_rs")
-    shader_rs.default_value = DEFAULT_UNUSED_COLOR
-    shader_rt = shader.inputs.new("NodeSocketColor", "texture_rt")
-    shader_rt.default_value = DEFAULT_UNUSED_COLOR
-    shader_rd = shader.inputs.new("NodeSocketColor", "texture_rd")
-    shader_rd.default_value = DEFAULT_UNUSED_COLOR
-
-    # Create outputs
-    shader.outputs.new("NodeSocketShader", 'Shader')
-
-    # The "Group Output" nodes is how we link values from shader.outputs into the other nodes in the shader
-    group_output = shader.nodes.new("NodeGroupOutput")
-
-    # Create the shader node and link it to the output.
-    principled_shader = shader.nodes.new("ShaderNodeBsdfPrincipled")
-    principled_shader.location = (100, 0)
-    group_output.location = (principled_shader.location[0] + principled_shader.width + 100, 0)
-    group_input_x = -800
-    link(principled_shader.outputs['BSDF'], group_output.inputs["Shader"])
-
-    # Create multiple "Group Input" nodes containing only the bits we want
-    group_input_diffuse = shader.nodes.new("NodeGroupInput")
-    for output in group_input_diffuse.outputs:
-        output.hide = (output.name != "texture_diffuse")
-    group_input_diffuse.label = "Diffuse Input"
-    group_input_diffuse.hide = True
-    group_input_diffuse.location = (group_input_x, 0)
-
-    group_input_is_skin = shader.nodes.new("NodeGroupInput")
-    for output in group_input_is_skin.outputs:
-        output.hide = (output.name != "Skin Shader")
-    group_input_is_skin.label = "Is-Skin Input"
-    group_input_is_skin.hide = True
-    group_input_is_skin.location = (group_input_x, -100)
-
-    group_input_multi = shader.nodes.new("NodeGroupInput")
-    for output in group_input_multi.outputs:
-        output.hide = (output.name != "texture_multi")
-    group_input_multi.label = "Multi Input"
-    group_input_multi.hide = True
-    group_input_multi.location = (group_input_x, -400)
-
-    group_input_alpha = shader.nodes.new("NodeGroupInput")
-    for output in group_input_alpha.outputs:
-        output.hide = (output.name != "Diffuse Alpha")
-    group_input_alpha.label = "Alpha Input"
-    group_input_alpha.hide = True
-    group_input_alpha.location = (group_input_x, -600)
-
-    # group_input_normal = shader.nodes.new("NodeGroupInput")
-    # for output in group_input_normal.outputs:
-    #     output.hide = ("Normal" not in output.name)
-    # group_input_normal.label = "Normal Input"
-    # group_input_normal.hide = True
-    # group_input_normal.location = (group_input_x, -800)
-
-    # Helper function for creating a MixRGB node between the given colors by the given factor.
-    def mix_between(fac: NodeSocket, color1, color2):
-        mix_node = shader.nodes.new("ShaderNodeMixRGB")
-
-        link(fac, mix_node.inputs['Fac'])
-
-        if isinstance(color1, NodeSocket):
-            link(color1, mix_node.inputs['Color1'])
-        else:
-            mix_node.inputs['Color1'].default_value = color1
-
-        if isinstance(color2, NodeSocket):
-            link(color2, mix_node.inputs['Color2'])
-        else:
-            mix_node.inputs['Color2'].default_value = color2
-
-        return mix_node
-
-    # Apply the multi texture
-    # Split the color into R, G, B
-    split_multi = shader.nodes.new("ShaderNodeSeparateRGB")
-    split_multi.location = (-600, group_input_multi.location[1])
-    link(group_input_multi.outputs["texture_multi"], split_multi.inputs[0])
-    # The R is shininess
-    link(split_multi.outputs['R'], principled_shader.inputs['Specular'])
-    # The B is Ambient Occlusion, so it darkens the diffuse color to create a "main color"
-    # TODO - this isn't consistent for Y3/4/5 models
-    # main_color = mix_between(split_multi.outputs['B'], group_input_diffuse.outputs['texture_diffuse'], (0, 0, 0, 1))
-    # main_color.label = "Main Color"
-    # main_color.hide = True
-    # main_color.location = (-400, 0)
-    # The G is emission, so use it to mix between diffuse and emission
-    main_color_diffuse_portion = mix_between(split_multi.outputs['G'], group_input_diffuse.outputs['texture_diffuse'],
-                                             (0, 0, 0, 1))
-    main_color_diffuse_portion.label = "Diffuse Portion"
-    main_color_diffuse_portion.hide = True
-    main_color_diffuse_portion.location = (-200, 0)
-    main_color_emissive_portion = mix_between(split_multi.outputs['G'], (0, 0, 0, 1),
-                                              group_input_diffuse.outputs['texture_diffuse'])
-    main_color_emissive_portion.label = "Emissive Portion"
-    main_color_emissive_portion.hide = True
-    main_color_emissive_portion.location = (-200, -50)
-    # Link the diffuse/emissive portions correctly
-    link(main_color_diffuse_portion.outputs[0], principled_shader.inputs['Base Color'])
-    link(main_color_emissive_portion.outputs[0], principled_shader.inputs['Emission'])
-
-    # TODO: normal maps? They are very complicated so probably not right now
-
-    # If the material supports transparency, Diffuse Alpha will be set to a non-zero value
-    link(group_input_alpha.outputs["Diffuse Alpha"], principled_shader.inputs["Alpha"])
-
-    # Skin
-    # Skin Shader = 1 if the shader is skin else 0. Attach this to the Subsurface control.
-    link(group_input_is_skin.outputs['Skin Shader'], principled_shader.inputs['Subsurface'])
-    # Use the base diffuse texture without any AO for the subsurface color. This may be wrong, but it looks OK.
-    link(group_input_diffuse.outputs['texture_diffuse'], principled_shader.inputs['Subsurface Color'])
-
-    return shader
+        return shader
+def get_uv_scaler_node_group():
+    if "UV scaler" in bpy.data.node_groups:
+        return bpy.data.node_groups["UV scaler"]
+    else:
+        shader_location = os.path.dirname(os.path.splitext(__file__)[0]) + "\\yakuza_shader.blend\\NodeTree\\"
+        shadername = "UV scaler"
+        print(shader_location)
+        bpy.ops.wm.append(filename=shadername, directory=shader_location)
+    
+        shader = bpy.data.node_groups["UV scaler"]
+        return shader

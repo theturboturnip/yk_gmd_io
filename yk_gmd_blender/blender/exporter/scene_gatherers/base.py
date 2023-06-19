@@ -214,13 +214,53 @@ class BaseGMDSceneGatherer(abc.ABC):
         # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data, and compare against provided in the node.
         # TODO - image nodes will null textures exist - those currently break the export
 
+        #gmd material override... dunno how else to do this!
+
+        gmd_material.origin_data.specular[0] = round(yakuza_shader_node.inputs["Specular color"].default_value[0] * 255)
+        gmd_material.origin_data.specular[1] = round(yakuza_shader_node.inputs["Specular color"].default_value[1] * 255)
+        gmd_material.origin_data.specular[2] = round(yakuza_shader_node.inputs["Specular color"].default_value[2] * 255)
+        gmd_material.origin_data.power = yakuza_shader_node.inputs["Specular power"].default_value
+        gmd_material.origin_data.opacity = round(yakuza_shader_node.inputs["Opacity"].default_value * 255)
+
+        uv_node = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and
+                    node.node_tree.name == "UV scaler"]
+        print("uv node: " + str(uv_node))
+
+        if len(uv_node) == 1:
+            rtpos = uv_node[0].inputs[0].default_value #RT X
+            rtpos2 = uv_node[0].inputs[1].default_value #RT Y
+            rdpos = uv_node[0].inputs[2].default_value #R(D/S/M) X
+            rdpos2 = uv_node[0].inputs[3].default_value# ^ Y
+
+            if gmd_material_origin_version == GMDVersion.Dragon:
+                imperfection = uv_node[0].inputs[4].default_value  # imperfection
+
+                yakuza_data.unk12[6] = rtpos
+                yakuza_data.unk12[7] = rtpos2
+                yakuza_data.unk12[4] = rdpos
+                yakuza_data.unk12[5] = rdpos2
+                yakuza_data.unk12[12] = imperfection
+            else:
+                if "[rd]" not in shader.name and "[rs]" in shader.name:
+                    yakuza_data.unk12[2] = rtpos
+                    yakuza_data.unk12[3] = rtpos2
+                    yakuza_data.attribute_set_floats[8] = rdpos
+                    yakuza_data.attribute_set_floats[9] = rdpos2
+                else:
+                    yakuza_data.attribute_set_floats[8] = rtpos
+                    yakuza_data.attribute_set_floats[9] = rtpos2
+                    yakuza_data.unk12[8] = rdpos
+                    yakuza_data.unk12[9] = rdpos2
+        elif len(uv_node) > 1:
+            self.error.fatal(f"Too many UV scaler nodes in " + material.name + "!")
+
         attribute_set = GMDAttributeSet(
             shader=shader,
 
             texture_diffuse=get_texture("texture_diffuse"),
             texture_refl=get_texture("texture_refl"),
             texture_multi=get_texture("texture_multi"),
-            texture_unk1=get_texture("texture_unk1"),
+            texture_rm=get_texture("texture_rm"),
             texture_rs=get_texture("texture_rs"),
             texture_normal=get_texture("texture_normal"),
             texture_rt=get_texture("texture_rt"),
@@ -232,6 +272,7 @@ class BaseGMDSceneGatherer(abc.ABC):
             attr_flags=int(yakuza_data.attribute_set_flags, base=16),
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )
+        print("[notyoshi debug] gmd_material specular after" + str(gmd_material.origin_data.specular))
         self.material_map[material.name] = attribute_set
         self.error.debug("MATERIAL", f"mat {material.name} -> {attribute_set}")
         return attribute_set

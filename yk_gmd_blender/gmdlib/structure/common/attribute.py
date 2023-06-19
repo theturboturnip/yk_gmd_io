@@ -41,7 +41,7 @@ class AttributeStruct:
     texture_refl: TextureIndexStruct  # Observed to have a cubemap texture for one eye-related material
     texture_multi: TextureIndexStruct
     # Never filled
-    texture_unk1: TextureIndexStruct
+    texture_rm: TextureIndexStruct
     texture_ts: TextureIndexStruct  # Only present in "rs" shaders
     texture_normal: TextureIndexStruct  # Usually has textures with _tn postfix
     texture_rt: TextureIndexStruct  # Usually has textures with _rt postfix
@@ -72,7 +72,7 @@ AttributeStruct_Unpack = StructureUnpacker(
         ("texture_diffuse", TextureIndexStruct_Unpack),
         ("texture_refl", TextureIndexStruct_Unpack),
         ("texture_multi", TextureIndexStruct_Unpack),
-        ("texture_unk1", TextureIndexStruct_Unpack),
+        ("texture_rm", TextureIndexStruct_Unpack),
         ("texture_ts", TextureIndexStruct_Unpack),
         ("texture_normal", TextureIndexStruct_Unpack),
         ("texture_rt", TextureIndexStruct_Unpack),

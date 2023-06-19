@@ -40,7 +40,7 @@ class AttributeStruct_Dragon:
     texture_normal: TextureIndexStruct_Dragon  # Usually has textures with _tn postfix
     texture_rd: TextureIndexStruct_Dragon  # Usually has textures with _rd postfix
     # Never filled
-    texture_unk1: TextureIndexStruct_Dragon
+    texture_rm: TextureIndexStruct_Dragon
     texture_rt: TextureIndexStruct_Dragon  # Usually has textures with _rt postfix
     texture_ts: TextureIndexStruct_Dragon  # Only present in "rs" shaders
     texture_refl: TextureIndexStruct_Dragon  # Observed to have a cubemap texture for one eye-related material
@@ -57,7 +57,7 @@ class AttributeStruct_Dragon:
                                 texture_normal: Optional,
                                 # Never filled
                                 texture_rd: Optional,
-                                texture_unk1: Optional,
+                                texture_rm: Optional,
                                 texture_rt: Optional,
                                 texture_ts: Optional,
                                 texture_refl: Optional,
@@ -71,7 +71,7 @@ class AttributeStruct_Dragon:
             count = 3
         if texture_rd:
             count = 4
-        if texture_unk1:
+        if texture_rm:
             count = 5
         if texture_rt:
             count = 6
@@ -98,7 +98,7 @@ AttributeStruct_Dragon_Unpack = StructureUnpacker(
         ("texture_multi", TextureIndexStruct_Dragon_Unpack),
         ("texture_normal", TextureIndexStruct_Dragon_Unpack),
         ("texture_rd", TextureIndexStruct_Dragon_Unpack),
-        ("texture_unk1", TextureIndexStruct_Dragon_Unpack),
+        ("texture_rm", TextureIndexStruct_Dragon_Unpack),
         ("texture_rt", TextureIndexStruct_Dragon_Unpack),
         ("texture_ts", TextureIndexStruct_Dragon_Unpack),
         ("texture_refl", TextureIndexStruct_Dragon_Unpack),
