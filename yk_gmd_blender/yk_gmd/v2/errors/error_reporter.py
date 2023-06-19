@@ -18,6 +18,12 @@ class ErrorReporter(abc.ABC):
         raise NotImplementedError()
 
     def debug(self, category: str, msg: str) -> bool:
+        """Prints a category/msg pair if the category is accepted by a filter
+
+        :param category:
+        :param msg:
+        :return: True if the category was accepted and the message was printed
+        """
         raise NotImplementedError()
 
 

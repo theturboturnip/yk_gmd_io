@@ -59,7 +59,8 @@ class GMDMaterial(GMDVersionRestricted):
                     diffuse=self.origin_data.diffuse,
                     opacity=int(self.origin_data.opacity * 255),
                     specular=self.origin_data.specular,
-                    unk1=[0, 0, 0, 0],
+                    power=self.origin_data.power,
+                    unk1=[0, 0],
                     unk2=[0, 0, 0, 0],
                 )
             )
@@ -109,7 +110,7 @@ class GMDAttributeSet:
     texture_diffuse: Optional[str]
     texture_refl: Optional[str]
     texture_multi: Optional[str]
-    texture_unk1: Optional[str]
+    texture_rm: Optional[str]
     texture_rs: Optional[str]
     texture_normal: Optional[str]
     texture_rt: Optional[str]

@@ -202,8 +202,8 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             texture_names.add(mesh.attribute_set.texture_refl)
         if mesh.attribute_set.texture_multi:
             texture_names.add(mesh.attribute_set.texture_multi)
-        if mesh.attribute_set.texture_unk1:
-            texture_names.add(mesh.attribute_set.texture_unk1)
+        if mesh.attribute_set.texture_rm:
+            texture_names.add(mesh.attribute_set.texture_rm)
         if mesh.attribute_set.texture_rs:
             texture_names.add(mesh.attribute_set.texture_rs)
         if mesh.attribute_set.texture_normal:
