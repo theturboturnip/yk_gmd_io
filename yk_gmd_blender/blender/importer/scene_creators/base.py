@@ -234,12 +234,12 @@ class BaseGMDSceneCreator(abc.ABC):
             set_uvs(material, node.inputs, rdpos, rtpos, rdpos2, rtpos2)
             node.location = (-750, -300)
             for x in material.node_tree.links:
-                if x.to_socket.name == "texture_rt":
-                    material.node_tree.links.new(node.outputs[2], x.from_node.inputs[0])
-                rdrt_textures = ["texture_rd", "texture_rt", "texture_rm"]
+                rdrm_textures = ["texture_rd", "texture_rm", "texture_rs"]
                 if "skin" not in material.yakuza_data.shader_name and any([y in x.to_socket.name
-                                                                           for y in rdrt_textures]):
+                                                                           for y in rdrm_textures]):
                     material.node_tree.links.new(node.outputs[1],x.from_node.inputs[0])
+                if x.to_socket.name == "texture_rt":
+                    material.node_tree.links.new(node.outputs[2],x.from_node.inputs[0])
                 if x.to_socket.name == "texture_refl" and "h2dz" in material.yakuza_data.shader_name:
                     material.node_tree.links.new(node.outputs[0],x.from_node.inputs[0])
 
