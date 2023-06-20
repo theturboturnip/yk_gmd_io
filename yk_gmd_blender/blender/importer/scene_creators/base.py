@@ -237,13 +237,11 @@ class BaseGMDSceneCreator(abc.ABC):
                 if x.to_socket.name == "texture_rt":
                     material.node_tree.links.new(node.outputs[2], x.from_node.inputs[0])
                 rdrt_textures = ["texture_rd", "texture_rt", "texture_rm"]
-
-                if "skin" not in material.yakuza_data.shader_name and any([x in x.to_socket.name
-                                                                           for x in rdrt_textures]):
-                    # exclude skin sss textures, which put tr on rd and ts on rt
-                    material.node_tree.links.new(node.outputs[1], x.from_node.inputs[0])
+                if "skin" not in material.yakuza_data.shader_name and any([y in x.to_socket.name
+                                                                           for y in rdrt_textures]):
+                    material.node_tree.links.new(node.outputs[1],x.from_node.inputs[0])
                 if x.to_socket.name == "texture_refl" and "h2dz" in material.yakuza_data.shader_name:
-                    material.node_tree.links.new(node.outputs[0], x.from_node.inputs[0])
+                    material.node_tree.links.new(node.outputs[0],x.from_node.inputs[0])
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material
