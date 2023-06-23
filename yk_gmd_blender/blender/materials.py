@@ -368,11 +368,9 @@ def get_yakuza_shader_node_group():
 
     #check if it already exists
     if YAKUZA_SHADER_NODE_GROUP in bpy.data.node_groups:
-        print("neo yakuza shader already exists")
         return bpy.data.node_groups[YAKUZA_SHADER_NODE_GROUP]
     else:
         # get yakuza shader from an external .blend file instead, saves a ton of time writing code
-        print("neo yakuza shader doesnt exist yet")
         shader_location = os.path.dirname(os.path.splitext(__file__)[0]) + "\\yakuza_shader.blend\\NodeTree\\"
         bpy.ops.wm.append(filename=YAKUZA_SHADER_NODE_GROUP, directory=shader_location)
         shader = bpy.data.node_groups[YAKUZA_SHADER_NODE_GROUP]
@@ -384,7 +382,6 @@ def get_uv_scaler_node_group():
     else:
         shader_location = os.path.dirname(os.path.splitext(__file__)[0]) + "\\yakuza_shader.blend\\NodeTree\\"
         shadername = "UV scaler"
-        print(shader_location)
         bpy.ops.wm.append(filename=shadername, directory=shader_location)
     
         shader = bpy.data.node_groups["UV scaler"]
