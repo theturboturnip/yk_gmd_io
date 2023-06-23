@@ -224,7 +224,6 @@ class BaseGMDSceneGatherer(abc.ABC):
 
         uv_node = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and
                     node.node_tree.name == "UV scaler"]
-        print("uv node: " + str(uv_node))
 
         if len(uv_node) == 1:
             rtpos = uv_node[0].inputs[0].default_value #RT X
@@ -272,7 +271,6 @@ class BaseGMDSceneGatherer(abc.ABC):
             attr_flags=int(yakuza_data.attribute_set_flags, base=16),
             attr_extra_properties=yakuza_data.attribute_set_floats,
         )
-        print("[notyoshi debug] gmd_material specular after" + str(gmd_material.origin_data.specular))
         self.material_map[material.name] = attribute_set
         self.error.debug("MATERIAL", f"mat {material.name} -> {attribute_set}")
         return attribute_set
