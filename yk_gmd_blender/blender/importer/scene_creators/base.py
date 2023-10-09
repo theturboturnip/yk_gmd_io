@@ -215,7 +215,7 @@ class BaseGMDSceneCreator(abc.ABC):
             node.node_tree = get_uv_scaler_node_group()
 
             if enginever != GMDVersion.Dragon:
-                if "[rd]" not in material.yakuza_data.shader_name and "[rs]" in material.yakuza_data.shader_name:
+                if "[rd]" not in material.yakuza_data.shader_name and "[rt]" not in material.yakuza_data.shader_name:
                     rtpos = material.yakuza_data.unk12[2]
                     rtpos2 = material.yakuza_data.unk12[3]
                     rdpos = material.yakuza_data.attribute_set_floats[8]
