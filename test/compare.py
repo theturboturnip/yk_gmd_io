@@ -288,7 +288,7 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in set(gmd_mesh.triangle_strip_noreset_indices):
+        for i in set(gmd_mesh.triangles.triangle_strips_noreset):
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
@@ -316,7 +316,7 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in set(gmd_mesh.triangle_strip_noreset_indices):
+        for i in set(gmd_mesh.triangles.triangle_strips_noreset):
             assert (buf.bone_data is not None) and (buf.weight_data is not None)
             all_verts.add(
                 (
@@ -329,7 +329,7 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "bw",
                     tuple(
-                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 3))
+                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 4))
                         for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
                         if w > 0
                     ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
@@ -360,7 +360,7 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         else:
             relevant_bones = None
             unfused_vs = [m.vertices_data for m in ms]
-        fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
+        fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangles.triangle_list for m in ms], unfused_vs)
 
         rounded_bw: tuple
 

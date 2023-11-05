@@ -30,6 +30,11 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
                                   vertices_big_endian: bool,
                                   scene: GMDScene, old_file_contents: FileData_Dragon, error: ErrorReporter,
                                   base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
+    old_file_had_triangle_strips = any(
+        (m.noreset_strip_indices.index_count > 0) or (m.reset_strip_indices.index_count > 0)
+        for m in old_file_contents.mesh_arr
+    )
+
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
@@ -187,26 +192,30 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         # Set up the pointer for the next set of indices
         triangle_indices = IndicesStruct(
             index_offset=len(index_buffer),
-            index_count=len(gmd_mesh.triangle_indices)
+            index_count=len(gmd_mesh.triangles.triangle_list)
         )
         # then add them to the data
-        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_indices]
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_list]
 
-        # Set up the pointer for the next set of indices
-        triangle_strip_noreset_indices = IndicesStruct(
-            index_offset=len(index_buffer),
-            index_count=len(gmd_mesh.triangle_strip_noreset_indices)
-        )
-        # then add them to the data
-        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_noreset_indices]
+        if old_file_had_triangle_strips:
+            # Set up the pointer for the next set of indices
+            triangle_strip_noreset_indices = IndicesStruct(
+                index_offset=len(index_buffer),
+                index_count=len(gmd_mesh.triangles.triangle_strips_noreset)
+            )
+            # then add them to the data
+            index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_noreset]
 
-        # Set up the pointer for the next set of indices
-        triangle_strip_reset_indices = IndicesStruct(
-            index_offset=len(index_buffer),
-            index_count=len(gmd_mesh.triangle_strip_reset_indices)
-        )
-        # then add them to the data
-        index_buffer += [pack_index(x) for x in gmd_mesh.triangle_strip_reset_indices]
+            # Set up the pointer for the next set of indices
+            triangle_strip_reset_indices = IndicesStruct(
+                index_offset=len(index_buffer),
+                index_count=len(gmd_mesh.triangles.triangle_strips_reset)
+            )
+            # then add them to the data
+            index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_reset]
+        else:
+            triangle_strip_noreset_indices = IndicesStruct(0, 0)
+            triangle_strip_reset_indices = IndicesStruct(0, 0)
 
         mesh_arr.append(MeshStruct_YK1(
             index=len(mesh_arr),

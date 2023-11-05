@@ -3,10 +3,10 @@ from typing import Union, List, Dict, cast, Tuple, Set
 import bmesh
 from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
-from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 
 def gmd_meshes_to_bmesh(
@@ -72,7 +72,8 @@ def gmd_meshes_to_bmesh(
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
     if fuse_vertices:
-        _, mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangle_indices for m in gmd_meshes], vertices)
+        _, mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangles.triangle_list for m in gmd_meshes],
+                                                               vertices)
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 if not is_fused[i_buf][i]:
@@ -137,8 +138,8 @@ def gmd_meshes_to_bmesh(
         attr_idx = attr_set_material_idx_mapping[id(gmd_mesh.attribute_set)]
 
         # For face in mesh
-        for ti in range(0, len(gmd_mesh.triangle_indices), 3):
-            tri_idxs = gmd_mesh.triangle_indices[ti:ti + 3]
+        for ti in range(0, len(gmd_mesh.triangles.triangle_list), 3):
+            tri_idxs = gmd_mesh.triangles.triangle_list[ti:ti + 3]
             if 0xFFFF in tri_idxs:
                 error.recoverable(f"Found an 0xFFFF index inside a triangle_indices list! That shouldn't happen.")
                 continue

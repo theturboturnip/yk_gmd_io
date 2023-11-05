@@ -3,11 +3,11 @@ import abc
 import array
 import time
 from enum import Enum
-from typing import List, Tuple, cast, Union, TypeVar, Generic
+from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional
 
 from mathutils import Matrix
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh, GMDMeshIndices
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
@@ -331,11 +331,21 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                                                          mesh_matrix_bytestrings, offset=offset)
             return data
 
-        # Take a range, look up that range in the index buffer, return normalized indices from 0 to vertex_count
-        def process_indices(mesh_struct: MeshStruct, indices_range: IndicesStruct, min_index: int = 0x1_0000,
-                            max_index: int = -1, ignore_FFFF: bool = True) -> Tuple[array.ArrayType, int, int]:
+        # Take a range, look up that range in the index buffer, return normalized indices from 0 to vertex_count.
+        # Use the min_index, max_index arguments with the index buffer contents to figure out the minimum index
+        # and maximum index used by this mesh, so we can extract the correct vertices and normalize.
+        def process_indices(
+                mesh_struct: MeshStruct, indices_range: IndicesStruct,
+                min_index: int = 0x1_0000, max_index: int = -1,
+                ignore_FFFF: bool = True
+        ) -> Tuple[Optional[array.ArrayType], int, int]:
             index_ptr_min = indices_range.index_offset
             index_ptr_max = index_ptr_min + indices_range.index_count
+
+            # Starting from Y8, RGG don't encode all the index streams. Just the ones they need.
+            # Return None if processing a stream with no indices.
+            if indices_range.index_count == 0:
+                return None, min_index, max_index
 
             if file_uses_relative_indices:
                 index_offset = 0
@@ -380,6 +390,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 # Actually import data
                 triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices,
                                                                          ignore_FFFF=False)
+                if triangle_indices is None:
+                    self.error.fatal(f"Mesh does not declare a set of triangle indices")
                 triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                        mesh_struct.noreset_strip_indices,
                                                                                        min_index, max_index,
@@ -420,6 +432,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                  f"index props: min_index {min_index}, max_index {max_index}, "
                                  f"vertex_start {vertex_start}, vertex_end {vertex_end}")
 
+            triangles = GMDMeshIndices.from_all_indices(triangle_indices, triangle_strip_noreset_indices,
+                                                        triangle_strip_reset_indices)
+
             vertex_buffer = abstract_vertex_buffers[mesh_struct.vertex_buffer_index]
             vertex_slice = slice(vertex_start, vertex_end)
 
@@ -441,9 +456,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     vertices_data=vertex_buffer.copy_as_skinned(vertex_slice),
 
-                    triangle_indices=triangle_indices,
-                    triangle_strip_noreset_indices=triangle_strip_noreset_indices,
-                    triangle_strip_reset_indices=triangle_strip_reset_indices,
+                    triangles=triangles,
 
                     attribute_set=abstract_attributes[mesh_struct.attribute_index]
                 ))
@@ -453,9 +466,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     vertices_data=vertex_buffer.copy_as_generic(vertex_slice),
 
-                    triangle_indices=triangle_indices,
-                    triangle_strip_noreset_indices=triangle_strip_noreset_indices,
-                    triangle_strip_reset_indices=triangle_strip_reset_indices,
+                    triangles=triangles,
 
                     attribute_set=abstract_attributes[mesh_struct.attribute_index]
                 ))
