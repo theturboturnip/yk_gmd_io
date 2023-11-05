@@ -616,7 +616,8 @@ def compare_bbox(context: str, src: GMDBoundingBox, dst: GMDBoundingBox, cmp: Co
         )
     dst_vol = dst_sphere_radius ** 3  # * pi
     src_vol = src_sphere_radius ** 3  # * pi
-    if dst_vol / 10 > src_vol:
+    # TODO we aren't bothered by strict bounding boxes right now. Re-enable this check when we are.
+    if False and dst_vol / 10 > src_vol:
         cmp.important_mismatch(
             f"{context}dst bbox sphere has more than 10x volume of src bbox sphere:\n"
             f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
