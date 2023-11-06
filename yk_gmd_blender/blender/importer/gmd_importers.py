@@ -386,7 +386,7 @@ def menu_func_import_animation_unskinned(self, context):
                          text="Yakuza Unskinned GMD for Animation [Props/Stages] (.gmd)")
 
 
-# TODO - we probably don't need this one! Waiting for the YMC member to let me know
+# This allows you to use the legacy animation option where bones are not connected to their parents.
 def menu_func_import_animation_skinned(self, context):
     self.layout.operator(ImportAnimationSkinnedGMD.bl_idname,
                          text="Yakuza Skinned GMD for Animation [Characters] (.gmd)")
