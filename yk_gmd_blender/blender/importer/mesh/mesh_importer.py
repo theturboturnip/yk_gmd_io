@@ -54,20 +54,21 @@ def gmd_meshes_to_bmesh(
 
     # Add a single vertex's (position, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
-        vert = bm.verts.new(gmd_to_blender_world @ Vector(buf.pos[i][:3]))
+        yk_pos = buf.pos[i]
+        vert = bm.verts.new((-yk_pos[0], yk_pos[2], yk_pos[1]))
         if buf.normal is not None:
             # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
             # Just using .xyz would make blender apply a translation
-            vert.normal = (gmd_to_blender_world @ (Vector(buf.normal[i][:3]).resized(4))).xyz
+            yk_norm = buf.normal[i]
+            vert.normal = Vector((-yk_norm[0], yk_norm[2], yk_norm[1]))
         if is_skinned:
-            for bone, weight in zip(buf.bone_data[i], buf.weight_data[i]):
-                if weight > 0:
-                    if bone >= len(relevant_bones):
-                        error.debug("BONES", f"bone out of bounds - "
-                                             f"bone {bone} in {[b.name for b in relevant_bones]}")
-                        error.debug("BONES", f"submesh len = {len(buf)}")
-                    vertex_group_index = vertex_group_indices[relevant_bones[bone].name]
-                    vert[deform][vertex_group_index] = weight
+            bones = buf.bone_data[i]
+            weights = buf.weight_data[i]
+            for j in range(4):
+                if weights[j] <= 0:
+                    break
+                vertex_group_index = vertex_group_indices[relevant_bones[bones[j]].name]
+                vert[deform][vertex_group_index] = weights[j]
 
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
