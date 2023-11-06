@@ -2,10 +2,12 @@ import abc
 import json
 import re
 from dataclasses import dataclass
+from enum import Enum
 from typing import List, Dict, Optional, cast, Tuple
 
 import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
+from mathutils import Vector
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
 from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
@@ -13,15 +15,42 @@ from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUn
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
 from yk_gmd_blender.gmdlib.structure.version import GMDVersion
 from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1
 
 
+class BoundingBoxCalc(Enum):
+    OLD_INFINITE = 0
+    EXPERIMENTAL_FROM_BLENDER = 1
+    EXPERIMENTAL_INFINITE_CENTRED = 2
+
+    @staticmethod
+    def blender_props():
+        return [
+            ("OLD_INFINITE", "Huge bounding box around 0,0,0",
+             "Old behaviour. Brute-force method, generate a huge bounding box for each item."),
+            ("EXPERIMENTAL_FROM_BLENDER", "[EXP] Blender-accurate bounding boxes",
+             "Experimental: Use Blender's bounding boxes. Does not work perfectly on skinned"),
+            ("EXPERIMENTAL_INFINITE_CENTRED", "[EXP] Huge bounding box around object centres",
+             "Experimental: Use huge bounding boxes, properly centred. May be relevant for stage export")
+        ]
+
+    @staticmethod
+    def map_from_blender_props(blender_enum: str) -> 'BoundingBoxCalc':
+        return {
+            "OLD_INFINITE": BoundingBoxCalc.OLD_INFINITE,
+            "EXPERIMENTAL_FROM_BLENDER": BoundingBoxCalc.EXPERIMENTAL_FROM_BLENDER,
+            "EXPERIMENTAL_INFINITE_CENTRED": BoundingBoxCalc.EXPERIMENTAL_INFINITE_CENTRED,
+        }[blender_enum]
+
+
 @dataclass(frozen=True)
 class GMDSceneGathererConfig:
     game: GMDGame
+    bounding_box_calc: BoundingBoxCalc
     debug_compare_matrices: bool
 
 
@@ -127,6 +156,27 @@ class BaseGMDSceneGatherer(abc.ABC):
             # Take the flags from the target file
             self.flags = self.original_scene.flags
             self.error.info(f"Taking flags from target file")
+
+    def gmd_bounding_box(self, object: bpy.types.Object) -> GMDBoundingBox:
+        if self.config.bounding_box_calc == BoundingBoxCalc.OLD_INFINITE:
+            return GMDBoundingBox.from_points((
+                Vector((-1000, -1000, -1000)),
+                Vector((+1000, +1000, +1000))
+            ))
+        elif self.config.bounding_box_calc == BoundingBoxCalc.EXPERIMENTAL_FROM_BLENDER:
+            return GMDBoundingBox.from_points(
+                Vector((-x, z, y))
+                for x, y, z in object.bound_box
+            )
+        elif self.config.bounding_box_calc == BoundingBoxCalc.EXPERIMENTAL_INFINITE_CENTRED:
+            blender_centre = object.location
+            centre = Vector((-blender_centre[0], blender_centre[2], blender_centre[1]))
+            return GMDBoundingBox.from_points((
+                Vector((-1000, -1000, -1000)) + centre,
+                Vector((+1000, +1000, +1000)) + centre
+            ))
+        else:
+            self.error.fatal(f"bounding_box_calc config is invalid value {self.config.bounding_box_calc}")
 
     def blender_material_to_gmd_attribute_set(self, material: bpy.types.Material,
                                               referencing_object: bpy.types.Object) -> GMDAttributeSet:

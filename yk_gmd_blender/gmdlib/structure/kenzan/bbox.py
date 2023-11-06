@@ -1,32 +1,40 @@
 from dataclasses import dataclass
 
 from mathutils import Vector
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
+from yk_gmd_blender.gmdlib.structure.common.vector import Vec3Unpacker, Vec4Unpacker
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32
-from yk_gmd_blender.gmdlib.structure.common.vector import Vec3Unpacker
 
 
 @dataclass
 class BoundsDataStruct_Kenzan:
-    sphere_pos: Vector
+    # The center of the sphere and the Axis Aligned Bounding Box
+    center: Vector
     sphere_radius: float
+    aabb_extents: Vector
 
-    aabox_bottomleft: Vector
-    aabox_topright: Vector
+    unknown: Vector  # Could be an (xyz, radius) for a slightly larger bounding sphere?
 
     padding: float = 0.0
-    padding2: float = 0.0
+
+    def abstractify(self) -> GMDBoundingBox:
+        return GMDBoundingBox(
+            center=self.center,
+            sphere_radius=self.sphere_radius,
+            aabb_extents=self.aabb_extents
+        )
 
 
 BoundsDataStruct_Kenzan_Unpack = StructureUnpacker(
     BoundsDataStruct_Kenzan,
     fields=[
-        ("sphere_pos", Vec3Unpacker),
+        ("center", Vec3Unpacker),
         ("sphere_radius", c_float32),
-        ("padding", c_float32),
 
-        ("aabox_bottomleft", Vec3Unpacker),
-        ("aabox_topright", Vec3Unpacker),
-        ("padding2", c_float32),
+        ("unknown", Vec4Unpacker),
+
+        ("aabb_extents", Vec3Unpacker),
+        ("padding", c_float32),
     ]
 )

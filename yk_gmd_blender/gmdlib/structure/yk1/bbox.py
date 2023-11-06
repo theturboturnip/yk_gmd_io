@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 
 from mathutils import Vector, Quaternion
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
+from yk_gmd_blender.gmdlib.structure.common.vector import Vec3Unpacker, QuatUnpacker
 from yk_gmd_blender.structurelib.base import StructureUnpacker
 from yk_gmd_blender.structurelib.primitives import c_float32
-from yk_gmd_blender.gmdlib.structure.common.vector import Vec3Unpacker, QuatUnpacker
 
 
 @dataclass
@@ -22,6 +23,35 @@ class BoundsDataStruct_YK1:
     box_rotation: Quaternion
 
     padding: float = 0.0
+
+    def abstractify(self) -> GMDBoundingBox:
+        ex = self.box_extents.xyz
+        corners = (
+            (ex.x, ex.y, ex.z),
+            (ex.x, ex.y, -ex.z),
+            (ex.x, -ex.y, ex.z),
+            (ex.x, -ex.y, -ex.z),
+
+            (-ex.x, ex.y, ex.z),
+            (-ex.x, ex.y, -ex.z),
+            (-ex.x, -ex.y, ex.z),
+            (-ex.x, -ex.y, -ex.z),
+        )
+        rotated_corners = tuple(
+            self.box_rotation @ Vector(c)
+            for c in corners
+        )
+        max_abs_x, max_abs_y, max_abs_z = -1, -1, -1
+        for rc in rotated_corners:
+            max_abs_x = max(max_abs_x, abs(rc.x))
+            max_abs_y = max(max_abs_y, abs(rc.y))
+            max_abs_z = max(max_abs_z, abs(rc.z))
+
+        return GMDBoundingBox(
+            center=self.center,
+            sphere_radius=self.sphere_radius,
+            aabb_extents=Vector((max_abs_x, max_abs_y, max_abs_z))
+        )
 
 
 BoundsData_YK1_Unpack = StructureUnpacker(

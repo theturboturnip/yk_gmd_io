@@ -1,13 +1,9 @@
-from typing import Iterable
-
-from mathutils import Quaternion, Vector
-from yk_gmd_blender.structurelib.base import PackingValidationError
-from yk_gmd_blender.structurelib.primitives import c_uint16
+from mathutils import Vector
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDUnk12
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
 from yk_gmd_blender.gmdlib.converters.common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
@@ -22,60 +18,17 @@ from yk_gmd_blender.gmdlib.structure.kenzan.mesh import MeshStruct_Kenzan
 from yk_gmd_blender.gmdlib.structure.kenzan.object import ObjectStruct_Kenzan
 from yk_gmd_blender.gmdlib.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan
 from yk_gmd_blender.gmdlib.structure.version import VersionProperties
+from yk_gmd_blender.structurelib.base import PackingValidationError
+from yk_gmd_blender.structurelib.primitives import c_uint16
 
 
-def bounds_from_minmax(min_pos: Vector, max_pos: Vector) -> BoundsDataStruct_Kenzan:
-    box_rotation = Quaternion()
-    box_rotation.identity()
-
-    center = (min_pos + max_pos) / 2
-    box_extents = (max_pos - center)
-    sphere_radius = (box_extents).length
-
+def kenzan_bounds_from_gmd(gmd_bounds: GMDBoundingBox) -> BoundsDataStruct_Kenzan:
     return BoundsDataStruct_Kenzan(
-        sphere_pos=center,
-        sphere_radius=sphere_radius,
-
-        aabox_bottomleft=min_pos,
-        aabox_topright=max_pos
+        center=gmd_bounds.center,
+        sphere_radius=gmd_bounds.sphere_radius,
+        aabb_extents=gmd_bounds.aabb_extents,
+        unknown=Vector((0, 0, 0, 0))  # TODO could put a different bounding sphere here?
     )
-
-
-def bounds_of(mesh) -> BoundsDataStruct_Kenzan:
-    min_pos = Vector((-1000, -1000, -1000))
-    max_pos = Vector((+1000, +1000, +1000))
-
-    return bounds_from_minmax(min_pos, max_pos)
-
-
-def combine_bounds(bounds: Iterable[BoundsDataStruct_Kenzan]) -> BoundsDataStruct_Kenzan:
-    min_pos = Vector((-1000, -1000, -1000))
-    max_pos = Vector((+1000, +1000, +1000))
-
-    for bound in bounds:
-        min_for_bound = bound.aabox_bottomleft
-        max_for_bound = bound.aabox_topright
-
-        if min_pos is None:
-            min_pos = min_for_bound
-            max_pos = max_for_bound
-        else:
-            min_pos.x = min(min_for_bound.x, min_pos.x)
-            min_pos.y = min(min_for_bound.y, min_pos.y)
-            min_pos.z = min(min_for_bound.z, min_pos.z)
-
-            max_pos.x = max(max_for_bound.x, max_pos.x)
-            max_pos.y = max(max_for_bound.y, max_pos.y)
-            max_pos.z = max(max_for_bound.z, max_pos.z)
-
-    # TODO - This is for the sake of hierarchy objects which have no meshes themselves, but presumably have children with meshes.
-    # Will these BBOXes need to be calculated with those other ones in mind?
-    # Will these BBOXes need to be calculated with object position in mind?
-    # if min_pos is None:
-    #     min_pos = Vector((0, 0, 0, 0))
-    #     max_pos = Vector((0, 0, 0, 0))
-
-    return bounds_from_minmax(min_pos, max_pos)
 
 
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
@@ -265,8 +218,6 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
     drawlist_bytearray = bytearray()
     touched_meshes = set()
     for i, obj in enumerate(rearranged_data.ordered_objects):
-
-        mesh_bounds = combine_bounds([bounds_of(gmd_mesh) for gmd_mesh in obj.mesh_list])
         node_index = rearranged_data.node_id_to_node_index[id(obj)]
 
         drawlist_rel_ptr = len(drawlist_bytearray)
@@ -284,11 +235,11 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             node_index_2=node_index,  # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
             drawlist_rel_ptr=drawlist_rel_ptr,
 
-            bbox=mesh_bounds,
+            bbox=kenzan_bounds_from_gmd(obj.bbox),
         ))
     if len(touched_meshes) != len(mesh_arr):
         error.fatal(f"Didn't export drawlists for all meshes")
-    overall_bounds = combine_bounds(obj.bbox for obj in obj_arr)
+    overall_bounds = GMDBoundingBox.combine((obj.bbox, obj.world_pos.xyz) for obj in rearranged_data.ordered_objects)
 
     material_arr = []
     for gmd_material in rearranged_data.ordered_materials:
@@ -351,7 +302,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
 
         name=ChecksumStrStruct.make_from_str(scene.name),
 
-        overall_bounds=overall_bounds,
+        overall_bounds=kenzan_bounds_from_gmd(overall_bounds),
 
         node_arr=node_arr,
         obj_arr=obj_arr,

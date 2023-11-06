@@ -127,7 +127,9 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                 anim_axis=anim_axis,
                 flags=flags,
 
-                matrix=adjusted_matrix
+                matrix=adjusted_matrix,
+
+                bbox=self.gmd_bounding_box(object)
             )
             if object.data.vertices:
                 if not object.material_slots:

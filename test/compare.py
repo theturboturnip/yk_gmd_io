@@ -6,18 +6,18 @@ from pathlib import Path
 from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic, Sequence
 
 from mathutils import Vector
-from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject, GMDBoundingBox
 from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.gmdlib.structure.common.node import NodeType
 from yk_gmd_blender.gmdlib.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 T = TypeVar('T')
 
@@ -480,16 +480,16 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
             cmp.important_mismatch(
-                f"{context}: field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+                f"{context}field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
 
     def compare_vec_field(f: str):
         src_f = tuple(round(x, 3) for x in getattr(src, f))
         dst_f = tuple(round(x, 3) for x in getattr(dst, f))
         if src_f != dst_f:
             if sum(fabs(s - r) for (s, r) in zip(src_f, dst_f)) > 0.05:
-                cmp.important_mismatch(f"{context}: vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                cmp.unimportant_mismatch(f"{context}: vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     def compare_mat_field(f: str):
         src_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(src, f))
@@ -498,9 +498,9 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             src_floats = tuple(x for v in src_f for x in v)
             dst_floats = tuple(x for v in dst_f for x in v)
             if sum(fabs(s - r) for (s, r) in zip(src_floats, dst_floats)) > 0.05:
-                cmp.important_mismatch(f"{context}: matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                cmp.unimportant_mismatch(f"{context}: matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
@@ -510,6 +510,12 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
     compare_vec_field("world_pos")
     compare_vec_field("anim_axis")
     compare_field("flags")
+
+    if isinstance(src, (GMDSkinnedObject, GMDUnskinnedObject)):
+        # Compare bounding boxes
+        # Right now, just check that the new bounds encompasses the old one
+        assert isinstance(dst, (GMDSkinnedObject, GMDUnskinnedObject))
+        compare_bbox(context, src.bbox, dst.bbox, cmp)
 
     if not isinstance(src, GMDSkinnedObject):
         compare_mat_field("matrix")
@@ -583,6 +589,42 @@ def recursive_compare_node_lists(skinned: bool, vertices: bool, src: List[GMDNod
         recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, cmp, child_context)
 
 
+def compare_bbox(context: str, src: GMDBoundingBox, dst: GMDBoundingBox, cmp: ComparisonReporter):
+    ROUND_N = 3
+    src_center = Vector(tuple(round(x, ROUND_N) for x in src.center))
+    src_sphere_radius = round(src.sphere_radius, ROUND_N)
+    src_aabb_extents = Vector(tuple(round(x, ROUND_N) for x in src.aabb_extents))
+    dst_center = Vector(tuple(round(x, ROUND_N) for x in dst.center))
+    dst_sphere_radius = round(dst.sphere_radius, ROUND_N)
+    dst_aabb_extents = Vector(tuple(round(x, ROUND_N) for x in dst.aabb_extents))
+
+    # Check the dst sphere encompasses the src one
+    # i.e. that the farthest point from the dst center on the src sphere, is still inside the dst sphere
+    # i.e. distance(dst.center, src.center) + src.sphere_radius <= dst.sphere_radius
+    if (dst_center - src_center).length + src_sphere_radius > dst_sphere_radius + 0.01:
+        cmp.important_mismatch(
+            f"{context}dst bbox sphere doesn't encompass src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
+        )
+    if any(src_dim > dst_dim + 0.01 for src_dim, dst_dim in
+           zip(src_center + src_aabb_extents, dst_center + dst_aabb_extents)):
+        cmp.important_mismatch(
+            f"{context}dst bbox aabb doesn't encompass src bbox aabb:\n"
+            f"src:\n\t{src_center}\n\t{src_aabb_extents}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_aabb_extents}\n"
+        )
+    dst_vol = dst_sphere_radius ** 3  # * pi
+    src_vol = src_sphere_radius ** 3  # * pi
+    # TODO we aren't bothered by strict bounding boxes right now. Re-enable this check when we are.
+    if False and dst_vol / 10 > src_vol:
+        cmp.important_mismatch(
+            f"{context}dst bbox sphere has more than 10x volume of src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
+        )
+
+
 def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool, strict: bool,
                   mismatch_filter: Optional[List[str]],
                   error: ErrorReporter):
@@ -597,7 +639,7 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
 
     def compare_header_field(f: str):
         if getattr(header_src, f) != getattr(header_dst, f):
-            cmp.unimportant_mismatch(
+            cmp.important_mismatch(
                 f"header: field {f} differs:\n"
                 f"src:\n\t{getattr(header_src, f)}\n"
                 f"dst:\n\t{getattr(header_dst, f)}"
@@ -622,8 +664,12 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
     compare_header_field("padding")
 
     # Technically YK1-specific?
-    compare_header_field("overall_bounds")
     compare_header_field("flags")
+
+    compare_bbox("header: ",
+                 header_src.overall_bounds.abstractify(),  # type: ignore
+                 header_dst.overall_bounds.abstractify(),  # type: ignore
+                 cmp)
 
     # Load and compare scene hierarchies
     import_mode = VertexImportMode.IMPORT_VERTICES if vertices else VertexImportMode.NO_VERTICES

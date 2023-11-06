@@ -6,15 +6,13 @@ from enum import Enum
 from typing import List, Tuple, cast, Union, TypeVar, Generic
 
 from mathutils import Matrix
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject, GMDBoundingBox
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.gmdlib.structure.common.attribute import AttributeStruct
 from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
@@ -25,6 +23,8 @@ from yk_gmd_blender.gmdlib.structure.common.node import NodeType, NodeStruct, No
 from yk_gmd_blender.gmdlib.structure.common.unks import Unk14Struct, Unk12Struct
 from yk_gmd_blender.gmdlib.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
 from yk_gmd_blender.gmdlib.structure.version import VersionProperties
+from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
+from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
 
 
 class ParentStack:
@@ -216,7 +216,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def build_node_hierarchy_from_structs(self,
 
                                           node_arr: List[NodeStruct],
-                                          node_name_arr: List[ChecksumStrStruct], matrix_arr: List[Matrix]) \
+                                          node_name_arr: List[ChecksumStrStruct], matrix_arr: List[Matrix],
+                                          object_bboxes: List[GMDBoundingBox]) \
             -> List[GMDNode]:
         nodes = []
         parent_stack = ParentStack()
@@ -226,6 +227,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             if node_struct.node_type == NodeType.SkinnedMesh and parent_stack:
                 # As far as we know Skinned Objects having a "parent" in the hierarchy is meaningless
                 self.error.fatal(f"Node {name} of type {node_struct.node_type} found inside hierarchy of Bone")
+
+            node: GMDNode
 
             # This is guaranteed to be a bone node
             if node_struct.node_type == NodeType.MatrixTransform:
@@ -261,7 +264,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     anim_axis=node_struct.anim_axis,
 
                     parent=parent_stack.peek() if parent_stack else None,
-                    flags=node_struct.flags
+                    flags=node_struct.flags,
+
+                    bbox=object_bboxes[node_struct.object_index]
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -282,7 +287,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     matrix=matrix,
 
                     parent=parent_stack.peek() if parent_stack else None,
-                    flags=node_struct.flags
+                    flags=node_struct.flags,
+
+                    bbox=object_bboxes[node_struct.object_index]
                 )
             else:
                 self.error.fatal(f"Unknown node type enum value {node_struct.node_type} for {name}")

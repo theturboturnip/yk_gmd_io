@@ -7,7 +7,7 @@ from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.exporter.scene_gatherers.base import GMDSceneGathererConfig
+from yk_gmd_blender.blender.exporter.scene_gatherers.base import GMDSceneGathererConfig, BoundingBoxCalc
 from yk_gmd_blender.blender.exporter.scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer, \
     GMDSkinnedSceneGathererConfig
 from yk_gmd_blender.blender.exporter.scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
@@ -34,6 +34,11 @@ class BaseExportGMD(Operator, ExportHelper):
                             items=GMDGame.blender_props() + [
                                 ("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
                             default="AUTODETECT")
+
+    bounding_box_enum: EnumProperty(name="Bounding Boxes",
+                                    description="How bounding boxes are calculated for each item. May affect stage export.",
+                                    items=BoundingBoxCalc.blender_props(),
+                                    default="OLD_INFINITE")
 
     logging_categories: StringProperty(name="Debug Log Categories",
                                        description="Space-separated string of debug categories for logging.",
@@ -70,6 +75,7 @@ class BaseExportGMD(Operator, ExportHelper):
 
         return GMDSceneGathererConfig(
             game=game,
+            bounding_box_calc=BoundingBoxCalc.map_from_blender_props(self.bounding_box_enum),
             debug_compare_matrices=self.debug_compare_matrices
         )
 
@@ -119,6 +125,7 @@ class ExportSkinnedGMD(BaseExportGMD):
         layout.prop(self, 'strict')
         layout.prop(self, 'logging_categories')
         layout.prop(self, "game_enum")
+        layout.prop(self, "bounding_box_enum")
 
         layout.prop(self, 'bone_matrix_origin')
         layout.prop(self, 'debug_compare_matrices')
@@ -135,6 +142,7 @@ class ExportSkinnedGMD(BaseExportGMD):
         else:
             bone_limit = 32 if self.manual_bone_limit <= 0 else self.manual_bone_limit
         return GMDSkinnedSceneGathererConfig(game=base_config.game,
+                                             bounding_box_calc=base_config.bounding_box_calc,
                                              debug_compare_matrices=base_config.debug_compare_matrices,
                                              bone_limit=bone_limit)
 
@@ -213,6 +221,7 @@ class ExportUnskinnedGMD(BaseExportGMD):
         layout.prop(self, 'strict')
         layout.prop(self, 'logging_categories')
         layout.prop(self, "game_enum")
+        layout.prop(self, "bounding_box_enum")
 
         layout.prop(self, 'debug_compare_matrices')
 
