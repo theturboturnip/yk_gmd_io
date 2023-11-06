@@ -193,6 +193,14 @@ class YakuzaFileRootData(PropertyGroup):
     imported_version: EnumProperty(items=GMDGame.blender_props(), name="Imported File Version", default=None)
     # scene flags
     flags_json: StringProperty(name="Imported Scene Flags (JSON)", default="[0,0,0,0,0,0]")
+    # how this file was imported
+    import_mode: EnumProperty(items=[
+        ("SKINNED", "Skinned",
+         "Imported as a top-level armature with direct children objects, manipulated via skinning. Exportable."),
+        ("UNSKINNED", "Unskinned", "Imported as a hierarchy of unskinned objects. Exportable."),
+        ("ANIMATION", "Animation-friendly",
+         "Imported with every mesh attached to a bone, for animation purposes. NOT exportable.")
+    ], name="Import Mode", default=None)
 
 
 class OBJECT_PT_yakuza_file_root_data_panel(Panel):

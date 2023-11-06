@@ -40,6 +40,11 @@ def pytest_addoption(parser):
         help="Should we test all methods for calculating skinned matrices"
     )
     parser.addoption(
+        "--test_animation",
+        action="store_true",
+        help="Should animation import method be tested"
+    )
+    parser.addoption(
         "--blender_logging",
         help="Logging categories to enable. Can be empty."
     )
@@ -49,13 +54,18 @@ def pytest_addoption(parser):
 class GMDTest:
     src: Path
     dst: Path
+    animation: bool
     skinned_method: str
     logging: str
 
     def __str__(self):
-        return f"{self.src.parent.name}/{self.src.name}" + (
-            f"-skin{self.skinned_method}" if self.skinned_method else "") + (
+        return f"{self.src.parent.name}/{self.src.name}" + \
+               (
+                   f"-skin{self.skinned_method}" if self.skinned_method else ""
+               ) + (
                    f"-log{self.logging}" if self.logging else "-nolog"
+               ) + (
+                   f"-importanim" if self.animation else ""
                )
 
 
@@ -75,6 +85,7 @@ def pytest_generate_tests(metafunc):
         output_dir = Path(metafunc.config.getoption("output_dir"))
         logging = metafunc.config.getoption("blender_logging")
         test_all_skinned = metafunc.config.getoption("--test_all_skinned")
+        test_animation = metafunc.config.getoption("--test_animation")
 
         assert model_root_dir
         assert output_dir
@@ -94,6 +105,7 @@ def pytest_generate_tests(metafunc):
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
                         skinned_method="CALCULATE",
+                        animation=False,
                         logging=logging
                     ))
                     if test_all_skinned:
@@ -101,12 +113,22 @@ def pytest_generate_tests(metafunc):
                             src=model,
                             dst=output_dir / model_dir.name / model.name,
                             skinned_method="FROM_TARGET_FILE",
+                            animation=False,
                             logging=logging
                         ))
                         gmdtests.append(GMDTest(
                             src=model,
                             dst=output_dir / model_dir.name / model.name,
                             skinned_method="FROM_ORIGINAL_GMD_IMPORT",
+                            animation=False,
+                            logging=logging
+                        ))
+                    if test_animation:
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="CALCULATE",
+                            animation=True,
                             logging=logging
                         ))
                 else:
@@ -114,8 +136,17 @@ def pytest_generate_tests(metafunc):
                         src=model,
                         dst=output_dir / model_dir.name / model.name,
                         skinned_method="",
+                        animation=False,
                         logging=logging
                     ))
+                    if test_animation:
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="",
+                            animation=True,
+                            logging=logging
+                        ))
 
         # Sort by filesize, to get quick files out of the way first
         gmdtests.sort(key=lambda gmdtest: os.path.getsize(gmdtest.src))

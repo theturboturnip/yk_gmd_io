@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 import bpy
 from bpy.types import ShaderNodeGroup
@@ -24,6 +24,22 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         super().__init__(filepath, original_scene, config, error)
 
         self.try_copy_hierarchy = try_copy_hierarchy
+
+    def detect_export_collection(self, context: bpy.types.Context) -> Tuple[bpy.types.Object, bpy.types.Collection]:
+        scene_root, collection = super().detect_export_collection(context)
+
+        if scene_root.yakuza_file_root_data.is_valid_root \
+                and scene_root.yakuza_file_root_data.import_mode != "UNSKINNED":
+            if scene_root.yakuza_file_root_data.import_mode == "SKINNED":
+                self.error.recoverable("File was imported in skinned mode, can't export as unskinned.\n"
+                                       "Try exporting in skinned mode.")
+            elif scene_root.yakuza_file_root_data.import_mode == "ANIMATION":
+                self.error.recoverable("File was imported in animation mode, export will likely go wrong.\n"
+                                       "Disable Strict Export if you really know what you're doing.")
+            else:
+                self.error.info("File root data wasn't marked as unskinned, export may go wrong.")
+
+        return scene_root, collection
 
     def gather_exported_items(self, context: bpy.types.Context):
         scene_root, selected_collection = self.detect_export_collection(context)

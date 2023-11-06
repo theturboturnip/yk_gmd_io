@@ -85,6 +85,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         armature_obj.yakuza_file_root_data.is_valid_root = True
         armature_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
         armature_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
+        armature_obj.yakuza_file_root_data.import_mode = "SKINNED"
 
         collection.objects.link(armature_obj)
 
@@ -143,14 +144,9 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
         # Set extra GMD data - we have to do this in object mode, because the extra data is on Bone not EditBone
         # (I think this is right, because EditBone only exists in Edit mode?)
-        for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+        for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
-
-            if gmd_node.parent:
-                sibling_order = gmd_node.parent.children.index(gmd_node)
-            else:
-                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
 
             # We find the bone we just created by name - we check elsewhere that the GMD doesn't have duplicate bone
             # names in skinned imports
