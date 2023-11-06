@@ -109,6 +109,10 @@ def gmd_meshes_to_bmesh(
     # Put the faces and extra data in the BMesh
     triangles: Set[Tuple[int, int, int]] = set()
 
+    # TODO This is currently a performance bottleneck, and I think there are a lot of parts to that:
+    # - use of stored() and set() a lot on small values - these are heap allocations we don't need
+    # - copying elements of the triangle_list into tri_idxs
+    # - Most of all, doing per-loop layer value sets. It would be better to use an array here? Set "here's the array of color0s for each loop"...
     for m_i, gmd_mesh in enumerate(gmd_meshes):
         layers = attr_set_layers[gmd_mesh.vertices_data.layout.packing_flags]
         # Check the layers
