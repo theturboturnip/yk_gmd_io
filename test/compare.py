@@ -3,21 +3,21 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic
+from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic, Sequence
 
 from mathutils import Vector
-from yk_gmd_blender.blender.importer.mesh.vertex_fusion import vertex_fusion, make_bone_indices_consistent
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBuffer_Generic, GMDVertexBuffer_Skinned
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, ErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
-from yk_gmd_blender.yk_gmd.v2.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject, GMDBoundingBox
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, ErrorReporter
+from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
+from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from yk_gmd_blender.gmdlib.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 T = TypeVar('T')
 
@@ -130,7 +130,7 @@ class VertSet:
         """
         return set(self.verts.keys()).difference(other.verts.keys())
 
-    def difference(self, other: 'VertSet') -> Dict[Tuple, Tuple[VertApproxData]]:
+    def difference(self, other: 'VertSet') -> Dict[Tuple, Tuple[VertApproxData, ...]]:
         """
         Return the difference of two vert-sets as a set.
         (i.e. all elements that are in this set but not the others.)
@@ -143,7 +143,7 @@ class VertSet:
         :return: Set of (vert_exact, vert_approx) tuples not found in the other set
         """
 
-        verts: Dict[Tuple, Tuple[VertApproxData]] = {}
+        verts: Dict[Tuple, Tuple[VertApproxData, ...]] = {}
 
         key_set = set(self.verts.keys())
 
@@ -250,16 +250,16 @@ class VertVoxelSet(Generic[TExact, TApprox]):
                 self_pos, self_exact, self_approx = self.verts[self_vert]
 
                 potential_other_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in other_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in other_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
                 counted_other_verts.update(i for (i, _) in potential_other_verts)
 
                 potential_self_verts = [
-                    (fi, a)
-                    for fi, (p, e, a) in self_search_space
+                    (fused_i, a)
+                    for fused_i, (p, e, a) in self_search_space
                     if e == self_exact and
                        (self_pos - p).length_squared < pos_epsilon_sqr
                 ]
@@ -288,24 +288,24 @@ def get_unique_verts(ms: List[GMDMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in set(gmd_mesh.triangle_strip_noreset_indices):
+        for i in set(gmd_mesh.triangles.triangle_strips_noreset):
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
-                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
-                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
-                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
-                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
-                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    round(buf.normal[i][3], 4) if buf.normal is not None else nul_item,
+                    round(buf.tangent[i][3], 4) if buf.tangent is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk is not None else nul_item,
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "b",
-                    tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
+                    tuple(round(x, 1) for x in buf.bone_data[i]) if buf.bone_data is not None else nul_item,
                     "w",
-                    tuple(round(x, 2) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                    tuple(round(x, 2) for x in buf.weight_data[i]) if buf.weight_data is not None else nul_item,
                 ),
                 VertApproxData.new(
-                    normal=buf.normal[i] if buf.normal else None,
-                    tangent=buf.tangent[i] if buf.tangent else None
+                    normal=Vector(buf.normal[i]) if buf.normal is not None else None,
+                    tangent=Vector(buf.tangent[i]) if buf.tangent is not None else None
                 )
             )
     return all_verts
@@ -316,27 +316,27 @@ def get_unique_skinned_verts(ms: List[GMDSkinnedMesh]) -> VertSet:
     all_verts = VertSet()
     for gmd_mesh in ms:
         buf = gmd_mesh.vertices_data
-        for i in set(gmd_mesh.triangle_strip_noreset_indices):
-            assert buf.bone_data and buf.weight_data
+        for i in set(gmd_mesh.triangles.triangle_strips_noreset):
+            assert (buf.bone_data is not None) and (buf.weight_data is not None)
             all_verts.add(
                 (
                     tuple(round(x, 2) for x in buf.pos[i]),
-                    round(buf.normal[i].w, 4) if buf.normal else nul_item,
-                    round(buf.tangent[i].w, 4) if buf.tangent else nul_item,
-                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 else nul_item,
-                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 else nul_item,
-                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk else nul_item,
+                    round(buf.normal[i][3], 4) if buf.normal is not None else nul_item,
+                    round(buf.tangent[i][3], 4) if buf.tangent is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col0[i]) if buf.col0 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.col1[i]) if buf.col1 is not None else nul_item,
+                    tuple(round(x, 2) for x in buf.unk[i]) if buf.unk is not None else nul_item,
                     tuple(round(x, 2) for uv in buf.uvs for x in uv[i]),
                     "bw",
                     tuple(
-                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 3))
+                        (gmd_mesh.relevant_bones[int(b)].name, round(w, 4))
                         for (b, w) in zip(buf.bone_data[i], buf.weight_data[i])
                         if w > 0
-                    ) if buf.bone_data and buf.weight_data else nul_item,
+                    ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
                 ),
                 VertApproxData.new(
-                    normal=buf.normal[i] if buf.normal else None,
-                    tangent=buf.tangent[i] if buf.tangent else None
+                    normal=Vector(buf.normal[i]) if buf.normal is not None else None,
+                    tangent=Vector(buf.tangent[i]) if buf.tangent is not None else None
                 )
             )
     return all_verts
@@ -353,40 +353,44 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
     # Create a set of fused vertices for src and dst
     # Use a Voxel set, where the vertices are grouped by position, to make finding nearby vertices for fusion less complex
     def find_fusion_output_vs(ms: List[GMDMesh]) -> VertVoxelSet:
-        unfused_vs: List[GMDVertexBuffer_Generic]
+        relevant_bones: Optional[List[GMDBone]]
+        unfused_vs: Sequence[GMDVertexBuffer]
         if skinned:
             relevant_bones, unfused_vs = make_bone_indices_consistent(cast(List[GMDSkinnedMesh], ms))
         else:
+            relevant_bones = None
             unfused_vs = [m.vertices_data for m in ms]
-        fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangle_indices for m in ms], unfused_vs)
+        fused_idx_to_buf_idx, _, _ = vertex_fusion([m.triangles.triangle_list for m in ms], unfused_vs)
+
+        rounded_bw: tuple
 
         all_verts: VertVoxelSet[Tuple, Optional[Tuple]] = VertVoxelSet()
-        if skinned:
+        if relevant_bones is not None:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
-                buf = cast(GMDVertexBuffer_Skinned, unfused_vs[buf_idx])
+                buf = cast(GMDSkinnedVertexBuffer, unfused_vs[buf_idx])
 
-                exact_pos = buf.pos[i]
+                exact_pos = Vector(buf.pos[i])
                 rounded_bw = (
                     tuple(
-                        (relevant_bones[int(bw.bone)].name, round(bw.weight, 4))
-                        for bw in buf.bone_weights[i]
-                        if bw.weight > 0
-                    ) if buf.bone_weights else nul_item,
+                        (relevant_bones[int(bone)].name, round(weight, 4))
+                        for bone, weight in zip(buf.bone_data[i], buf.weight_data[i])
+                        if weight > 0
+                    ) if (buf.bone_data is not None) and (buf.weight_data is not None) else nul_item,
                 )
-                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
                 all_verts.add(exact_pos, rounded_bw, norm)
         else:
             for (fused_i, buf_idxs) in enumerate(fused_idx_to_buf_idx):
                 buf_idx, i = buf_idxs[0]
                 buf = unfused_vs[buf_idx]
 
-                exact_pos = buf.pos[i]
+                exact_pos = Vector(buf.pos[i])
                 rounded_bw = (
-                    tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data else nul_item,
-                    tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data else nul_item,
+                    tuple(round(x, 4) for x in buf.bone_data[i]) if buf.bone_data is not None else nul_item,
+                    tuple(round(x, 4) for x in buf.weight_data[i]) if buf.weight_data is not None else nul_item,
                 )
-                norm = tuple(round(n, 3) for n in buf.normal[i].xyz) if buf.normal else None
+                norm = tuple(round(n, 3) for n in buf.normal[i][:3]) if buf.normal is not None else None
                 all_verts.add(exact_pos, rounded_bw, norm)
 
         return all_verts
@@ -401,8 +405,8 @@ def compare_same_layout_mesh_vertex_fusions(skinned: bool, src: List[GMDMesh], d
         src_fused_vs.check_fusions(dst_fused_vs)
     if src_vs_with_no_equiv or src_vs_unfused_in_dst or dst_vs_with_no_equiv_in_src:
         src_with_no_equiv_str = '\n\t'.join(str(x) for x in itertools.islice(sorted(src_vs_with_no_equiv), 5))
-        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _, _ in ss))
-        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _, _ in ds))
+        n_in_src_unfused = len(set(i for _, _, ss, _ in src_vs_unfused_in_dst for i, _ in ss))
+        n_in_dst_unfused = len(set(i for _, _, _, ds in src_vs_unfused_in_dst for i, _ in ds))
         src_unfused_str = '\n\t'.join(
             str(x) for x in
             itertools.islice(sorted([v for v in src_vs_unfused_in_dst]), 5))
@@ -476,16 +480,16 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
     def compare_field(f: str):
         if getattr(src, f) != getattr(dst, f):
             cmp.important_mismatch(
-                f"{context}: field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
+                f"{context}field '{f}' differs:\nsrc:\n\t{getattr(src, f)}\ndst:\n\t{getattr(dst, f)}")
 
     def compare_vec_field(f: str):
         src_f = tuple(round(x, 3) for x in getattr(src, f))
         dst_f = tuple(round(x, 3) for x in getattr(dst, f))
         if src_f != dst_f:
             if sum(fabs(s - r) for (s, r) in zip(src_f, dst_f)) > 0.05:
-                cmp.important_mismatch(f"{context}: vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}vector '{f}'' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                cmp.unimportant_mismatch(f"{context}: vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}vector '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     def compare_mat_field(f: str):
         src_f = tuple(tuple(round(x, 3) for x in v) for v in getattr(src, f))
@@ -494,9 +498,9 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
             src_floats = tuple(x for v in src_f for x in v)
             dst_floats = tuple(x for v in dst_f for x in v)
             if sum(fabs(s - r) for (s, r) in zip(src_floats, dst_floats)) > 0.05:
-                cmp.important_mismatch(f"{context}: matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.important_mismatch(f"{context}matrix '{f}' differs:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
             else:
-                cmp.unimportant_mismatch(f"{context}: matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
+                cmp.unimportant_mismatch(f"{context}matrix '{f}' differs slightly:\nsrc:\n\t{src_f}\ndst:\n\t{dst_f}")
 
     # Compare subclass-agnostic, hierarchy-agnostic values
     compare_field("node_type")
@@ -506,6 +510,12 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
     compare_vec_field("world_pos")
     compare_vec_field("anim_axis")
     compare_field("flags")
+
+    if isinstance(src, (GMDSkinnedObject, GMDUnskinnedObject)):
+        # Compare bounding boxes
+        # Right now, just check that the new bounds encompasses the old one
+        assert isinstance(dst, (GMDSkinnedObject, GMDUnskinnedObject))
+        compare_bbox(context, src.bbox, dst.bbox, cmp)
 
     if not isinstance(src, GMDSkinnedObject):
         compare_mat_field("matrix")
@@ -579,6 +589,42 @@ def recursive_compare_node_lists(skinned: bool, vertices: bool, src: List[GMDNod
         recursive_compare_node_lists(skinned, vertices, child_src.children, child_dst.children, cmp, child_context)
 
 
+def compare_bbox(context: str, src: GMDBoundingBox, dst: GMDBoundingBox, cmp: ComparisonReporter):
+    ROUND_N = 3
+    src_center = Vector(tuple(round(x, ROUND_N) for x in src.center))
+    src_sphere_radius = round(src.sphere_radius, ROUND_N)
+    src_aabb_extents = Vector(tuple(round(x, ROUND_N) for x in src.aabb_extents))
+    dst_center = Vector(tuple(round(x, ROUND_N) for x in dst.center))
+    dst_sphere_radius = round(dst.sphere_radius, ROUND_N)
+    dst_aabb_extents = Vector(tuple(round(x, ROUND_N) for x in dst.aabb_extents))
+
+    # Check the dst sphere encompasses the src one
+    # i.e. that the farthest point from the dst center on the src sphere, is still inside the dst sphere
+    # i.e. distance(dst.center, src.center) + src.sphere_radius <= dst.sphere_radius
+    if (dst_center - src_center).length + src_sphere_radius > dst_sphere_radius + 0.01:
+        cmp.important_mismatch(
+            f"{context}dst bbox sphere doesn't encompass src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
+        )
+    if any(src_dim > dst_dim + 0.01 for src_dim, dst_dim in
+           zip(src_center + src_aabb_extents, dst_center + dst_aabb_extents)):
+        cmp.important_mismatch(
+            f"{context}dst bbox aabb doesn't encompass src bbox aabb:\n"
+            f"src:\n\t{src_center}\n\t{src_aabb_extents}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_aabb_extents}\n"
+        )
+    dst_vol = dst_sphere_radius ** 3  # * pi
+    src_vol = src_sphere_radius ** 3  # * pi
+    # TODO we aren't bothered by strict bounding boxes right now. Re-enable this check when we are.
+    if False and dst_vol / 10 > src_vol:
+        cmp.important_mismatch(
+            f"{context}dst bbox sphere has more than 10x volume of src bbox sphere:\n"
+            f"src:\n\t{src_center}\n\t{src_sphere_radius}\n"
+            f"dst:\n\t{dst_center}\n\t{dst_sphere_radius}\n"
+        )
+
+
 def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool, strict: bool,
                   mismatch_filter: Optional[List[str]],
                   error: ErrorReporter):
@@ -593,7 +639,7 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
 
     def compare_header_field(f: str):
         if getattr(header_src, f) != getattr(header_dst, f):
-            cmp.unimportant_mismatch(
+            cmp.important_mismatch(
                 f"header: field {f} differs:\n"
                 f"src:\n\t{getattr(header_src, f)}\n"
                 f"dst:\n\t{getattr(header_dst, f)}"
@@ -618,8 +664,12 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
     compare_header_field("padding")
 
     # Technically YK1-specific?
-    compare_header_field("overall_bounds")
     compare_header_field("flags")
+
+    compare_bbox("header: ",
+                 header_src.overall_bounds.abstractify(),  # type: ignore
+                 header_dst.overall_bounds.abstractify(),  # type: ignore
+                 cmp)
 
     # Load and compare scene hierarchies
     import_mode = VertexImportMode.IMPORT_VERTICES if vertices else VertexImportMode.NO_VERTICES

@@ -6,8 +6,8 @@ import bpy
 from bmesh.types import BMesh, BMLayerCollection
 from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 
 
 class GMDGame(IntEnum):
@@ -193,6 +193,14 @@ class YakuzaFileRootData(PropertyGroup):
     imported_version: EnumProperty(items=GMDGame.blender_props(), name="Imported File Version", default=None)
     # scene flags
     flags_json: StringProperty(name="Imported Scene Flags (JSON)", default="[0,0,0,0,0,0]")
+    # how this file was imported
+    import_mode: EnumProperty(items=[
+        ("SKINNED", "Skinned",
+         "Imported as a top-level armature with direct children objects, manipulated via skinning. Exportable."),
+        ("UNSKINNED", "Unskinned", "Imported as a hierarchy of unskinned objects. Exportable."),
+        ("ANIMATION", "Animation-friendly",
+         "Imported with every mesh attached to a bone, for animation purposes. NOT exportable.")
+    ], name="Import Mode", default=None)
 
 
 class OBJECT_PT_yakuza_file_root_data_panel(Panel):
@@ -287,7 +295,7 @@ class AttribSetLayerNames:
 
         # Normal W data
         normal_w_layer = None
-        if layout.normal_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
+        if layout.normal_storage and layout.normal_storage.n_comps == 4:
             normal_w_layer = LayerSpec("NormalW", layout.normal_storage)
 
         # Tangent data
@@ -295,7 +303,7 @@ class AttribSetLayerNames:
         tangent_w_layer = None
         if is_skinned:
             # For skinned, we may need to store tangent-W
-            if layout.tangent_storage in [VecStorage.Vec4Half, VecStorage.Vec4Fixed, VecStorage.Vec4Full]:
+            if layout.tangent_storage and layout.tangent_storage.n_comps == 4:
                 tangent_w_layer = LayerSpec("TangentW", layout.tangent_storage)
         else:
             # For unskinned, we may need to store the whole thing
@@ -309,7 +317,7 @@ class AttribSetLayerNames:
 
         def get_primary_uv_index() -> Optional[int]:
             for i, uv_storage in enumerate(layout.uv_storages):
-                if uv_storage in [VecStorage.Vec2Full, VecStorage.Vec2Half]:
+                if uv_storage.n_comps == 2:
                     return i
             return None
 
@@ -320,7 +328,7 @@ class AttribSetLayerNames:
             if i == primary_uv_i:
                 uv_spec = LayerSpec(f"UV_Primary", uv_storage)
             else:
-                uv_spec = LayerSpec(f"UV{i}_{VecStorage.component_count(uv_storage)}_components", uv_storage)
+                uv_spec = LayerSpec(f"UV{i}_{uv_storage.n_comps}_components", uv_storage)
 
             uv_layers.append(uv_spec)
 
@@ -351,8 +359,7 @@ class AttribSetLayerNames:
             if spec.name in bm.loops.layers.float_color:
                 return bm.loops.layers.float_color[spec.name]
             error.debug("MESH",
-                        f"Creating color layer {spec.name} for {purpose}: storage {spec.storage},"
-                        f"componentcount = {VecStorage.component_count(spec.storage)}")
+                        f"Creating color layer {spec.name} for {purpose}: storage {spec.storage}")
             return bm.loops.layers.float_color.new(spec.name)
 
         def create_uv_layer(spec: Optional[LayerSpec], purpose: str) -> Optional[BMLayerCollection]:
@@ -361,8 +368,7 @@ class AttribSetLayerNames:
             if spec.name in bm.loops.layers.uv:
                 return bm.loops.layers.uv[spec.name]
             error.debug("MESH",
-                        f"Creating UV layer {spec.name} for {purpose}: storage {spec.storage},"
-                        f"componentcount = {VecStorage.component_count(spec.storage)}")
+                        f"Creating UV layer {spec.name} for {purpose}: storage {spec.storage}")
             return bm.loops.layers.uv.new(spec.name)
 
         col0_layer = create_color_layer(self.col0_layer, "Color0")
@@ -375,17 +381,17 @@ class AttribSetLayerNames:
 
         if self.primary_uv_i is not None:
             error.debug("MESH", f"Using UV{self.primary_uv_i} as primary UV layer")
-            assert VecStorage.component_count(self.uv_layers[self.primary_uv_i].storage) == 2
+            assert self.uv_layers[self.primary_uv_i].storage.n_comps == 2
 
         uv_layers = []
         for i, uv_spec in enumerate(self.uv_layers):
-            if VecStorage.component_count(uv_spec.storage) == 2:
+            if uv_spec.storage.n_comps == 2:
                 uv_layer = create_uv_layer(uv_spec, f"UV{i}")
             else:
                 uv_layer = create_color_layer(uv_spec, f"UV{i}")
             assert uv_layer is not None
 
-            uv_layers.append((VecStorage.component_count(uv_spec.storage), uv_layer))
+            uv_layers.append((uv_spec.storage.n_comps, uv_layer))
 
         return AttribSetLayers_bmesh(
             col0_layer=col0_layer,
@@ -419,12 +425,11 @@ class AttribSetLayerNames:
                     error.fatal(f"Found color layer {spec.name} for {purpose}: storage {spec.storage}, "
                                 f"but has wrong domain {attr.domain} - expected CORNER.")
                 error.debug("MESH",
-                            f"Retrieved color layer {spec.name} for {purpose}: storage {spec.storage},"
-                            f"componentcount = {VecStorage.component_count(spec.storage)}")
+                            f"Retrieved color layer {spec.name} for {purpose}: storage {spec.storage}")
                 return attr
             else:
                 error.info(f"Expected {mesh.name} to have a color layer {spec.name} for {purpose}: "
-                           f"storage {spec.storage}, componentcount: {VecStorage.component_count(spec.storage)}, "
+                           f"storage {spec.storage} "
                            f"but found None")
                 return None
 
@@ -434,11 +439,10 @@ class AttribSetLayerNames:
             layer = mesh.uv_layers[spec.name] if spec.name in mesh.uv_layers else None
             if layer:
                 error.debug("MESH",
-                            f"Retrieved UV layer {spec.name} for {purpose}: storage {spec.storage},"
-                            f"componentcount = {VecStorage.component_count(spec.storage)}")
+                            f"Retrieved UV layer {spec.name} for {purpose}: storage {spec.storage}")
             else:
                 error.info(f"Expected {mesh.name} to have a UV layer {spec.name} for {purpose}: "
-                           f"storage {spec.storage}, componentcount: {VecStorage.component_count(spec.storage)}, "
+                           f"storage {spec.storage}, "
                            f"but found None")
             return layer
 
@@ -452,17 +456,17 @@ class AttribSetLayerNames:
 
         if self.primary_uv_i is not None:
             error.debug("MESH", f"Using UV{self.primary_uv_i} as primary UV layer")
-            assert VecStorage.component_count(self.uv_layers[self.primary_uv_i].storage) == 2
+            assert self.uv_layers[self.primary_uv_i].storage.n_comps == 2
 
         uv_layers = []
         for i, uv_spec in enumerate(self.uv_layers):
             uv_layer: Optional[Union[bpy.types.MeshLoopColorLayer, bpy.types.MeshUVLoopLayer]]
-            if VecStorage.component_count(uv_spec.storage) == 2:
+            if uv_spec.storage.n_comps == 2:
                 uv_layer = retrieve_uv_layer(uv_spec, f"UV{i}")
             else:
                 uv_layer = retrieve_color_layer(uv_spec, f"UV{i}")
 
-            uv_layers.append((VecStorage.component_count(uv_spec.storage), uv_layer))
+            uv_layers.append((uv_spec.storage.n_comps, uv_layer))
 
         if self.primary_uv_i is not None and uv_layers[self.primary_uv_i][1] is None:
             # Fallback for finding the primary map
@@ -495,7 +499,7 @@ class AttribSetLayerNames:
         return [
             spec.name
             for spec in self.uv_layers
-            if VecStorage.component_count(spec.storage) == 2
+            if spec.storage.n_comps == 2
         ]
 
     def get_blender_color_layers(self) -> List[str]:
@@ -520,7 +524,7 @@ class AttribSetLayerNames:
         return color_layers + [
             spec.name
             for spec in self.uv_layers
-            if VecStorage.component_count(spec.storage) != 2
+            if spec.storage.n_comps != 2
         ]
 
 

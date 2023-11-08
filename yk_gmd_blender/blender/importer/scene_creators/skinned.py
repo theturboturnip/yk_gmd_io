@@ -5,11 +5,11 @@ import bpy
 from mathutils import Matrix, Vector, Quaternion
 from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 
 
 def armature_name_for_gmd_file(gmd_file: Union[GMDScene, str]):
@@ -31,8 +31,11 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         # Check for bone name overlap
         # Only bones are added to the overall armature, not objects
         # But the bones are referenced by name, so we need to check if there are multiple bones with the same name
-        bones_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                             isinstance(node, GMDBone)]
+        bones_depth_first = [
+            node
+            for node in self.gmd_scene.overall_hierarchy
+            if isinstance(node, GMDBone)
+        ]
         bone_names = {bone.name for bone in bones_depth_first}
         if len(bone_names) != len(bones_depth_first):
             # Find the duplicate names by listing them all, and removing one occurence of each name
@@ -44,8 +47,11 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             self.error.fatal(f"Some bones don't have unique names - found duplicates {duplicate_names}")
 
         # Check that objects do not have bones underneath them
-        objects_depth_first = [node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                               not isinstance(node, GMDBone)]
+        objects_depth_first = [
+            node
+            for node in self.gmd_scene.overall_hierarchy
+            if not isinstance(node, GMDBone)
+        ]
 
         def check_object(object: GMDNode):
             if object.parent is not None:
@@ -60,8 +66,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         for object in objects_depth_first:
             check_object(object)
 
-        if len([node for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                isinstance(node, GMDUnskinnedObject)]) != 0:
+        if any(isinstance(node, GMDUnskinnedObject) for node in self.gmd_scene.overall_hierarchy):
             self.error.recoverable(
                 f"This import method cannot import unskinnned objects. Please use the [Unskinned] variant")
 
@@ -80,6 +85,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         armature_obj.yakuza_file_root_data.is_valid_root = True
         armature_obj.yakuza_file_root_data.imported_version = self.config.game.as_blender()
         armature_obj.yakuza_file_root_data.flags_json = json.dumps(self.gmd_scene.flags)
+        armature_obj.yakuza_file_root_data.import_mode = "SKINNED"
 
         collection.objects.link(armature_obj)
 
@@ -88,7 +94,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
         self.bone_world_yakuza_space_matrices: Dict[str, Matrix] = {}
 
-        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+        for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
 
@@ -138,14 +144,9 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
         # Set extra GMD data - we have to do this in object mode, because the extra data is on Bone not EditBone
         # (I think this is right, because EditBone only exists in Edit mode?)
-        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+        for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDBone):
                 continue
-
-            if gmd_node.parent:
-                sibling_order = gmd_node.parent.children.index(gmd_node)
-            else:
-                sibling_order = self.gmd_scene.overall_hierarchy.roots.index(gmd_node)
 
             # We find the bone we just created by name - we check elsewhere that the GMD doesn't have duplicate bone
             # names in skinned imports
@@ -174,8 +175,11 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         :return: Nothing
         """
 
-        vertex_group_list = [node.name for node in self.gmd_scene.overall_hierarchy.depth_first_iterate() if
-                             isinstance(node, GMDBone)]
+        vertex_group_list = [
+            node.name
+            for node in self.gmd_scene.overall_hierarchy
+            if isinstance(node, GMDBone)
+        ]
         vertex_group_indices = {
             name: i
             for i, name in enumerate(vertex_group_list)
@@ -183,7 +187,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
         gmd_objects = {}
 
-        for gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
+        for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDSkinnedObject):
                 continue
             gmd_node: GMDSkinnedObject = cast(GMDSkinnedObject, gmd_node)

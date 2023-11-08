@@ -2,14 +2,13 @@ import argparse
 import math
 from pathlib import Path
 
-from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
-    pack_abstract_scene, pack_file_data
 from mathutils import Quaternion
-
-from yk_gmd_blender.yk_gmd.v2.structure.common.file import FileData_Common
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
+from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
+    pack_abstract_scene, pack_file_data
+from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common
+from yk_gmd_blender.structurelib.primitives import c_uint16
 
 
 def quaternion_to_euler_angle(q: Quaternion):
@@ -30,8 +29,10 @@ def quaternion_to_euler_angle(q: Quaternion):
 
     return X, Y, Z
 
+
 def csv_str(iter):
     return ", ".join(str(x) for x in iter)
+
 
 def print_each(iter):
     for x in iter:
@@ -50,6 +51,7 @@ def unpack_drawlist_bytes(file_data: FileData_Common, obj):
         data.append(material_idx)
         data.append(mesh_idx)
     return data
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("GMD Poker")
@@ -76,17 +78,21 @@ if __name__ == '__main__':
     # new_file_data = pack_abstract_contents_YK1(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
     # new_file_bytearray = bytearray()
     # FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
-    unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(), file_data.vertices_are_big_endian(), scene, error_reporter)
+    unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(),
+                                                 file_data.vertices_are_big_endian(), scene, file_data, error_reporter)
     new_file_bytearray = pack_file_data(version_props, unabstracted_file_data, error_reporter)
 
     new_version_props, new_header, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
-    #print(version_props == new_version_props)
-    #print(version_props)
-    #print(new_version_props)
-    new_scene = read_abstract_scene_from_filedata_object(new_version_props, FileImportMode.SKINNED if args.skinned else FileImportMode.UNSKINNED, VertexImportMode.IMPORT_VERTICES, new_file_data, error_reporter)
+    # print(version_props == new_version_props)
+    # print(version_props)
+    # print(new_version_props)
+    new_scene = read_abstract_scene_from_filedata_object(new_version_props,
+                                                         FileImportMode.SKINNED if args.skinned else FileImportMode.UNSKINNED,
+                                                         VertexImportMode.IMPORT_VERTICES, new_file_data,
+                                                         error_reporter)
 
     if args.output_dir:
         with open(args.output_dir / args.file_to_poke, "wb") as out_file:
             out_file.write(new_file_bytearray)
 
-    #legacy_abstract_v2_struct_main(args)
+    # legacy_abstract_v2_struct_main(args)

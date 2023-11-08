@@ -5,16 +5,16 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Union, Callable
 
 from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.yk_gmd.v2.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.yk_gmd.v2.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import VertexImportMode, FileImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_gmd_structures, read_abstract_scene_from_filedata_object
-from yk_gmd_blender.yk_gmd.v2.structure.common.node import NodeType
-from yk_gmd_blender.yk_gmd.v2.structure.kenzan.file import FileData_Kenzan
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.file import FileData_YK1
-from yk_gmd_blender.yk_gmd.v2.structure.yk1.mesh import MeshStruct_YK1
+from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
+from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import VertexImportMode, FileImportMode
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
+from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
+from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from yk_gmd_blender.gmdlib.structure.kenzan.file import FileData_Kenzan
+from yk_gmd_blender.gmdlib.structure.yk1.file import FileData_YK1
+from yk_gmd_blender.gmdlib.structure.yk1.mesh import MeshStruct_YK1
 
 
 def batch_process_files(args, f: Callable[[str, Union[FileData_Kenzan, FileData_YK1], GMDScene], None]):
@@ -143,7 +143,7 @@ def check_vertex_layouts(args):
     # vertex_buffer_layouts = set()
 
     def process_meshes(_, file_data: FileData_YK1, scene: GMDScene):
-        for node in scene.overall_hierarchy.depth_first_iterate():
+        for node in scene.overall_hierarchy:
             if node.node_type == NodeType.UnskinnedMesh and isinstance(node, GMDUnskinnedObject):
                 for mesh in node.mesh_list:
                     vbl = mesh.attribute_set.shader.vertex_buffer_layout
@@ -163,7 +163,7 @@ def check_bonecounts(args):
 
     def process_meshes(path: str, file_data: FileData_YK1, scene: GMDScene):
         max_bonecount = 0
-        for node in scene.overall_hierarchy.depth_first_iterate():
+        for node in scene.overall_hierarchy:
             if node.node_type == NodeType.SkinnedMesh and isinstance(node, GMDSkinnedObject):
                 for mesh in node.mesh_list:
                     if len(mesh.relevant_bones) > max_bonecount:

@@ -8,7 +8,7 @@ import pytest
 
 import compare
 from conftest import GMDTest
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
+from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
 
 # Filter out specific fatal errors for specific files
 COMPARE_FILTER = {
@@ -30,14 +30,50 @@ COMPARE_FILTER = {
     ("y0-Skinned", "c_at_kiryu.gmd"): [
         # The leather shoes have the same issue as yk1 st_sera_dead - triangles that are effectively degenerate
         # whose vertices disappear
-        "[l0]shoes_leather > attr set c_am_kiryu_shoes_di"
+        "[l0]shoes_leather > attr set c_am_kiryu_shoes_di "
         "src (1202 unique verts) and dst (1192 unique verts) exact data differs"
     ]
 }
 
 
 @pytest.mark.order(10)
-def test_gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+def test_gmd(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+    if gmdtest.animation:
+        gmd_importanim(gmdtest, blender, isolate_blender)
+    else:
+        gmd_importexport_comparelenient(gmdtest, blender, isolate_blender)
+
+
+def gmd_importanim(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+    # Set the src/dst for the import/export
+    env = os.environ.copy()
+    env.update({
+        "YKGMDIO_TEST_SRC": str(gmdtest.src),
+        "YKGMDIO_SKINNED": str(gmdtest.skinned_method),
+        "YKGMDIO_LOGGING": gmdtest.logging,
+    })
+
+    SCRIPTLOC = os.path.dirname(__file__)
+
+    # Run blender and import/export the file
+    if isolate_blender:
+        subprocess.run([
+            str(blender / "blender"),
+            "--factory-startup",
+            "-b",
+            "--python-exit-code", "1",
+            "-P", f"{SCRIPTLOC}/blender_do_importanim.py"
+        ], check=True, env=env)
+    else:
+        subprocess.run([
+            str(blender / "blender"),
+            "-b",
+            "--python-exit-code", "1",
+            "-P", f"{SCRIPTLOC}/blender_do_importanim.py"
+        ], check=True, env=env)
+
+
+def gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     # Create subfolder in output for directory
     gmdtest.dst.parent.mkdir(parents=True, exist_ok=True)
     # Copy the file into the output - this should be overwritten by blender

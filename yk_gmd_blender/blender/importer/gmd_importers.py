@@ -11,15 +11,16 @@ from bpy.types import (
 from bpy_extras.io_utils import ImportHelper
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
+from yk_gmd_blender.blender.importer.scene_creators.animation import GMDAnimationSceneCreator
 from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
 from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
 from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
-from yk_gmd_blender.yk_gmd.v2.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.yk_gmd.v2.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.yk_gmd.v2.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
-from yk_gmd_blender.yk_gmd.v2.io import read_abstract_scene_from_filedata_object, \
+from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
+from yk_gmd_blender.gmdlib.io import read_abstract_scene_from_filedata_object, \
     read_gmd_structures
-from yk_gmd_blender.yk_gmd.v2.structure.version import VersionProperties, GMDVersion
+from yk_gmd_blender.gmdlib.structure.version import VersionProperties, GMDVersion
 
 
 class BaseImportGMD:
@@ -113,7 +114,7 @@ class BaseImportGMD:
 class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_skinned"
-    bl_label = "Import Yakuza GMD [Characters/Skinned]"
+    bl_label = "Import Yakuza Skinned GMD for Modelling"
 
     import_hierarchy: BoolProperty(name="Import Hierarchy",
                                    description="If True, will import the full node hierarchy including skeleton bones. "
@@ -204,13 +205,13 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
 
 def menu_func_import_skinned(self, context):
-    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza GMD [Characters/Skinned] (.gmd)")
+    self.layout.operator(ImportSkinnedGMD.bl_idname, text="Yakuza Skinned GMD for Modelling [Characters] (.gmd)")
 
 
 class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
     """Loads a GMD file into blender"""
     bl_idname = "import_scene.gmd_unskinned"
-    bl_label = "Import Yakuza GMD [Stages/Weapons/Unskinned]"
+    bl_label = "Import Yakuza Unskinned GMD for Modelling"
 
     def draw(self, context):
         layout = self.layout
@@ -282,4 +283,110 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
 
 
 def menu_func_import_unskinned(self, context):
-    self.layout.operator(ImportUnskinnedGMD.bl_idname, text="Yakuza GMD [Stages/Weapons/Unskinned] (.gmd)")
+    self.layout.operator(ImportUnskinnedGMD.bl_idname, text="Yakuza Unskinned GMD for Modelling [Props/Stages] (.gmd)")
+
+
+# Abstract base class for importers that use GMDAnimationSceneCreator.
+# Only abstract function is the one that specifies file import mode.
+class BaseImportAnimationGMD(BaseImportGMD, Operator, ImportHelper):
+    def draw(self, context):
+        layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = True  # No animation.
+
+        # When properties are added, use "layout.prop" here to display them
+        layout.prop(self, 'strict')
+        layout.prop(self, 'stop_on_fail')
+        layout.prop(self, 'logging_categories')
+        layout.prop(self, "game_enum")
+        layout.prop(self, 'import_materials')
+        layout.prop(self, 'material_naming')
+        layout.prop(self, 'fuse_vertices')
+
+    def execute(self, context):
+        error = self.create_logger()
+
+        if self.files:
+            successes = 0
+            base_folder = self.directory
+            for f in self.files:
+                gmd_filepath = os.path.join(base_folder, f.name)
+                try:
+                    self.import_single(context, gmd_filepath, error)
+                    successes += 1
+                except GMDImportExportError as e:
+                    print(e)
+                    self.report({"ERROR"}, str(e))
+                    # If one failure should stop subsequent files from importing, return here.
+                    # Otherwise, the loop will continue.
+                    if self.stop_on_fail:
+                        if len(self.files) > 1:
+                            self.report({"ERROR"}, f"Stopped importing because of error in file {f.name}")
+                        return {'CANCELLED'}
+
+            if len(self.files) > 1:
+                self.report({"INFO"}, f"Successfully imported {successes} of {len(self.files)} files")
+        else:
+            self.import_single(context, self.filepath, error)
+
+        return {'FINISHED'}
+
+    def file_import_mode(self) -> FileImportMode:
+        raise NotImplementedError()
+
+    def import_single(self, context, gmd_filepath, error):
+        if (not os.path.isfile(gmd_filepath)) or (not gmd_filepath.lower().endswith("gmd")):
+            error.fatal(f"{gmd_filepath} is not a gmd file.")
+
+        self.report({"INFO"}, f"Importing {gmd_filepath}...")
+
+        self.report({"INFO"}, "Extracting abstract scene...")
+        gmd_version, gmd_header, gmd_contents = read_gmd_structures(gmd_filepath, error)
+        gmd_config = self.create_gmd_config(gmd_version, error)
+        gmd_scene = read_abstract_scene_from_filedata_object(gmd_version, self.file_import_mode(),
+                                                             VertexImportMode.IMPORT_VERTICES, gmd_contents,
+                                                             error)
+        self.report({"INFO"}, "Finished extracting abstract scene")
+
+        scene_creator = GMDAnimationSceneCreator(gmd_filepath, gmd_scene, gmd_config, error)
+
+        scene_creator.validate_scene()
+
+        gmd_collection = scene_creator.make_collection(context)
+
+        self.report({"INFO"}, "Importing bone hierarchy...")
+        gmd_armature, node_id_to_blender_bone_name = scene_creator.make_bone_hierarchy(context, gmd_collection)
+        self.report({"INFO"}, "Importing objects...")
+        scene_creator.make_objects(context, gmd_collection, gmd_armature, node_id_to_blender_bone_name)
+
+        self.report({"INFO"}, f"Finished importing {gmd_scene.name}")
+
+
+class ImportAnimationUnskinnedGMD(BaseImportAnimationGMD):
+    """Loads a GMD file into blender"""
+    bl_idname = "import_scene.gmd_animation_unskinned"
+    bl_label = "Import Yakuza Unskinned GMD for Animation"
+
+    def file_import_mode(self) -> FileImportMode:
+        return FileImportMode.UNSKINNED
+
+
+class ImportAnimationSkinnedGMD(BaseImportAnimationGMD):
+    """Loads a GMD file into blender"""
+    bl_idname = "import_scene.gmd_animation_skinned"
+    bl_label = "Import Yakuza Skinned GMD for Animation"
+
+    def file_import_mode(self) -> FileImportMode:
+        return FileImportMode.SKINNED
+
+
+def menu_func_import_animation_unskinned(self, context):
+    self.layout.operator(ImportAnimationUnskinnedGMD.bl_idname,
+                         text="Yakuza Unskinned GMD for Animation [Props/Stages] (.gmd)")
+
+
+# This allows you to use the legacy animation option where bones are not connected to their parents.
+def menu_func_import_animation_skinned(self, context):
+    self.layout.operator(ImportAnimationSkinnedGMD.bl_idname,
+                         text="Yakuza Skinned GMD for Animation [Characters] (.gmd)")
