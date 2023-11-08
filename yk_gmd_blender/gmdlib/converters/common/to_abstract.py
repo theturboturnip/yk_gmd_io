@@ -391,7 +391,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices,
                                                                          ignore_FFFF=False)
                 if triangle_indices is None:
-                    self.error.fatal(f"Mesh does not declare a set of triangle indices")
+                    self.error.fatal(f"Mesh does not declare a triangle list")
                 triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                        mesh_struct.noreset_strip_indices,
                                                                                        min_index, max_index,

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from dataclasses import dataclass
 from typing import List, Dict, Set, Tuple
 from typing import cast
 
