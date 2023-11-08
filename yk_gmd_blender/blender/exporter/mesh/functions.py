@@ -1,4 +1,3 @@
-import array
 from dataclasses import dataclass
 from typing import List, Dict, Set, Tuple
 from typing import cast
@@ -9,14 +8,14 @@ import bpy
 from yk_gmd_blender.blender.exporter.mesh.extractor import compute_vertex_4weights, loop_indices_for_material, \
     extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
-from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
-    convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
-    MeshLoopIdx, DedupedVertIdx, SubmeshTri
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
+from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh, GMDMeshIndices
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
+    convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
+    MeshLoopIdx, DedupedVertIdx, SubmeshTri
 
 
 def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.types.Object,
@@ -148,68 +147,14 @@ class Submesh:
     def build_unskinned(self, mesh: bpy.types.Mesh, error: ErrorReporter) -> GMDMesh:
         vertices = extract_vertices_for_unskinned_material(mesh, self.attr_set, self.verts, error)
 
-        triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
+        triangles = GMDMeshIndices.from_triangles(self.triangles)
 
         return GMDMesh(
             empty=False,
             vertices_data=vertices,
-            triangle_indices=triangle_list,
-            triangle_strip_noreset_indices=triangle_strip_noreset,
-            triangle_strip_reset_indices=triangle_strip_reset,
+            triangles=triangles,
             attribute_set=self.attr_set
         )
-
-    # Build the triangle strip from self.triangles
-    def _build_triangles(self) -> Tuple[array.ArrayType, array.ArrayType, array.ArrayType]:
-        triangle_list = array.array("H")
-        triangle_strip_noreset = array.array("H")
-        triangle_strip_reset = array.array("H")
-
-        for t0, t1, t2 in self.triangles:
-            triangle_list.append(t0)
-            triangle_list.append(t1)
-            triangle_list.append(t2)
-
-            # If we can continue the strip, do so
-            if not triangle_strip_noreset:
-                # Starting the strip
-                triangle_strip_noreset.append(t0)
-                triangle_strip_noreset.append(t1)
-                triangle_strip_noreset.append(t2)
-            elif (triangle_strip_noreset[-2] == t0 and
-                  triangle_strip_noreset[-1] == t1):
-                # Continue the strip
-                triangle_strip_noreset.append(t2)
-            else:
-                # End previous strip, start new strip
-                # Two extra verts to create a degenerate triangle, signalling the end of the strip
-                triangle_strip_noreset.append(triangle_strip_noreset[-1])
-                triangle_strip_noreset.append(t0)
-                # Add the triangle as normal
-                triangle_strip_noreset.append(t0)
-                triangle_strip_noreset.append(t1)
-                triangle_strip_noreset.append(t2)
-
-            # If we can continue the strip, do so
-            if not triangle_strip_reset:
-                # Starting the strip
-                triangle_strip_reset.append(t0)
-                triangle_strip_reset.append(t1)
-                triangle_strip_reset.append(t2)
-            elif (triangle_strip_reset[-2] == t0 and
-                  triangle_strip_reset[-1] == t1):
-                # Continue the strip
-                triangle_strip_reset.append(t2)
-            else:
-                # End previous strip, start new strip
-                # Reset index signalling the end of the strip
-                triangle_strip_reset.append(0xFFFF)
-                # Add the triangle as normal
-                triangle_strip_reset.append(t0)
-                triangle_strip_reset.append(t1)
-                triangle_strip_reset.append(t2)
-
-        return triangle_list, triangle_strip_noreset, triangle_strip_reset
 
 
 def convert_meshloop_tris_to_unskinned_submeshes(
@@ -242,14 +187,12 @@ class SkinnedSubmesh(Submesh):
         vertices = extract_vertices_for_skinned_material(mesh, self.attr_set, self.verts, bone_info, error,
                                                          bone_remapper=self.relevant_vertex_groups)
 
-        triangle_list, triangle_strip_noreset, triangle_strip_reset = self._build_triangles()
+        triangles = GMDMeshIndices.from_triangles(self.triangles)
 
         return GMDSkinnedMesh(
             empty=False,
             vertices_data=vertices,
-            triangle_indices=triangle_list,
-            triangle_strip_noreset_indices=triangle_strip_noreset,
-            triangle_strip_reset_indices=triangle_strip_reset,
+            triangles=triangles,
             attribute_set=self.attr_set,
             relevant_bones=self.relevant_bones
         )

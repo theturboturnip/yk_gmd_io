@@ -3,10 +3,10 @@ from typing import Union, List, Dict, cast, Tuple, Set
 import bmesh
 from mathutils import Matrix, Vector
 from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
-from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 
 def gmd_meshes_to_bmesh(
@@ -54,25 +54,27 @@ def gmd_meshes_to_bmesh(
 
     # Add a single vertex's (position, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
-        vert = bm.verts.new(gmd_to_blender_world @ Vector(buf.pos[i][:3]))
+        yk_pos = buf.pos[i]
+        vert = bm.verts.new((-yk_pos[0], yk_pos[2], yk_pos[1]))
         if buf.normal is not None:
             # apply the matrix to normal.xyz.resized(4) to set the w component to 0 - normals cannot be translated!
             # Just using .xyz would make blender apply a translation
-            vert.normal = (gmd_to_blender_world @ (Vector(buf.normal[i][:3]).resized(4))).xyz
+            yk_norm = buf.normal[i]
+            vert.normal = Vector((-yk_norm[0], yk_norm[2], yk_norm[1]))
         if is_skinned:
-            for bone, weight in zip(buf.bone_data[i], buf.weight_data[i]):
-                if weight > 0:
-                    if bone >= len(relevant_bones):
-                        error.debug("BONES", f"bone out of bounds - "
-                                             f"bone {bone} in {[b.name for b in relevant_bones]}")
-                        error.debug("BONES", f"submesh len = {len(buf)}")
-                    vertex_group_index = vertex_group_indices[relevant_bones[bone].name]
-                    vert[deform][vertex_group_index] = weight
+            bones = buf.bone_data[i]
+            weights = buf.weight_data[i]
+            for j in range(4):
+                if weights[j] <= 0:
+                    break
+                vertex_group_index = vertex_group_indices[relevant_bones[bones[j]].name]
+                vert[deform][vertex_group_index] = weights[j]
 
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
     if fuse_vertices:
-        _, mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangle_indices for m in gmd_meshes], vertices)
+        _, mesh_vtx_idx_to_bmesh_idx, is_fused = vertex_fusion([m.triangles.triangle_list for m in gmd_meshes],
+                                                               vertices)
         for i_buf, buf in enumerate(vertices):
             for i in range(len(buf)):
                 if not is_fused[i_buf][i]:
@@ -107,24 +109,10 @@ def gmd_meshes_to_bmesh(
     # Put the faces and extra data in the BMesh
     triangles: Set[Tuple[int, int, int]] = set()
 
-    # Helper function for adding a face to the BMesh
-    def add_face_to_bmesh(face_idx: Tuple[int, int, int], attr_idx: int):
-        try:
-            # This can throw ValueError if the triangle is "degenerate" - i.e. has two vertices that are the same
-            # [1, 2, 3] is fine
-            # [1, 2, 2] is degenerate
-            # This should never be called with degenerate triangles, but if there is one we skip it and recover.
-            face = bm.faces.new((bm.verts[face_idx[0]], bm.verts[face_idx[1]], bm.verts[face_idx[2]]))
-        except ValueError as e:
-            error.recoverable(
-                f"Adding face {face_idx} resulted in ValueError - This should have been a valid triangle. "
-                f"Vert count: {len(bm.verts)}.\n{e}")
-        else:
-            face.smooth = True
-            face.material_index = attr_idx
-            triangles.add(tuple(sorted(face_idx)))
-            return face
-
+    # TODO This is currently a performance bottleneck, and I think there are a lot of parts to that:
+    # - use of stored() and set() a lot on small values - these are heap allocations we don't need
+    # - copying elements of the triangle_list into tri_idxs
+    # - Most of all, doing per-loop layer value sets. It would be better to use an array here? Set "here's the array of color0s for each loop"...
     for m_i, gmd_mesh in enumerate(gmd_meshes):
         layers = attr_set_layers[gmd_mesh.vertices_data.layout.packing_flags]
         # Check the layers
@@ -137,8 +125,8 @@ def gmd_meshes_to_bmesh(
         attr_idx = attr_set_material_idx_mapping[id(gmd_mesh.attribute_set)]
 
         # For face in mesh
-        for ti in range(0, len(gmd_mesh.triangle_indices), 3):
-            tri_idxs = gmd_mesh.triangle_indices[ti:ti + 3]
+        for ti in range(0, len(gmd_mesh.triangles.triangle_list), 3):
+            tri_idxs = gmd_mesh.triangles.triangle_list[ti:ti + 3]
             if 0xFFFF in tri_idxs:
                 error.recoverable(f"Found an 0xFFFF index inside a triangle_indices list! That shouldn't happen.")
                 continue
@@ -150,38 +138,52 @@ def gmd_meshes_to_bmesh(
             if tuple(sorted(remapped_tri_idxs)) in triangles:
                 continue
             # Create face
-            face = add_face_to_bmesh(remapped_tri_idxs, attr_idx)
-            if not face:
-                # Creating the face failed for some reason
+            try:
+                # This can throw ValueError if the triangle is "degenerate" - i.e. has two vertices that are the same
+                # [1, 2, 3] is fine
+                # [1, 2, 2] is degenerate
+                # This should never be called with degenerate triangles, but if there is one we skip it and recover.
+                face = bm.faces.new(
+                    (bm.verts[remapped_tri_idxs[0]], bm.verts[remapped_tri_idxs[1]], bm.verts[remapped_tri_idxs[2]]))
+            except ValueError as e:
+                error.recoverable(
+                    f"Adding face {remapped_tri_idxs} resulted in ValueError - This should have been a valid triangle. "
+                    f"Vert count: {len(bm.verts)}.\n{e}")
                 continue
+            else:
+                face.smooth = True
+                face.material_index = attr_idx
+                triangles.add(tuple(sorted(remapped_tri_idxs)))
+
+            verts_with_loops = list(zip(tri_idxs, face.loops))
 
             # Apply Col0, Col1, TangentW, UV for each loop
             if layers.col0_layer:
                 assert gmd_mesh.vertices_data.col0 is not None
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     color = gmd_mesh.vertices_data.col0[v_i]
                     loop[layers.col0_layer] = color
 
             if layers.col1_layer:
                 assert gmd_mesh.vertices_data.col1 is not None
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     color = gmd_mesh.vertices_data.col1[v_i]
                     loop[layers.col1_layer] = color
 
             if layers.weight_data_layer:
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     weight = gmd_mesh.vertices_data.weight_data[v_i]
                     loop[layers.weight_data_layer] = weight
 
             if layers.bone_data_layer:
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     # Divide by 255 to scale to 0..1
                     bones = gmd_mesh.vertices_data.bone_data[v_i] / 255
                     loop[layers.bone_data_layer] = bones
 
             if layers.normal_w_layer:
                 assert gmd_mesh.vertices_data.normal is not None
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     normal_w = gmd_mesh.vertices_data.normal[v_i][3]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
@@ -189,7 +191,7 @@ def gmd_meshes_to_bmesh(
 
             if layers.tangent_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     tangent = gmd_mesh.vertices_data.tangent[v_i]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
@@ -198,7 +200,7 @@ def gmd_meshes_to_bmesh(
 
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
-                for (v_i, loop) in zip(tri_idxs, face.loops):
+                for (v_i, loop) in verts_with_loops:
                     tangent_w = gmd_mesh.vertices_data.tangent[v_i][3]
                     # Convert from [-1, 1] to [0, 1]
                     # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
@@ -206,11 +208,11 @@ def gmd_meshes_to_bmesh(
 
             for uv_i, (uv_componentcount, uv_layer) in enumerate(layers.uv_layers):
                 if uv_componentcount == 2:
-                    for (v_i, loop) in zip(tri_idxs, face.loops):
+                    for (v_i, loop) in verts_with_loops:
                         original_uv = gmd_mesh.vertices_data.uvs[uv_i][v_i]
                         loop[uv_layer].uv = (original_uv[0], 1.0 - original_uv[1])
                 else:
-                    for (v_i, loop) in zip(tri_idxs, face.loops):
+                    for (v_i, loop) in verts_with_loops:
                         original_uv = gmd_mesh.vertices_data.uvs[uv_i][v_i]
                         loop[uv_layer] = Vector(original_uv).resized(4)
                         if any(x < 0 or x > 1 for x in original_uv):

@@ -2,14 +2,13 @@ import argparse
 import math
 from pathlib import Path
 
-from yk_gmd_blender.structurelib.primitives import c_uint16
+from mathutils import Quaternion
 from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
 from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
 from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
     pack_abstract_scene, pack_file_data
-from mathutils import Quaternion
-
 from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common
+from yk_gmd_blender.structurelib.primitives import c_uint16
 
 
 def quaternion_to_euler_angle(q: Quaternion):
@@ -80,7 +79,7 @@ if __name__ == '__main__':
     # new_file_bytearray = bytearray()
     # FilePacker_YK1.pack(file_data.file_is_big_endian(), new_file_data, new_file_bytearray)
     unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(),
-                                                 file_data.vertices_are_big_endian(), scene, error_reporter)
+                                                 file_data.vertices_are_big_endian(), scene, file_data, error_reporter)
     new_file_bytearray = pack_file_data(version_props, unabstracted_file_data, error_reporter)
 
     new_version_props, new_header, new_file_data = read_gmd_structures(bytes(new_file_bytearray), error_reporter)
