@@ -1,10 +1,12 @@
 import argparse
 import itertools
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Callable, TypeVar, Tuple, cast, Iterable, Set, DefaultDict, Optional, Dict, Generic, Sequence
 
+from gmdlib.structure.version import GMDVersion
 from mathutils import Vector
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
@@ -53,6 +55,7 @@ class ComparisonReporter:
             self.important_mismatches += "\n"
 
     def raise_mismatches(self):
+        sys.stdout.flush()
         if self.important_mismatches:
             raise GMDImportExportError(self.important_mismatches)
 
@@ -670,6 +673,26 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
                  header_src.overall_bounds.abstractify(),  # type: ignore
                  header_dst.overall_bounds.abstractify(),  # type: ignore
                  cmp)
+
+    def compare_name_arrs(f: str):
+        list_a = getattr(file_data_src, f)
+        list_b = getattr(file_data_dst, f)
+        if list_a != list_b:
+            cmp_str = f"file_data: field {f} differs:\n\tsrc    \tdst\n"
+            for x, y in itertools.zip_longest(list_a, list_b):
+                x_text = x.text if x is not None else "-"
+                y_text = y.text if y is not None else "-"
+                cmp_str += f"\t{x_text: <20s}\t{y_text: <20s}\n"
+            cmp.important_mismatch(cmp_str)
+
+    if header_src.get_version_properties().major_version == GMDVersion.Dragon:
+        # TODO ooh this one's a doozy! AFAIK there is no deterministic way to sort these by name the same way RGG did.
+        # Right now the addon tries to emulate the behaviour for Kiryu Yakuza Kiwami 2, but that breaks - e.g.
+        # we assume shaders are sorted in reverse prefix order (rs_p before rs_o) because that's how it worked for Kiryu.
+        # LADGaiden trees do it the other way around: rs_p AFTER rs_o, and I don't think there's a consistent ordering.
+        # compare_name_arrs("shader_arr")
+        compare_name_arrs("texture_arr")
+        # compare_name_arrs("node_name_arr") # This has not been proven essential. TODO do this in the future?
 
     # Load and compare scene hierarchies
     import_mode = VertexImportMode.IMPORT_VERTICES if vertices else VertexImportMode.NO_VERTICES
