@@ -200,22 +200,18 @@ class BaseGMDSceneCreator(abc.ABC):
         if "[hair]" in mat_yk_data.shader_name and enginever == GMDVersion.Dragon:
             material.use_backface_culling = False
 
-        # HOLD IT! we're not done yet. setting UVs
-        def set_uvs(material: bpy.types.Material, uv_inputs: bpy.types.NodeInputs, rdpos, rtpos, rdpos2, rtpos2):
-            uv_inputs[0].default_value = rtpos  # RT X
-            uv_inputs[1].default_value = rtpos2  # RT Y
-            uv_inputs[2].default_value = rdpos  # R(D/S/M) X
-            uv_inputs[3].default_value = rdpos2  # ^ Y
-            uv_inputs[4].default_value = mat_yk_data.unk12[12]  # imperfection (UV1 * (2 ^ x))
-            uv_inputs[5].default_value = 1.0 if enginever == GMDVersion.Dragon else 0.0
-
         rdrt_shaders = ["[rd]", "[rt]", "[rs]", "_m2"]
 
         if mat_yk_data.inited == True and any([x in mat_yk_data.shader_name for x in rdrt_shaders]):
-            node = material.node_tree.nodes.new('ShaderNodeGroup')
-            node.node_tree = get_uv_scaler_node_group(self.error)
+            uv_scaler_node = material.node_tree.nodes.new('ShaderNodeGroup')
+            uv_scaler_node.node_tree = get_uv_scaler_node_group(self.error)
 
-            if enginever != GMDVersion.Dragon:
+            if enginever == GMDVersion.Dragon:
+                rtpos = mat_yk_data.unk12[6]
+                rtpos2 = mat_yk_data.unk12[7]
+                rdpos = mat_yk_data.unk12[4]
+                rdpos2 = mat_yk_data.unk12[5]
+            else:
                 if "[rd]" not in mat_yk_data.shader_name and "[rt]" not in mat_yk_data.shader_name:
                     rtpos = mat_yk_data.unk12[2]
                     rtpos2 = mat_yk_data.unk12[3]
@@ -226,23 +222,24 @@ class BaseGMDSceneCreator(abc.ABC):
                     rtpos2 = mat_yk_data.attribute_set_floats[9]
                     rdpos = mat_yk_data.unk12[8]
                     rdpos2 = mat_yk_data.unk12[9]
-            else:
-                rtpos = mat_yk_data.unk12[6]
-                rtpos2 = mat_yk_data.unk12[7]
-                rdpos = mat_yk_data.unk12[4]
-                rdpos2 = mat_yk_data.unk12[5]
 
-            set_uvs(material, node.inputs, rdpos, rtpos, rdpos2, rtpos2)
-            node.location = (-750, -300)
+            uv_scaler_node.inputs[0].default_value = rtpos  # RT X
+            uv_scaler_node.inputs[1].default_value = rtpos2  # RT Y
+            uv_scaler_node.inputs[2].default_value = rdpos  # R(D/S/M) X
+            uv_scaler_node.inputs[3].default_value = rdpos2  # ^ Y
+            uv_scaler_node.inputs[4].default_value = mat_yk_data.unk12[12]  # imperfection (UV1 * (2 ^ x))
+            uv_scaler_node.inputs[5].default_value = 1.0 if enginever == GMDVersion.Dragon else 0.0
+
+            uv_scaler_node.location = (-750, -300)
             for x in material.node_tree.links:
                 rdrm_textures = ["texture_rd", "texture_rm", "texture_rs"]
                 if "skin" not in mat_yk_data.shader_name and any([y in x.to_socket.name
                                                                   for y in rdrm_textures]):
-                    material.node_tree.links.new(node.outputs[1], x.from_node.inputs[0])
+                    material.node_tree.links.new(uv_scaler_node.outputs[1], x.from_node.inputs[0])
                 if x.to_socket.name == "texture_rt":
-                    material.node_tree.links.new(node.outputs[2], x.from_node.inputs[0])
+                    material.node_tree.links.new(uv_scaler_node.outputs[2], x.from_node.inputs[0])
                 if x.to_socket.name == "texture_refl" and "h2dz" in mat_yk_data.shader_name:
-                    material.node_tree.links.new(node.outputs[0], x.from_node.inputs[0])
+                    material.node_tree.links.new(uv_scaler_node.outputs[0], x.from_node.inputs[0])
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material

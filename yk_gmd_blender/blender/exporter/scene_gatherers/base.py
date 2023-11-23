@@ -226,6 +226,7 @@ class BaseGMDSceneGatherer(abc.ABC):
         uv_node = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and
                    node.node_tree.name == "UV scaler"]
 
+        # TODO We assume a shader only has a UV node if it's for an rdrt shader?
         if len(uv_node) == 1:
             rtpos = uv_node[0].inputs[0].default_value  # RT X
             rtpos2 = uv_node[0].inputs[1].default_value  # RT Y
@@ -251,6 +252,7 @@ class BaseGMDSceneGatherer(abc.ABC):
                     yakuza_data.attribute_set_floats[9] = rtpos2
                     yakuza_data.unk12[8] = rdpos
                     yakuza_data.unk12[9] = rdpos2
+
         elif len(uv_node) > 1:
             self.error.fatal(f"Too many UV scaler nodes in " + material.name + "!")
 
