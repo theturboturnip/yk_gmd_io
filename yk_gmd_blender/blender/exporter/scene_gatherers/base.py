@@ -211,10 +211,11 @@ class BaseGMDSceneGatherer(abc.ABC):
         else:
             self.error.fatal(f"Unknown GMDVersion {gmd_material_origin_version}")
 
-        # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data, and compare against provided in the node.
+        # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data,
+        #  and compare against provided in the node.
         # TODO - image nodes will null textures exist - those currently break the export
 
-        #gmd material override... dunno how else to do this!
+        # gmd material override... dunno how else to do this!
 
         gmd_material.origin_data.specular[0] = round(yakuza_shader_node.inputs["Specular color"].default_value[0] * 255)
         gmd_material.origin_data.specular[1] = round(yakuza_shader_node.inputs["Specular color"].default_value[1] * 255)
@@ -223,13 +224,13 @@ class BaseGMDSceneGatherer(abc.ABC):
         gmd_material.origin_data.opacity = round(yakuza_shader_node.inputs["Opacity"].default_value * 255)
 
         uv_node = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and
-                    node.node_tree.name == "UV scaler"]
+                   node.node_tree.name == "UV scaler"]
 
         if len(uv_node) == 1:
-            rtpos = uv_node[0].inputs[0].default_value #RT X
-            rtpos2 = uv_node[0].inputs[1].default_value #RT Y
-            rdpos = uv_node[0].inputs[2].default_value #R(D/S/M) X
-            rdpos2 = uv_node[0].inputs[3].default_value# ^ Y
+            rtpos = uv_node[0].inputs[0].default_value  # RT X
+            rtpos2 = uv_node[0].inputs[1].default_value  # RT Y
+            rdpos = uv_node[0].inputs[2].default_value  # R(D/S/M) X
+            rdpos2 = uv_node[0].inputs[3].default_value  # ^ Y
 
             if gmd_material_origin_version == GMDVersion.Dragon:
                 imperfection = uv_node[0].inputs[4].default_value  # imperfection

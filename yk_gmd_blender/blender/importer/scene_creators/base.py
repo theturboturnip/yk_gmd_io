@@ -10,7 +10,7 @@ from mathutils import Vector, Matrix
 from yk_gmd_blender.blender.common import GMDGame
 from yk_gmd_blender.blender.importer.mesh.mesh_importer import gmd_meshes_to_bmesh
 from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, get_uv_scaler_node_group, \
-    set_yakuza_shader_material_from_attributeset
+    set_yakuza_shader_material_from_attributeset, YakuzaPropertyGroup
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
@@ -154,7 +154,7 @@ class BaseGMDSceneCreator(abc.ABC):
 
         def make_yakuza_node_group(node_tree: bpy.types.NodeTree):
             node = node_tree.nodes.new("ShaderNodeGroup")
-            node.node_tree = get_yakuza_shader_node_group()
+            node.node_tree = get_yakuza_shader_node_group(self.error)
             return node
 
         if self.config.material_naming_convention == MaterialNamingType.Collection_Shader:
@@ -192,11 +192,12 @@ class BaseGMDSceneCreator(abc.ABC):
         )
 
         # check engine
-        enginever = GMDVersion(material.yakuza_data.material_origin_type)
+        mat_yk_data: YakuzaPropertyGroup = material.yakuza_data  # type: ignore
+        enginever = GMDVersion(mat_yk_data.material_origin_type)
 
         # Yakuza shaders all use backface culling (except for hair in DE.)
         material.use_backface_culling = True
-        if "[hair]" in material.yakuza_data.shader_name and enginever == GMDVersion.Dragon:
+        if "[hair]" in mat_yk_data.shader_name and enginever == GMDVersion.Dragon:
             material.use_backface_culling = False
 
         # HOLD IT! we're not done yet. setting UVs
@@ -205,43 +206,43 @@ class BaseGMDSceneCreator(abc.ABC):
             uv_inputs[1].default_value = rtpos2  # RT Y
             uv_inputs[2].default_value = rdpos  # R(D/S/M) X
             uv_inputs[3].default_value = rdpos2  # ^ Y
-            uv_inputs[4].default_value = material.yakuza_data.unk12[12]  # imperfection (UV1 * (2 ^ x))
+            uv_inputs[4].default_value = mat_yk_data.unk12[12]  # imperfection (UV1 * (2 ^ x))
             uv_inputs[5].default_value = 1.0 if enginever == GMDVersion.Dragon else 0.0
 
         rdrt_shaders = ["[rd]", "[rt]", "[rs]", "_m2"]
 
-        if material.yakuza_data.inited == True and any([x in material.yakuza_data.shader_name for x in rdrt_shaders]):
+        if mat_yk_data.inited == True and any([x in mat_yk_data.shader_name for x in rdrt_shaders]):
             node = material.node_tree.nodes.new('ShaderNodeGroup')
-            node.node_tree = get_uv_scaler_node_group()
+            node.node_tree = get_uv_scaler_node_group(self.error)
 
             if enginever != GMDVersion.Dragon:
-                if "[rd]" not in material.yakuza_data.shader_name and "[rt]" not in material.yakuza_data.shader_name:
-                    rtpos = material.yakuza_data.unk12[2]
-                    rtpos2 = material.yakuza_data.unk12[3]
-                    rdpos = material.yakuza_data.attribute_set_floats[8]
-                    rdpos2 = material.yakuza_data.attribute_set_floats[9]
+                if "[rd]" not in mat_yk_data.shader_name and "[rt]" not in mat_yk_data.shader_name:
+                    rtpos = mat_yk_data.unk12[2]
+                    rtpos2 = mat_yk_data.unk12[3]
+                    rdpos = mat_yk_data.attribute_set_floats[8]
+                    rdpos2 = mat_yk_data.attribute_set_floats[9]
                 else:
-                    rtpos = material.yakuza_data.attribute_set_floats[8]
-                    rtpos2 = material.yakuza_data.attribute_set_floats[9]
-                    rdpos = material.yakuza_data.unk12[8]
-                    rdpos2 = material.yakuza_data.unk12[9]
+                    rtpos = mat_yk_data.attribute_set_floats[8]
+                    rtpos2 = mat_yk_data.attribute_set_floats[9]
+                    rdpos = mat_yk_data.unk12[8]
+                    rdpos2 = mat_yk_data.unk12[9]
             else:
-                rtpos = material.yakuza_data.unk12[6]
-                rtpos2 = material.yakuza_data.unk12[7]
-                rdpos = material.yakuza_data.unk12[4]
-                rdpos2 = material.yakuza_data.unk12[5]
+                rtpos = mat_yk_data.unk12[6]
+                rtpos2 = mat_yk_data.unk12[7]
+                rdpos = mat_yk_data.unk12[4]
+                rdpos2 = mat_yk_data.unk12[5]
 
             set_uvs(material, node.inputs, rdpos, rtpos, rdpos2, rtpos2)
             node.location = (-750, -300)
             for x in material.node_tree.links:
                 rdrm_textures = ["texture_rd", "texture_rm", "texture_rs"]
-                if "skin" not in material.yakuza_data.shader_name and any([y in x.to_socket.name
-                                                                           for y in rdrm_textures]):
-                    material.node_tree.links.new(node.outputs[1],x.from_node.inputs[0])
+                if "skin" not in mat_yk_data.shader_name and any([y in x.to_socket.name
+                                                                  for y in rdrm_textures]):
+                    material.node_tree.links.new(node.outputs[1], x.from_node.inputs[0])
                 if x.to_socket.name == "texture_rt":
-                    material.node_tree.links.new(node.outputs[2],x.from_node.inputs[0])
-                if x.to_socket.name == "texture_refl" and "h2dz" in material.yakuza_data.shader_name:
-                    material.node_tree.links.new(node.outputs[0],x.from_node.inputs[0])
+                    material.node_tree.links.new(node.outputs[2], x.from_node.inputs[0])
+                if x.to_socket.name == "texture_refl" and "h2dz" in mat_yk_data.shader_name:
+                    material.node_tree.links.new(node.outputs[0], x.from_node.inputs[0])
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material
