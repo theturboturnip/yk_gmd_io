@@ -13,7 +13,7 @@ $ZipFile = "${path}\yk_gmd_blender.zip"
 Set-Location "$path"
 
 # collecting list of files that we want to archive excluding those that we don't want to preserve
-$Files = @(Get-ChildItem "${subdir}" -Recurse -File | Where-Object { $_ -Match "^*.py$" })
+$Files = @(Get-ChildItem "${subdir}" -Recurse -File | Where-Object { $_ -Match "^*.(py|blend)$" })
 $FullFilenames = $files | ForEach-Object -Process { Write-Output -InputObject $_.FullName }
 
 # remove old zip file
