@@ -156,6 +156,8 @@ DEFAULT_NORMAL_COLOR = (0.5, 0.5, 1, 1)
 DEFAULT_MULTI_COLOR = (0, 1, 0, 1)
 DEFAULT_Z_COLOR = (0.5, 1, 0.5, 1)
 
+RDRT_SHADERS = ["[rd]", "[rt]", "[rs]", "_m2"]
+
 
 def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, float, float]) -> bpy.types.Image:
     """

@@ -7,7 +7,7 @@ from typing import List, Dict, Optional, cast, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
-from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP
+from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, RDRT_SHADERS
 from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
@@ -226,8 +226,14 @@ class BaseGMDSceneGatherer(abc.ABC):
         uv_node = [node for node in material.node_tree.nodes if node.bl_idname == "ShaderNodeGroup" and
                    node.node_tree.name == "UV scaler"]
 
-        # TODO We assume a shader only has a UV node if it's for an rdrt shader?
         if len(uv_node) == 1:
+            if not any([x in yakuza_data.shader_name for x in RDRT_SHADERS]):
+                self.error.recoverable(
+                    f"Blender material '{material.name}' contains a UV scaler node, "
+                    f"but the shader may not support UV scaling. "
+                    f"This may produce unexpected results. Disable Strict Export to continue."
+                )
+
             rtpos = uv_node[0].inputs[0].default_value  # RT X
             rtpos2 = uv_node[0].inputs[1].default_value  # RT Y
             rdpos = uv_node[0].inputs[2].default_value  # R(D/S/M) X
@@ -242,7 +248,7 @@ class BaseGMDSceneGatherer(abc.ABC):
                 yakuza_data.unk12[5] = rdpos2
                 yakuza_data.unk12[12] = imperfection
             else:
-                if "[rd]" not in shader.name and "[rs]" in shader.name:
+                if "[rd]" not in shader.name and "[rt]" not in shader.name:
                     yakuza_data.unk12[2] = rtpos
                     yakuza_data.unk12[3] = rtpos2
                     yakuza_data.attribute_set_floats[8] = rdpos
