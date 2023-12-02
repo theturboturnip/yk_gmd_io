@@ -260,8 +260,6 @@ def gmd_meshes_to_bmesh(
         overall_mesh.normals_split_custom_set(tuple(zip(*(iter(clnors),) * 3)))
         overall_mesh.use_auto_smooth = True
         overall_mesh.free_normals_split()
-    else:
-        overall_mesh.calc_normals()
 
     bm.free()
 
