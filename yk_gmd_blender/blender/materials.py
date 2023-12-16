@@ -271,6 +271,8 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.material_origin_type = attribute_set.material.origin_version.value
     material.yakuza_data.material_json = json.dumps(vars(attribute_set.material.origin_data))
 
+    # TODO detect if yakuza 8 is used, because that apparently uses roughness instead of glossiness (notyoshi)
+
     # Set the skin shader to 1 if the shader is a skin shader
     yakuza_inputs["Skin shader"].default_value = 1.0 if "[skin]" in attribute_set.shader.name else 0.0
 
