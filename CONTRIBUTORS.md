@@ -1,0 +1,2 @@
+- Samuel Stark (https://github.com/theturboturnip)
+- notyoshi (https://github.com/nyshii)

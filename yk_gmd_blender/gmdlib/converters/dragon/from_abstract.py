@@ -297,7 +297,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             texture_diffuse=(gmd_attribute_set.texture_diffuse),
             texture_refl=(gmd_attribute_set.texture_refl),
             texture_multi=(gmd_attribute_set.texture_multi),
-            texture_unk1=(gmd_attribute_set.texture_unk1),
+            texture_rm=(gmd_attribute_set.texture_rm),
             texture_ts=(gmd_attribute_set.texture_rs),
             texture_normal=(gmd_attribute_set.texture_normal),
             texture_rt=(gmd_attribute_set.texture_rt),
@@ -321,7 +321,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
             texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
             texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
-            texture_unk1=make_texture_index(gmd_attribute_set.texture_unk1),
+            texture_rm=make_texture_index(gmd_attribute_set.texture_rm),
             texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
             texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
             texture_refl=make_texture_index(gmd_attribute_set.texture_refl),
