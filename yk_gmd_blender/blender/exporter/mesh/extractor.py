@@ -5,10 +5,10 @@ import numpy as np
 
 import bpy
 from yk_gmd_blender.blender.common import AttribSetLayerNames
-from yk_gmd_blender.meshlib.export_submeshing import MeshLoopIdx
 from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, VecStorage, VecCompFmt
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from yk_gmd_blender.meshlib.export_submeshing import MeshLoopIdx
 
 
 def generate_vertex_byteslices(vertex_buffer: GMDVertexBuffer, big_endian: bool) -> List[bytes]:
@@ -170,6 +170,10 @@ def compute_vertex_4weights(
 
     has_warned_about_weights_over_one = False
 
+    # In very rare cases blender has spit out vertex groups where g.weight = 0.
+    # Elsewhere we use .weight = 0 to imply "no group", so use a threshold value here to prevent this.
+    MIN_WEIGHT = 1.0 / 255.0
+
     for v in mesh.vertices:
         # For each vertex: take all boneweights that are part of this armature,
         # sort them in descending order of weight,
@@ -180,27 +184,33 @@ def compute_vertex_4weights(
             [
                 g
                 for g in v.groups
-                if g.group in relevant_vertex_groups
+                if g.group in relevant_vertex_groups and g.weight >= MIN_WEIGHT
             ],
             key=lambda g: g.weight,
             reverse=True
         )
 
         # Check if weights are greater than 1 or lower than 0
-        if gs and gs[0].weight > 1 and not has_warned_about_weights_over_one:
+        if any(g.weight > 1 for g in v.groups) and not has_warned_about_weights_over_one:
             error.recoverable(f"Some weights in mesh {mesh.name} are greater than 1. "
                               f"These can't be exported - try normalizing your weights, or turn off Strict Export "
                               f"to clamp it to 1")
             has_warned_about_weights_over_one = True
-        if gs and gs[-1].weight < 0:
-            error.fatal(f"Some weights in mesh {mesh.name} are smaller than 0 - this is impossible.")
+        if any(g.weight < 0 for g in v.groups):
+            error.fatal(f"Some weights in mesh {mesh.name} are smaller than 0 - this is impossible to export.")
 
         # For each of the top four elements of bws, push it into bones/weights
-        v_n_weights = min(4, len(gs))
-        n_weights[v.index] = v_n_weights
-        for i in range(v_n_weights):
-            bones[v.index, i] = gs[i].group if gs[i].weight else 0
+        for i in range(min(4, len(gs))):
             weights[v.index, i] = min(1.0, gs[i].weight)
+            # Check after putting it in the ndarray that it still isn't 0, because it might have been rounded down
+            # inside the precision of uint8.
+            # This will ensure the invariant that weights[v.index, i] == 0 directly implies
+            # - bones[v.index, i] = 0
+            # - n_weights[v.index] <= i (i.e. iterating through range(n_weights[v.index]) will not produce i)
+            if weights[v.index, i] > 0:
+                bones[v.index, i] = gs[i].group
+                n_weights[v.index] = i + 1
+
         # Sanity checks for meshes with more than 4 ""major"" influences.
         if len(gs) > 4 and any(g.weight > 0.1 for g in gs[4:]):
             error.recoverable(f"Some vertices in mesh {mesh.name} have more than 4 major influences. "

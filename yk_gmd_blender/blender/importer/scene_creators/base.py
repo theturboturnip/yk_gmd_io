@@ -41,6 +41,7 @@ class GMDSceneCreatorConfig:
     material_naming_convention: MaterialNamingType
 
     fuse_vertices: bool
+    custom_split_normals: bool
 
 
 class BaseGMDSceneCreator(abc.ABC):
@@ -114,26 +115,24 @@ class BaseGMDSceneCreator(abc.ABC):
             # Otherwise all attribute sets are mapped to blender material index 0
             attr_set_material_idx_mapping = defaultdict(lambda: 0)
 
-        overall_mesh = bpy.data.meshes.new(gmd_node.name)
-
         # If we have any meshes, merge them into an overall BMesh
         if gmd_node.mesh_list:
-            overall_bm = gmd_meshes_to_bmesh(
+            overall_mesh = gmd_meshes_to_bmesh(
+                gmd_node.name,
                 gmd_node.mesh_list,
                 vertex_group_indices,
                 attr_set_material_idx_mapping,
                 gmd_to_blender_world=self.gmd_to_blender_world,
                 fuse_vertices=self.config.fuse_vertices,
+                custom_split_normals=self.config.custom_split_normals,
                 error=self.error
             )
-            self.error.debug("OBJ", f"\tOverall mesh vert count: {len(overall_bm.verts)}")
-            overall_bm.to_mesh(overall_mesh)
-            overall_bm.free()
             if self.config.import_materials:
                 for mat in blender_material_list:
                     overall_mesh.materials.append(mat)
         else:
             # Else use an empty mesh
+            overall_mesh = bpy.data.meshes.new(gmd_node.name)
             self.error.debug("OBJ", f"Empty mesh")
 
         return overall_mesh
