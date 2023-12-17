@@ -113,7 +113,10 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tan
     bpy_mesh = cast(bpy.types.Mesh, object.evaluated_get(dg).data)
 
     # Now it's triangulated we can calculate tangents
-    bpy_mesh.calc_normals_split()
+    if bpy.app.version < (4, 1):
+        # Blender 4.1 changed how split normals are used.
+        # TODO this probably wasn't needed anyway, but it doesn't hurt...
+        bpy_mesh.calc_normals_split()
     if needs_tangent:
         # This doesn't quite work correctly with meshes using custom split normals.
         # If a vertex in a mesh with custom split normals has the same normal value on every loop it touches,
