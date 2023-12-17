@@ -12,6 +12,7 @@ from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
 from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh, GMDMeshIndices
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
     convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
@@ -121,7 +122,11 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tan
         # is split into multiple GMD vertices because of the tangents.
         # This only started happening once we started using custom split normals.
         # It would be nice if we could figure out how GMD calculates tangents so we could match it exactly.
-        bpy_mesh.calc_tangents()
+        try:
+            bpy_mesh.calc_tangents()
+        except RuntimeError as err:
+            raise GMDImportExportError(
+                f"Failed to calculate tangents for object '{object.name_full}'. Try adding the triangulate modifier to this object to fix it.\n{err}")
 
     # TODO assuming this triangulates automatically
     bpy_mesh.calc_loop_triangles()

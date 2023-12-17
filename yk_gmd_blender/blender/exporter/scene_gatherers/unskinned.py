@@ -12,6 +12,7 @@ from yk_gmd_blender.blender.exporter.scene_gatherers.base import BaseGMDSceneGat
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
 from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
+from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
 from yk_gmd_blender.gmdlib.structure.common.node import NodeType
 
@@ -158,9 +159,21 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
                                      f"or changing to a different material.\n"
                                      f"If you're absolutely sure that this material works for unskinned meshes,"
                                      f"uncheck the 'Assume Skinned' box in the Yakuza Material Properties.")
-                gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
-                for gmd_mesh in gmd_meshes:
-                    gmd_object.add_mesh(gmd_mesh)
+                try:
+                    gmd_meshes = split_unskinned_blender_mesh_object(context, object, attribute_sets, self.error)
+                    for gmd_mesh in gmd_meshes:
+                        gmd_object.add_mesh(gmd_mesh)
+                except GMDImportExportError:
+                    # Assume GMDImportExportErrors have enough context
+                    raise
+                except Exception as err:
+                    # Raising a new RuntimeError (NOT a new GMDImportExportError) here makes blender show both
+                    # the old error and this new error. Combined, they should give enough context for people to
+                    # figure out where the problem in their meshes is
+                    # TODO `raise X from err` doesn't show `err` in Blender python console. If it ever does, use it here instead?
+                    raise RuntimeError(
+                        f"Error handling meshes in {object.name_full}: {err}"
+                    )  # from err
             else:
                 self.error.info(f"Object {object.name} is a mesh with no vertices - exporting as GMDUnskinnedObject")
         else:
