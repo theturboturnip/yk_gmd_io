@@ -112,9 +112,16 @@ def prepare_mesh(context: bpy.types.Context, object: bpy.types.Object, needs_tan
     # Evaluate the dependency graph (creates a new mesh)
     bpy_mesh = cast(bpy.types.Mesh, object.evaluated_get(dg).data)
 
-    # Now it's triangulated we can calculate tangents (TODO calc_normals_split may not be necessary anymore)
+    # Now it's triangulated we can calculate tangents
     bpy_mesh.calc_normals_split()
     if needs_tangent:
+        # This doesn't quite work correctly with meshes using custom split normals.
+        # If a vertex in a mesh with custom split normals has the same normal value on every loop it touches,
+        # this will still calculate a unique tangent for every loop.
+        # This means a single Blender vertex, which would otherwise map to a single GMD vertex,
+        # is split into multiple GMD vertices because of the tangents.
+        # This only started happening once we started using custom split normals.
+        # It would be nice if we could figure out how GMD calculates tangents so we could match it exactly.
         try:
             bpy_mesh.calc_tangents()
         except RuntimeError as err:
