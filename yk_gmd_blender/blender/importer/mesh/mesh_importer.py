@@ -239,7 +239,10 @@ def gmd_meshes_to_bmesh(
     # Code for setting split normals is based on the FBX importer:
     # https://github.com/sobotka/blender-addons/blob/master/io_scene_fbx/import_fbx.py#L1336
     if custom_split_normals:
-        overall_mesh.create_normals_split()
+        # pre-Blender-4.1 we had to explicitly ask for split normals. Now calling normals_split_custom_set is enough?
+        if bpy.app.version < (4, 1):
+            overall_mesh.create_normals_split()
+
         # clnors = [ vert0normalX, vert0normalY, vert0normalZ, vert1normalX, ...]
         clnors = array.array('f', [0.0] * (len(overall_mesh.loops) * 3))
         for i_loop, loop in enumerate(overall_mesh.loops):
@@ -250,16 +253,23 @@ def gmd_meshes_to_bmesh(
             clnors[i_loop * 3 + 2] = nor.z
 
         # This is a really weird setup.
-        # tuple(                      # expand the iterator of (float, float, float)
-        #   zip(                      # zip the three iterators together to create iter of (float, float, float)
-        #     *                       # unpack the tuple of \/
-        #       (iter(clnors),) * 3   # creates a tuple of (clnors_iter, clnors_iter, clnors_iter)
-        #   )
-        # )
+        # tuple(
+        #   # zip the same iterator three times to create an iter of (float, float, float)
+        #   zip(clnors_iter, clnors_iter, clnors_iter)
+        # ) # expand the iterator of (float, float, float) into a tuple
         # It creates three references to the same iterator, and zip() goes through them in order
-        overall_mesh.normals_split_custom_set(tuple(zip(*(iter(clnors),) * 3)))
-        overall_mesh.use_auto_smooth = True
-        overall_mesh.free_normals_split()
+        # clnors is [x, y, z, x, y, z, ...].
+        # zip() pops values out of the same iterator three times, so pops an x then a y then a z.
+        # zip() then packs those into a tuple and yields it.
+        # The toplevel tuple() creates a tuple-of-(xyz-tuple) from all the (xyz-tuple)s emitted from zip()
+        clnors_iter = iter(clnors)
+        overall_mesh.normals_split_custom_set(tuple(zip(clnors_iter, clnors_iter, clnors_iter)))
+        
+        # pre-Blender-4.1 we had to enable things like auto-smooth as a magic incantation to make normals work better.
+        if bpy.app.version < (4, 1):
+            overall_mesh.use_auto_smooth = True
+            overall_mesh.free_normals_split()  # Really not sure why we do this, but it doesn't have a visual impact.
+            # Maybe it helps save memory, in which case we should do it.
 
     bm.free()
 

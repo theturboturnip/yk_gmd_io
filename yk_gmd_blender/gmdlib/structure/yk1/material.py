@@ -6,11 +6,12 @@ from yk_gmd_blender.structurelib.primitives import *
 from yk_gmd_blender.gmdlib.structure.common.material_base import MaterialBaseStruct
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class MaterialStruct_YK1(MaterialBaseStruct):
     diffuse: List[int]
     opacity: int
     specular: List[int]
+    power: float
 
     unk1: List[int]
     unk2: List[int]
@@ -22,7 +23,8 @@ class MaterialStruct_YK1(MaterialBaseStruct):
 MaterialStruct_YK1_Unpack = StructureUnpacker(
     MaterialStruct_YK1,
     fields=[
-        ("unk1", FixedSizeArrayUnpacker(c_uint8, 4)),
+        ("power", c_float16),
+        ("unk1", FixedSizeArrayUnpacker(c_uint8, 2)),
 
         ("specular", FixedSizeArrayUnpacker(c_uint8, 3)),
         ("padding", c_uint8),

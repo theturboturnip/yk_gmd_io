@@ -197,7 +197,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 texture_diffuse=parse_texture_index(attribute_struct.texture_diffuse),
                 texture_refl=parse_texture_index(attribute_struct.texture_refl),
                 texture_multi=parse_texture_index(attribute_struct.texture_multi),
-                texture_unk1=parse_texture_index(attribute_struct.texture_unk1),
+                texture_rm=parse_texture_index(attribute_struct.texture_rm),
                 texture_rs=parse_texture_index(attribute_struct.texture_ts),
                 texture_normal=parse_texture_index(attribute_struct.texture_normal),
                 texture_rt=parse_texture_index(attribute_struct.texture_rt),
