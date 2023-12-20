@@ -61,6 +61,11 @@ class BaseImportGMD:
                                             "will have duplicate vertices removed.",
                                 default=True)
 
+    custom_split_normals: BoolProperty(name="Custom Split Normals",
+                                       description="If True, will use the custom split normals feature "
+                                                   "to exactly preserve normals.",
+                                       default=True)
+
     game_enum: EnumProperty(name="Game/Engine Version",
                             description="The Game or Engine version you're importing from."
                                         "If the specific game isn't available, you can select the engine type.",
@@ -107,7 +112,8 @@ class BaseImportGMD:
             import_materials=self.import_materials,
             material_naming_convention=material_naming_from_enum[self.material_naming],
 
-            fuse_vertices=self.fuse_vertices
+            fuse_vertices=self.fuse_vertices,
+            custom_split_normals=self.custom_split_normals,
         )
 
 
@@ -140,6 +146,7 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
         layout.prop(self, 'import_materials')
         layout.prop(self, 'material_naming')
         layout.prop(self, 'fuse_vertices')
+        layout.prop(self, 'custom_split_normals')
 
         layout.prop(self, 'import_hierarchy')
         layout.prop(self, 'import_objects')
@@ -227,6 +234,7 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
         layout.prop(self, 'import_materials')
         layout.prop(self, 'material_naming')
         layout.prop(self, 'fuse_vertices')
+        layout.prop(self, 'custom_split_normals')
 
     def execute(self, context):
         error = self.create_logger()
