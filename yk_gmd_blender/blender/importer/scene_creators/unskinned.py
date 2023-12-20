@@ -73,8 +73,8 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
             # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            node_obj.rotation_quaternion = Quaternion(
-                (gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
+            # No Idea why quat does not work but euler is fine
+            node_obj.rotation_euler = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y)).to_euler()
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
