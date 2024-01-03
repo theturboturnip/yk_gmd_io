@@ -80,7 +80,7 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
             indices_offset_by_min_index=True
         )
 
-    print(f"Unknown major/minor combination {version_major}.{version_minor}")
+    raise ValueError(f"Unknown major/minor combination {version_major}.{version_minor}")
 
 
 def get_combined_version_properties(version_combined: int):
