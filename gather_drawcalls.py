@@ -28,6 +28,8 @@ class DrawCall:
     matrix_count: int
     attrib_set_index: int # This is different to the column in the table! This is relative to the list of attribsets in the associated file. The database 
 
+# TODO APPARENTLY THERES A CRUCIAL DIFFERENCE BETWEEN INT AND INTEGER! WHAT JOY! FUCK
+# TODO MAKE A MIGRATION THAT REPLICATES ALL THE TABLES EXCEPT IT USES INTEGER PRIMARY KEY
 
 DRAWCALL_TABLE_SPEC_V1 = """CREATE TABLE DrawCalls (
     id INT PRIMARY KEY,
