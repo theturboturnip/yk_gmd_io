@@ -1,27 +1,27 @@
 from pathlib import Path
 from typing import Union, Tuple, cast
 
-from yk_gmd_blender.structurelib.base import PackingValidationError
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.gmdlib.converters.dragon.from_abstract import pack_abstract_contents_Dragon
-from yk_gmd_blender.gmdlib.converters.dragon.to_abstract import GMDAbstractor_Dragon
-from yk_gmd_blender.gmdlib.converters.kenzan.from_abstract import pack_abstract_contents_Kenzan
-from yk_gmd_blender.gmdlib.converters.kenzan.to_abstract import GMDAbstractor_Kenzan
-from yk_gmd_blender.gmdlib.converters.yk1.from_abstract import pack_abstract_contents_YK1
-from yk_gmd_blender.gmdlib.converters.yk1.to_abstract import GMDAbstractor_YK1
-from yk_gmd_blender.gmdlib.errors.error_classes import InvalidGMDFormatError
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.common.file import FileUnpackError, FileData_Common
-from yk_gmd_blender.gmdlib.structure.common.header import GMDHeaderStruct, GMDHeaderStruct_Unpack
-from yk_gmd_blender.gmdlib.structure.dragon.file import FilePacker_Dragon, FileData_Dragon
-from yk_gmd_blender.gmdlib.structure.dragon.header import GMDHeader_Dragon_Unpack
-from yk_gmd_blender.gmdlib.structure.endianness import check_is_file_big_endian
-from yk_gmd_blender.gmdlib.structure.kenzan.file import FileData_Kenzan, FilePacker_Kenzan
-from yk_gmd_blender.gmdlib.structure.kenzan.header import GMDHeader_Kenzan_Unpack
-from yk_gmd_blender.gmdlib.structure.version import GMDVersion, VersionProperties
-from yk_gmd_blender.gmdlib.structure.yk1.file import FileData_YK1, FilePacker_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.header import GMDHeader_YK1_Unpack
+from ..structurelib.base import PackingValidationError
+from .abstract.gmd_scene import GMDScene
+from .converters.common.to_abstract import FileImportMode, VertexImportMode
+from .converters.dragon.from_abstract import pack_abstract_contents_Dragon
+from .converters.dragon.to_abstract import GMDAbstractor_Dragon
+from .converters.kenzan.from_abstract import pack_abstract_contents_Kenzan
+from .converters.kenzan.to_abstract import GMDAbstractor_Kenzan
+from .converters.yk1.from_abstract import pack_abstract_contents_YK1
+from .converters.yk1.to_abstract import GMDAbstractor_YK1
+from .errors.error_classes import InvalidGMDFormatError
+from .errors.error_reporter import ErrorReporter
+from .structure.common.file import FileUnpackError, FileData_Common
+from .structure.common.header import GMDHeaderStruct, GMDHeaderStruct_Unpack
+from .structure.dragon.file import FilePacker_Dragon, FileData_Dragon
+from .structure.dragon.header import GMDHeader_Dragon_Unpack
+from .structure.endianness import check_is_file_big_endian
+from .structure.kenzan.file import FileData_Kenzan, FilePacker_Kenzan
+from .structure.kenzan.header import GMDHeader_Kenzan_Unpack
+from .structure.version import GMDVersion, VersionProperties
+from .structure.yk1.file import FileData_YK1, FilePacker_YK1
+from .structure.yk1.header import GMDHeader_YK1_Unpack
 
 
 def _get_file_data(data: Union[Path, str, bytes], error_reporter: ErrorReporter) -> bytes:

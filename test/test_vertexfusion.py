@@ -4,10 +4,10 @@ from typing import List, Tuple
 import pytest
 
 from mathutils import Vector
-from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, fuse_adjacent_vertices, \
-    detect_fully_fused_triangles, decide_on_unfusions, solve_unfusion
 from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDVertexBufferLayout, VecStorage, \
     VecCompFmt
+from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, fuse_adjacent_vertices, \
+    detect_fully_fused_triangles, decide_on_unfusions, solve_unfusion
 
 
 def mock_vertex_buffer(pos: List[Vector]) -> GMDVertexBuffer:

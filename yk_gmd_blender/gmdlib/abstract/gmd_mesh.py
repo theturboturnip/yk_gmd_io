@@ -4,9 +4,9 @@ from typing import List, Optional, Generator, Tuple, Iterable
 
 import numpy as np
 
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from .gmd_attributes import GMDAttributeSet
+from .gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer
+from .nodes.gmd_bone import GMDBone
 
 
 def iterate_three(x: array.ArrayType) -> Generator[Tuple[int, int, int], None, None]:

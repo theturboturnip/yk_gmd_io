@@ -3,8 +3,8 @@ from typing import Optional, Tuple, List, Sized, Iterable, Set
 
 import numpy as np
 
-from yk_gmd_blender.meshlib.vertex_buffer import VecStorage, VecCompFmt
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from ...meshlib.vertex_buffer import VecStorage, VecCompFmt
+from ..errors.error_reporter import ErrorReporter
 
 
 # Generic representation of a vertex buffer, that can contain "weights" and "bones" separately.

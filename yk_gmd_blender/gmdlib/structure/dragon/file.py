@@ -3,20 +3,20 @@ from typing import List, Tuple, Union, Type
 
 import mathutils
 
-from yk_gmd_blender.structurelib.base import BaseUnpacker
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
-from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common, FilePacker
-from yk_gmd_blender.gmdlib.structure.common.matrix import MatrixUnpacker
-from yk_gmd_blender.gmdlib.structure.common.node import NodeStruct_Unpack, NodeStruct
-from yk_gmd_blender.gmdlib.structure.common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, \
+from ....structurelib.base import BaseUnpacker
+from ..common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
+from ..common.file import FileData_Common, FilePacker
+from ..common.matrix import MatrixUnpacker
+from ..common.node import NodeStruct_Unpack, NodeStruct
+from ..common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, \
     Unk14Struct
-from yk_gmd_blender.gmdlib.structure.dragon.attribute import AttributeStruct_Dragon, AttributeStruct_Dragon_Unpack
-from yk_gmd_blender.gmdlib.structure.dragon.header import GMDHeader_Dragon_Unpack
-from yk_gmd_blender.gmdlib.structure.yk1.bbox import BoundsDataStruct_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
-from yk_gmd_blender.gmdlib.structure.yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
-from yk_gmd_blender.gmdlib.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, \
+from .attribute import AttributeStruct_Dragon, AttributeStruct_Dragon_Unpack
+from .header import GMDHeader_Dragon_Unpack
+from ..yk1.bbox import BoundsDataStruct_YK1
+from ..yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
+from ..yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
+from ..yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
+from ..yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, \
     VertexBufferLayoutStruct_YK1
 
 

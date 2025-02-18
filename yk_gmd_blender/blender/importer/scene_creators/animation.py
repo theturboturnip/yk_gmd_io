@@ -3,13 +3,13 @@ from typing import Dict, Tuple, Set
 
 import bpy
 from mathutils import Quaternion, Matrix, Vector
-from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
-from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig
-from yk_gmd_blender.blender.importer.scene_creators.skinned import armature_name_for_gmd_file
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from ...coordinate_converter import transform_rotation_gmd_to_blender
+from .base import BaseGMDSceneCreator, GMDSceneCreatorConfig
+from .skinned import armature_name_for_gmd_file
+from ....gmdlib.abstract.gmd_scene import GMDScene
+from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
+from ....gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
+from ....gmdlib.errors.error_reporter import ErrorReporter
 
 
 class GMDAnimationSceneCreator(BaseGMDSceneCreator):

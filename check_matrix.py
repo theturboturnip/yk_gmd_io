@@ -3,13 +3,13 @@ import math
 from pathlib import Path
 
 from mathutils import Quaternion, Matrix, Vector
-from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
-from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from .yk_gmd_blender.structurelib.primitives import c_uint16
+from .yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
+from .yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from .yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
+from .yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
+from .yk_gmd_blender.gmdlib.structure.common.file import FileData_Common
+from .yk_gmd_blender.gmdlib.structure.common.node import NodeType
 
 
 def quaternion_to_euler_angle(q: Quaternion):

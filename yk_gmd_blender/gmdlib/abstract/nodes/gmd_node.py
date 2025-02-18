@@ -4,7 +4,7 @@ from typing import List, Optional
 # TODO: I don't like depending on this
 # Create a set of read-only dataclasses for Vector etc?
 from mathutils import Vector, Quaternion
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from ...structure.common.node import NodeType
 
 
 @dataclass(init=False, repr=False)

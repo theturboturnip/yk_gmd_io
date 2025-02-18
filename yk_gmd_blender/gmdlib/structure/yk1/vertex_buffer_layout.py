@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint32, c_uint64
-from yk_gmd_blender.gmdlib.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
+from ....structurelib.base import StructureUnpacker
+from ....structurelib.primitives import c_uint32, c_uint64
+from ..common.vertex_buffer_layout import VertexBufferLayoutStruct
 
 
 @dataclass(frozen=True)

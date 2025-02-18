@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from mathutils import Vector, Quaternion, Matrix
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from .gmd_node import GMDNode
+from ...structure.common.node import NodeType
 
 
 @dataclass(repr=False)

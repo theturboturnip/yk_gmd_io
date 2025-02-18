@@ -1,7 +1,7 @@
 import mathutils
 
-from yk_gmd_blender.structurelib.base import ValueAdaptor, FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32
+from ....structurelib.base import ValueAdaptor, FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_float32
 
 MatrixUnpacker = ValueAdaptor(mathutils.Matrix,
                               FixedSizeArrayUnpacker(c_float32, 16),

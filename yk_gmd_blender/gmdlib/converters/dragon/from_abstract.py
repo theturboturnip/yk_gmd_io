@@ -1,27 +1,27 @@
 from typing import Dict
 
 from mathutils import Vector
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDUnk12
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
-from yk_gmd_blender.gmdlib.converters.common.from_abstract import RearrangedData, arrange_data_for_export, \
+from ...abstract.gmd_attributes import GMDUnk12
+from ...abstract.gmd_mesh import GMDSkinnedMesh
+from ...abstract.gmd_scene import GMDScene
+from ...abstract.nodes.gmd_bone import GMDBone
+from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
+from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
-from yk_gmd_blender.gmdlib.converters.yk1.from_abstract import yk1_bounds_from_gmd
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.mesh import IndicesStruct
-from yk_gmd_blender.gmdlib.structure.common.node import NodeStruct, NodeType
-from yk_gmd_blender.gmdlib.structure.common.unks import Unk12Struct, Unk14Struct
-from yk_gmd_blender.gmdlib.structure.dragon.attribute import AttributeStruct_Dragon, TextureIndexStruct_Dragon
-from yk_gmd_blender.gmdlib.structure.dragon.file import FileData_Dragon
-from yk_gmd_blender.gmdlib.structure.version import VersionProperties
-from yk_gmd_blender.gmdlib.structure.yk1.mesh import MeshStruct_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.object import ObjectStruct_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
-from yk_gmd_blender.structurelib.base import PackingValidationError
-from yk_gmd_blender.structurelib.primitives import c_uint16
+from ..yk1.from_abstract import yk1_bounds_from_gmd
+from ...errors.error_reporter import ErrorReporter
+from ...structure.common.checksum_str import ChecksumStrStruct
+from ...structure.common.mesh import IndicesStruct
+from ...structure.common.node import NodeStruct, NodeType
+from ...structure.common.unks import Unk12Struct, Unk14Struct
+from ...structure.dragon.attribute import AttributeStruct_Dragon, TextureIndexStruct_Dragon
+from ...structure.dragon.file import FileData_Dragon
+from ...structure.version import VersionProperties
+from ...structure.yk1.mesh import MeshStruct_YK1
+from ...structure.yk1.object import ObjectStruct_YK1
+from ...structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
+from ....structurelib.base import PackingValidationError
+from ....structurelib.primitives import c_uint16
 
 
 def vec3_to_vec4(vec: Vector, w: float = 0.0):

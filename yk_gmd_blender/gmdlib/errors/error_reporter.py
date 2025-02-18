@@ -1,7 +1,7 @@
 import abc
 from typing import NoReturn, Set
 
-from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
+from .error_classes import GMDImportExportError
 
 
 class ErrorReporter(abc.ABC):

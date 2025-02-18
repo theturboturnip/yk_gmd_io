@@ -4,18 +4,18 @@ from dataclasses import dataclass
 from typing import TypeVar, Tuple, List, Dict, Iterable, Callable, Set, Union
 
 from mathutils import Matrix
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import depth_first_iterate, GMDScene
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.node import NodeStackOp
+from ....structurelib.base import FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_uint16
+from ...abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
+from ...abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
+from ...abstract.gmd_scene import depth_first_iterate, GMDScene
+from ...abstract.gmd_shader import GMDVertexBufferLayout
+from ...abstract.nodes.gmd_bone import GMDBone
+from ...abstract.nodes.gmd_node import GMDNode
+from ...abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from ...errors.error_reporter import ErrorReporter
+from ...structure.common.checksum_str import ChecksumStrStruct
+from ...structure.common.node import NodeStackOp
 
 
 @dataclass(frozen=True)

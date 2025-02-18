@@ -3,21 +3,21 @@ from typing import List, Tuple, Union, Type
 
 import mathutils
 
-from yk_gmd_blender.structurelib.base import BaseUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16
-from yk_gmd_blender.gmdlib.structure.common.attribute import AttributeStruct_Unpack, AttributeStruct
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct_Unpack, ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common, FilePacker
-from yk_gmd_blender.gmdlib.structure.common.matrix import MatrixUnpacker
-from yk_gmd_blender.gmdlib.structure.common.node import NodeStruct_Unpack, NodeStruct
-from yk_gmd_blender.gmdlib.structure.common.unks import Unk12Struct, Unk14Struct, Unk14Struct_Unpack, \
+from ....structurelib.base import BaseUnpacker
+from ....structurelib.primitives import c_uint16
+from ..common.attribute import AttributeStruct_Unpack, AttributeStruct
+from ..common.checksum_str import ChecksumStrStruct_Unpack, ChecksumStrStruct
+from ..common.file import FileData_Common, FilePacker
+from ..common.matrix import MatrixUnpacker
+from ..common.node import NodeStruct_Unpack, NodeStruct
+from ..common.unks import Unk12Struct, Unk14Struct, Unk14Struct_Unpack, \
     Unk12Struct_Unpack
-from yk_gmd_blender.gmdlib.structure.kenzan.bbox import BoundsDataStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.kenzan.header import GMDHeader_Kenzan_Unpack
-from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan_Unpack, MaterialStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.kenzan.mesh import MeshStruct_Kenzan_Unpack, MeshStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.kenzan.object import ObjectStruct_Kenzan_Unpack, ObjectStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.kenzan.vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan_Unpack, \
+from .bbox import BoundsDataStruct_Kenzan
+from .header import GMDHeader_Kenzan_Unpack
+from .material import MaterialStruct_Kenzan_Unpack, MaterialStruct_Kenzan
+from .mesh import MeshStruct_Kenzan_Unpack, MeshStruct_Kenzan
+from .object import ObjectStruct_Kenzan_Unpack, ObjectStruct_Kenzan
+from .vertex_buffer_layout import VertexBufferLayoutStruct_Kenzan_Unpack, \
     VertexBufferLayoutStruct_Kenzan
 
 

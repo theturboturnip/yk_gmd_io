@@ -1,7 +1,7 @@
 import mathutils
 
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32, List
+from ....structurelib.base import FixedSizeArrayUnpacker, ValueAdaptor, BaseUnpacker
+from ....structurelib.primitives import c_float32, List
 
 
 def Vec3Unpacker_of(float_type: BaseUnpacker[float]):

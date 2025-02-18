@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Generator, Tuple, TypeVar, Iterable, Iterator
 
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
+from .nodes.gmd_node import GMDNode
 
 T = TypeVar('T')
 

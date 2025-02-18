@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint32
-from yk_gmd_blender.gmdlib.structure.kenzan.bbox import BoundsDataStruct_Kenzan, BoundsDataStruct_Kenzan_Unpack
+from ....structurelib.base import StructureUnpacker
+from ....structurelib.primitives import c_uint32
+from .bbox import BoundsDataStruct_Kenzan, BoundsDataStruct_Kenzan_Unpack
 
 
 @dataclass

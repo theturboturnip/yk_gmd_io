@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
 from mathutils import Vector
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
-from yk_gmd_blender.gmdlib.structure.common.vector import Vec3Unpacker, Vec4Unpacker
-from yk_gmd_blender.structurelib.base import StructureUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32
+from ...abstract.nodes.gmd_object import GMDBoundingBox
+from ..common.vector import Vec3Unpacker, Vec4Unpacker
+from ....structurelib.base import StructureUnpacker
+from ....structurelib.primitives import c_float32
 
 
 @dataclass

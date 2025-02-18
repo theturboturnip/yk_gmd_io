@@ -5,16 +5,16 @@ from typing import cast
 import numpy as np
 
 import bpy
-from yk_gmd_blender.blender.exporter.mesh.extractor import compute_vertex_4weights, loop_indices_for_material, \
+from .extractor import compute_vertex_4weights, loop_indices_for_material, \
     extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh, GMDMeshIndices
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.meshlib.export_submeshing import dedupe_loops, \
+from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from ....gmdlib.abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh, GMDMeshIndices
+from ....gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer
+from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
+from ....gmdlib.errors.error_classes import GMDImportExportError
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....meshlib.export_submeshing import dedupe_loops, \
     convert_meshloop_tris_to_tsubmeshes, MeshLoopTri, \
     MeshLoopIdx, DedupedVertIdx, SubmeshTri
 

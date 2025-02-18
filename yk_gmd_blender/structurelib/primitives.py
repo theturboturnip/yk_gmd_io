@@ -15,7 +15,7 @@ __all__ = [
 
 from typing import *
 
-from yk_gmd_blender.structurelib.base import BoundedPrimitiveUnpacker, BasePrimitive
+from .base import BoundedPrimitiveUnpacker, BasePrimitive
 
 c_uint8 = BoundedPrimitiveUnpacker(struct_fmt="B", python_type=int, range=(0, 255))
 c_uint16 = BoundedPrimitiveUnpacker(struct_fmt="H", python_type=int, range=(0, 65_535))

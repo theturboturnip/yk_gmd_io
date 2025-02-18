@@ -9,18 +9,18 @@ from bpy.types import (
     OperatorFileListElement,
 )
 from bpy_extras.io_utils import ImportHelper
-from yk_gmd_blender.blender.common import GMDGame
-from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.blender.importer.scene_creators.animation import GMDAnimationSceneCreator
-from yk_gmd_blender.blender.importer.scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
-from yk_gmd_blender.blender.importer.scene_creators.skinned import GMDSkinnedSceneCreator
-from yk_gmd_blender.blender.importer.scene_creators.unskinned import GMDUnskinnedSceneCreator
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
-from yk_gmd_blender.gmdlib.io import read_abstract_scene_from_filedata_object, \
+from ..common import GMDGame
+from ..error_reporter import BlenderErrorReporter
+from .scene_creators.animation import GMDAnimationSceneCreator
+from .scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
+from .scene_creators.skinned import GMDSkinnedSceneCreator
+from .scene_creators.unskinned import GMDUnskinnedSceneCreator
+from ...gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from ...gmdlib.errors.error_classes import GMDImportExportError
+from ...gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
+from ...gmdlib.io import read_abstract_scene_from_filedata_object, \
     read_gmd_structures
-from yk_gmd_blender.gmdlib.structure.version import VersionProperties, GMDVersion
+from ...gmdlib.structure.version import VersionProperties, GMDVersion
 
 
 class BaseImportGMD:

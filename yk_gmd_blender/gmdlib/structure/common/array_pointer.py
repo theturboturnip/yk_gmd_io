@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Generic, TypeVar, List
 
-from yk_gmd_blender.structurelib.base import BaseUnpacker, FixedSizeArrayUnpacker, StructureUnpacker
-from yk_gmd_blender.gmdlib.structure.common.sized_pointer import SizedPointerStruct, SizedPointerStruct_Unpack
+from ....structurelib.base import BaseUnpacker, FixedSizeArrayUnpacker, StructureUnpacker
+from .sized_pointer import SizedPointerStruct, SizedPointerStruct_Unpack
 
 T = TypeVar('T')
 

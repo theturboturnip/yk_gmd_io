@@ -1,8 +1,8 @@
 import time
 
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import HierarchyData, GMDScene
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import GMDAbstractor_Common
-from yk_gmd_blender.gmdlib.structure.kenzan.file import FileData_Kenzan
+from ...abstract.gmd_scene import HierarchyData, GMDScene
+from ..common.to_abstract import GMDAbstractor_Common
+from ...structure.kenzan.file import FileData_Kenzan
 
 
 class GMDAbstractor_Kenzan(GMDAbstractor_Common[FileData_Kenzan]):

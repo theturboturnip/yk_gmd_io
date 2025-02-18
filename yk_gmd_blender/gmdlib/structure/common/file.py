@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Type, Union, Tuple, List
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
-from yk_gmd_blender.gmdlib.structure.common.array_pointer import ArrayPointerStruct
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.header import GMDHeaderStruct
-from yk_gmd_blender.gmdlib.structure.common.sized_pointer import SizedPointerStruct
-from yk_gmd_blender.gmdlib.structure.endianness import check_is_file_big_endian, check_are_vertices_big_endian
-from yk_gmd_blender.gmdlib.structure.version import VersionProperties, \
+from ....structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
+from .array_pointer import ArrayPointerStruct
+from .checksum_str import ChecksumStrStruct
+from .header import GMDHeaderStruct
+from .sized_pointer import SizedPointerStruct
+from ..endianness import check_is_file_big_endian, check_are_vertices_big_endian
+from ..version import VersionProperties, \
     get_combined_version_properties
 
 

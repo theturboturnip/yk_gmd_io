@@ -6,8 +6,8 @@ import bpy
 from bmesh.types import BMesh, BMLayerCollection
 from bpy.props import BoolProperty, FloatVectorProperty, StringProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Panel
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from ..gmdlib.abstract.gmd_shader import GMDVertexBufferLayout, VecStorage
+from ..gmdlib.errors.error_reporter import ErrorReporter
 
 
 class GMDGame(IntEnum):

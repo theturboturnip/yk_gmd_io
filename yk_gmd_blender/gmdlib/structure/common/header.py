@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from typing import Tuple
 
-from yk_gmd_blender.structurelib.base import *
-from yk_gmd_blender.structurelib.primitives import *
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
-from yk_gmd_blender.gmdlib.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
-from yk_gmd_blender.gmdlib.structure.version import get_combined_version_properties, VersionProperties
+from ....structurelib.base import *
+from ....structurelib.primitives import *
+from .checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
+from ..endianness import check_are_vertices_big_endian, check_is_file_big_endian
+from ..version import get_combined_version_properties, VersionProperties
 
 
 def extract_base_header(data: bytes) -> Tuple['GMDHeaderStruct', bool]:

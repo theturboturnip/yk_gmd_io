@@ -3,20 +3,20 @@ from typing import List
 
 import mathutils
 
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint32
-from yk_gmd_blender.gmdlib.structure.common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.header import GMDHeaderStruct, StructureUnpacker, GMDHeaderStruct_Unpack
-from yk_gmd_blender.gmdlib.structure.common.mesh import MeshStruct
-from yk_gmd_blender.gmdlib.structure.common.node import NodeStruct
-from yk_gmd_blender.gmdlib.structure.common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
-from yk_gmd_blender.gmdlib.structure.common.unks import Unk12Struct, Unk14Struct
-from yk_gmd_blender.gmdlib.structure.dragon.attribute import AttributeStruct_Dragon
-from yk_gmd_blender.gmdlib.structure.kenzan.object import ObjectStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.yk1.bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
-from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1
-from yk_gmd_blender.gmdlib.structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
+from ....structurelib.base import FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_uint32
+from ..common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
+from ..common.checksum_str import ChecksumStrStruct
+from ..common.header import GMDHeaderStruct, StructureUnpacker, GMDHeaderStruct_Unpack
+from ..common.mesh import MeshStruct
+from ..common.node import NodeStruct
+from ..common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
+from ..common.unks import Unk12Struct, Unk14Struct
+from .attribute import AttributeStruct_Dragon
+from ..kenzan.object import ObjectStruct_Kenzan
+from ..yk1.bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
+from ..yk1.material import MaterialStruct_YK1
+from ..yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 
 
 @dataclass(frozen=True)

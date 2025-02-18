@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import *
+from .base import StructureUnpacker, FixedSizeArrayUnpacker
+from .primitives import *
 
 short_arr_6 = FixedSizeArrayUnpacker(c_uint16, 6)
 

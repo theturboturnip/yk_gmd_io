@@ -1,8 +1,8 @@
 import time
 
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import HierarchyData, GMDScene
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import GMDAbstractor_Common
-from yk_gmd_blender.gmdlib.structure.dragon.file import FileData_Dragon
+from ...abstract.gmd_scene import HierarchyData, GMDScene
+from ..common.to_abstract import GMDAbstractor_Common
+from ...structure.dragon.file import FileData_Dragon
 
 
 class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):

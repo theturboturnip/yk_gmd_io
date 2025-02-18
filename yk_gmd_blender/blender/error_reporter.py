@@ -1,7 +1,7 @@
 from typing import NoReturn, Callable, Set
 
-from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from ..gmdlib.errors.error_classes import GMDImportExportError
+from ..gmdlib.errors.error_reporter import ErrorReporter
 
 
 class BlenderErrorReporter(ErrorReporter):

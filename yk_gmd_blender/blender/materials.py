@@ -8,11 +8,11 @@ import bpy
 from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, IntProperty
 from bpy.types import NodeSocket, NodeSocketColor, ShaderNodeTexImage, \
     PropertyGroup
-from yk_gmd_blender.blender.common import AttribSetLayerNames
-from yk_gmd_blender.blender.error_reporter import BlenderErrorReporter
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBufferLayout
-from yk_gmd_blender.gmdlib.errors.error_reporter import StrictErrorReporter, ErrorReporter
+from .common import AttribSetLayerNames
+from .error_reporter import BlenderErrorReporter
+from ..gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from ..gmdlib.abstract.gmd_shader import GMDVertexBufferLayout
+from ..gmdlib.errors.error_reporter import StrictErrorReporter, ErrorReporter
 
 
 class YakuzaPropertyGroup(PropertyGroup):

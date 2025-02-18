@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_float32, c_uint32
+from ....structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_float32, c_uint32
 
 
 @dataclass(frozen=True)

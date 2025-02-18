@@ -4,11 +4,11 @@ from typing import Union, List, Dict, cast, Tuple, Set
 import bmesh
 import bpy.types
 from mathutils import Matrix, Vector
-from yk_gmd_blender.blender.common import AttribSetLayerNames, AttribSetLayers_bmesh
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
+from ...common import AttribSetLayerNames, AttribSetLayers_bmesh
+from ....gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
+from ....gmdlib.abstract.gmd_shader import GMDSkinnedVertexBuffer, GMDVertexBuffer
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 
 def gmd_meshes_to_bmesh(

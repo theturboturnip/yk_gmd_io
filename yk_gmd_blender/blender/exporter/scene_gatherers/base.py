@@ -8,18 +8,18 @@ from typing import List, Dict, Optional, cast, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup, ShaderNodeTexImage
 from mathutils import Vector
-from yk_gmd_blender.blender.common import GMDGame, YakuzaFileRootData
-from yk_gmd_blender.blender.materials import YAKUZA_SHADER_NODE_GROUP, RDRT_SHADERS
-from yk_gmd_blender.blender.materials import YakuzaPropertyGroup
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.version import GMDVersion
-from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1
+from ...common import GMDGame, YakuzaFileRootData
+from ...materials import YAKUZA_SHADER_NODE_GROUP, RDRT_SHADERS
+from ...materials import YakuzaPropertyGroup
+from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk12, GMDUnk14, GMDMaterial
+from ....gmdlib.abstract.gmd_scene import GMDScene, HierarchyData
+from ....gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout
+from ....gmdlib.abstract.nodes.gmd_node import GMDNode
+from ....gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
+from ....gmdlib.structure.version import GMDVersion
+from ....gmdlib.structure.yk1.material import MaterialStruct_YK1
 
 
 class BoundingBoxCalc(Enum):

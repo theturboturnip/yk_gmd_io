@@ -6,25 +6,25 @@ from enum import Enum
 from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional
 
 from mathutils import Matrix
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh, GMDMeshIndices
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject, GMDBoundingBox
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.common.attribute import AttributeStruct
-from yk_gmd_blender.gmdlib.structure.common.checksum_str import ChecksumStrStruct
-from yk_gmd_blender.gmdlib.structure.common.file import FileData_Common
-from yk_gmd_blender.gmdlib.structure.common.material_base import MaterialBaseStruct
-from yk_gmd_blender.gmdlib.structure.common.mesh import IndicesStruct, MeshStruct
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType, NodeStruct, NodeStackOp
-from yk_gmd_blender.gmdlib.structure.common.unks import Unk14Struct, Unk12Struct
-from yk_gmd_blender.gmdlib.structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
-from yk_gmd_blender.gmdlib.structure.version import VersionProperties
-from yk_gmd_blender.structurelib.base import FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16, c_uint8
+from ...abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
+from ...abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh, GMDMeshIndices
+from ...abstract.gmd_scene import GMDScene
+from ...abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
+from ...abstract.nodes.gmd_bone import GMDBone
+from ...abstract.nodes.gmd_node import GMDNode
+from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject, GMDBoundingBox
+from ...errors.error_reporter import ErrorReporter
+from ...structure.common.attribute import AttributeStruct
+from ...structure.common.checksum_str import ChecksumStrStruct
+from ...structure.common.file import FileData_Common
+from ...structure.common.material_base import MaterialBaseStruct
+from ...structure.common.mesh import IndicesStruct, MeshStruct
+from ...structure.common.node import NodeType, NodeStruct, NodeStackOp
+from ...structure.common.unks import Unk14Struct, Unk12Struct
+from ...structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
+from ...structure.version import VersionProperties
+from ....structurelib.base import FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_uint16, c_uint8
 
 
 class ParentStack:

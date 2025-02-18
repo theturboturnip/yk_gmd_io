@@ -2,10 +2,10 @@ import abc
 from dataclasses import dataclass
 from typing import List, Optional, Union, TypeVar
 
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDShader
-from yk_gmd_blender.gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
-from yk_gmd_blender.gmdlib.structure.version import GMDVersion
-from yk_gmd_blender.gmdlib.structure.yk1.material import MaterialStruct_YK1
+from .gmd_shader import GMDShader
+from ..structure.kenzan.material import MaterialStruct_Kenzan
+from ..structure.version import GMDVersion
+from ..structure.yk1.material import MaterialStruct_YK1
 
 T = TypeVar('T')
 

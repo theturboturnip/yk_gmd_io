@@ -4,11 +4,11 @@ from typing import List, Tuple, Optional, Union, Set, Mapping
 import numpy as np
 
 import bpy
-from yk_gmd_blender.blender.common import AttribSetLayerNames
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, VecStorage, VecCompFmt
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.meshlib.export_submeshing import MeshLoopIdx
+from ...common import AttribSetLayerNames
+from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from ....gmdlib.abstract.gmd_shader import GMDVertexBuffer, GMDSkinnedVertexBuffer, VecStorage, VecCompFmt
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....meshlib.export_submeshing import MeshLoopIdx
 
 
 def generate_vertex_byteslices(vertex_buffer: GMDVertexBuffer, big_endian: bool) -> List[bytes]:

@@ -2,12 +2,12 @@ import json
 
 import bpy
 from mathutils import Quaternion
-from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
+from .base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
     root_name_for_gmd_file
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
+from ....gmdlib.abstract.gmd_scene import GMDScene
+from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
+from ....gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from ....gmdlib.errors.error_reporter import ErrorReporter
 
 
 class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):

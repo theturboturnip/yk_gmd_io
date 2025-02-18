@@ -7,15 +7,15 @@ from typing import Dict, Union
 
 import bpy
 from mathutils import Vector, Matrix
-from yk_gmd_blender.blender.common import GMDGame
-from yk_gmd_blender.blender.importer.mesh.mesh_importer import gmd_meshes_to_bmesh
-from yk_gmd_blender.blender.materials import get_yakuza_shader_node_group, get_uv_scaler_node_group, \
+from ...common import GMDGame
+from ..mesh.mesh_importer import gmd_meshes_to_bmesh
+from ...materials import get_yakuza_shader_node_group, get_uv_scaler_node_group, \
     set_yakuza_shader_material_from_attributeset, YakuzaPropertyGroup, RDRT_SHADERS
-from yk_gmd_blender.gmdlib.abstract.gmd_attributes import GMDAttributeSet
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.version import GMDVersion
+from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet
+from ....gmdlib.abstract.gmd_scene import GMDScene
+from ....gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....gmdlib.structure.version import GMDVersion
 
 
 def root_name_for_gmd_file(gmd_file: GMDScene):

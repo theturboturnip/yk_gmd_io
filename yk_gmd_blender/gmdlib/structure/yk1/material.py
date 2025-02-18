@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import List
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
-from yk_gmd_blender.structurelib.primitives import *
-from yk_gmd_blender.gmdlib.structure.common.material_base import MaterialBaseStruct
+from ....structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
+from ....structurelib.primitives import *
+from ..common.material_base import MaterialBaseStruct
 
 
 @dataclass(frozen=False)

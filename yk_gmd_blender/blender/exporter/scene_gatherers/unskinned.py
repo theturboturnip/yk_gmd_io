@@ -4,17 +4,17 @@ from typing import Optional, Union, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector
-from yk_gmd_blender.blender.common import yakuza_hierarchy_node_data_sort_key
-from yk_gmd_blender.blender.coordinate_converter import transform_blender_to_gmd
-from yk_gmd_blender.blender.exporter.mesh.functions import split_unskinned_blender_mesh_object
-from yk_gmd_blender.blender.exporter.scene_gatherers.base import BaseGMDSceneGatherer, remove_blender_duplicate, \
+from ...common import yakuza_hierarchy_node_data_sort_key
+from ...coordinate_converter import transform_blender_to_gmd
+from ..mesh.functions import split_unskinned_blender_mesh_object
+from .base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
-from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_bone import GMDBone
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
-from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
-from yk_gmd_blender.gmdlib.errors.error_reporter import ErrorReporter
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from ....gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
+from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
+from ....gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
+from ....gmdlib.errors.error_classes import GMDImportExportError
+from ....gmdlib.errors.error_reporter import ErrorReporter
+from ....gmdlib.structure.common.node import NodeType
 
 
 class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):

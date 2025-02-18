@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Iterable, Tuple
 
 from mathutils import Vector, Quaternion, Matrix
-from yk_gmd_blender.gmdlib.abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh
-from yk_gmd_blender.gmdlib.abstract.nodes.gmd_node import GMDNode
-from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from ..gmd_mesh import GMDMesh, GMDSkinnedMesh
+from .gmd_node import GMDNode
+from ...structure.common.node import NodeType
 
 
 @dataclass()

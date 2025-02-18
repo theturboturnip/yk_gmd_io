@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from yk_gmd_blender.structurelib.base import StructureUnpacker, FixedSizeASCIIUnpacker
-from yk_gmd_blender.structurelib.primitives import c_uint16
+from ....structurelib.base import StructureUnpacker, FixedSizeASCIIUnpacker
+from ....structurelib.primitives import c_uint16
 
 
 @dataclass(frozen=True)

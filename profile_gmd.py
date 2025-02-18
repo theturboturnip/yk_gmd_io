@@ -4,9 +4,9 @@ import pstats
 from pathlib import Path
 from typing import TypeVar, Callable
 
-from yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
-from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
-from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
+from .yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
+from .yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
+from .yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
     pack_abstract_scene, pack_file_data
 
 T = TypeVar('T')
