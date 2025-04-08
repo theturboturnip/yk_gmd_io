@@ -99,7 +99,7 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
         # => replace the bones layout with one that uses 16-bit uints.
         layout = dataclasses.replace(
             attr_set.shader.vertex_buffer_layout,
-            bones_storage=VecStorage(VecCompFmt.U16, 4)
+            bones_storage=VecStorage(VecCompFmt.U16, attr_set.shader.vertex_buffer_layout.bones_storage.n_comps)
         )
     else:
         layout = attr_set.shader.vertex_buffer_layout
@@ -121,7 +121,10 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
                           f"If this is OK, disable Strict Export.")
     assert vertices.bone_data is not None
     assert vertices.weight_data is not None
-    _extract_skinned_boneweights(loops, mesh, bone_info, bone_remapper, vertices.bone_data, vertices.weight_data)
+    _extract_skinned_boneweights(
+        loops, mesh, bone_info, bone_remapper, vertices.bone_data, vertices.weight_data,
+        N_max_weights=layout.bones_storage.n_comps,
+    )
     if vertices.col0 is not None:
         _extract_from_color(loops, layers.col0_layer, vertices.col0)
     if vertices.col1 is not None:
@@ -137,17 +140,18 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
     return vertices
 
 
-def compute_vertex_4weights(
+def compute_vertex_Nweights(
         mesh: bpy.types.Mesh,
         relevant_vertex_groups: Set[int],
-        error: ErrorReporter
+        error: ErrorReporter,
+        N: int,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Given a bpy Mesh, find the top 4 bones and weights of each vertex.
+    Given a bpy Mesh, find the top (N in {4,8}) bones and weights of each vertex.
     Returns two ndarrays, one for bones and one for weights.
     bones[vertex][i] = 0 if weights[vertex][i] is 0, else = the index of a vertex group in relevant_vertex_groups.
     weights[vertex][i] = float in [0, 1].
-    n_weights[vertex] = the number of active weights for the vertex (max 4).
+    n_weights[vertex] = the number of active weights for the vertex (max N).
     e.g. if n_weights[v] = 3, bones[v][3] == weights[v][3] == 0 but weights[v][0..2] are nonzero.
     bones[vertex] and weights[vertex] are sorted in descending weight e.g.
     bones[v] = [0, 1, 2, 3]
@@ -156,6 +160,7 @@ def compute_vertex_4weights(
     :param relevant_vertex_groups: A set of relevant (mesh vertex group index) values. Weights for other groups are ignored.
     :return:
     """
+    assert N in [4, 8]
 
     # Right now we store the bone indices (which can be 0..all bones that touch the mesh) inside a uint16.
     # Once they're split up into submeshes the max is 255 to fit into a uint8, but I *think* >255 bones per overall mesh
@@ -164,8 +169,8 @@ def compute_vertex_4weights(
     if max(relevant_vertex_groups) > 65535:
         error.fatal(
             f"Mesh {mesh.name} has vertex group indices > 65535. This is not supported. Use fewer bones please.")
-    bones = np.zeros((len(mesh.vertices), 4), np.uint16)
-    weights = np.zeros((len(mesh.vertices), 4), np.float32)
+    bones = np.zeros((len(mesh.vertices), N), np.uint16)
+    weights = np.zeros((len(mesh.vertices), N), np.float32)
     n_weights = np.zeros(len(mesh.vertices), np.uint8)
 
     has_warned_about_weights_over_one = False
@@ -178,8 +183,8 @@ def compute_vertex_4weights(
         # For each vertex: take all boneweights that are part of this armature,
         # sort them in descending order of weight,
         # do sanity checks for values > 1 and < 0,
-        # and put the first 4 values into the bones/weights array.
-        # If there are fewer than 4 values, the others default to 0.
+        # and put the first N values into the bones/weights array.
+        # If there are fewer than N values, the others default to 0.
         gs = sorted(
             [
                 g
@@ -199,8 +204,8 @@ def compute_vertex_4weights(
         if any(g.weight < 0 for g in v.groups):
             error.fatal(f"Some weights in mesh {mesh.name} are smaller than 0 - this is impossible to export.")
 
-        # For each of the top four elements of bws, push it into bones/weights
-        for i in range(min(4, len(gs))):
+        # For each of the top N elements of bws, push it into bones/weights
+        for i in range(min(N, len(gs))):
             weights[v.index, i] = min(1.0, gs[i].weight)
             # Check after putting it in the ndarray that it still isn't 0, because it might have been rounded down
             # inside the precision of uint8.
@@ -211,11 +216,11 @@ def compute_vertex_4weights(
                 bones[v.index, i] = gs[i].group
                 n_weights[v.index] = i + 1
 
-        # Sanity checks for meshes with more than 4 ""major"" influences.
-        if len(gs) > 4 and any(g.weight > 0.1 for g in gs[4:]):
-            error.recoverable(f"Some vertices in mesh {mesh.name} have more than 4 major influences. "
+        # Sanity checks for meshes with more than N ""major"" influences.
+        if len(gs) > N and any(g.weight > 0.1 for g in gs[N:]):
+            error.recoverable(f"Some vertices in mesh {mesh.name} have more than {N} major influences. "
                               f"A major influence is a bone with weight greater than 0.1. "
-                              f"The exporter can only export 4 influences per vertex, so animation on this model may "
+                              f"The exporter can only export {N} influences per vertex, so animation on this model may "
                               f"look odd. Turn off Strict Export if this is acceptable.")
 
     return bones, weights, n_weights
@@ -327,18 +332,19 @@ def _extract_uv(loops: List[MeshLoopIdx], uv_idx: int, comp_count: int,
 def _extract_skinned_boneweights(loops: List[MeshLoopIdx], mesh: bpy.types.Mesh,
                                  bone_info: Tuple[np.ndarray, np.ndarray, np.ndarray],
                                  bone_remapper: Optional[Mapping[int, int]],
-                                 bone_data: np.ndarray, weight_data: np.ndarray):
+                                 bone_data: np.ndarray, weight_data: np.ndarray,
+                                 N_max_weights: int):
     bones, weights, n_weights = bone_info
 
     vertices = [mesh.loops[l].vertex_index for l in loops]
-    weight_data[:] = weights[vertices, :]
-    unmapped_bones = bones[vertices, :]
+    weight_data[:] = weights[vertices, :N_max_weights]
+    unmapped_bones = bones[vertices, :N_max_weights]
     if bone_remapper is None:
         np.copyto(bone_data, unmapped_bones, casting="safe")
     else:
         # Where vertices.weight_data > 0, remap vertices.bone_data with self.relevant_vertex_groups
         for i in range(len(vertices)):
-            for j in range(4):
+            for j in range(N_max_weights):
                 if weight_data[i, j] > 0:
                     bone_data[i, j] = bone_remapper[unmapped_bones[i, j]]
                 # Other bone_data elements are 0-initialized

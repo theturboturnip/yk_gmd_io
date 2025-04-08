@@ -69,7 +69,7 @@ def gmd_meshes_to_bmesh(
         if is_skinned:
             bones = buf.bone_data[i]
             weights = buf.weight_data[i]
-            for j in range(4):
+            for j in range(len(bones)):
                 if weights[j] <= 0:
                     break
                 vertex_group_index = vertex_group_indices[relevant_bones[bones[j]].name]
@@ -264,7 +264,7 @@ def gmd_meshes_to_bmesh(
         # The toplevel tuple() creates a tuple-of-(xyz-tuple) from all the (xyz-tuple)s emitted from zip()
         clnors_iter = iter(clnors)
         overall_mesh.normals_split_custom_set(tuple(zip(clnors_iter, clnors_iter, clnors_iter)))
-        
+
         # pre-Blender-4.1 we had to enable things like auto-smooth as a magic incantation to make normals work better.
         if bpy.app.version < (4, 1):
             overall_mesh.use_auto_smooth = True

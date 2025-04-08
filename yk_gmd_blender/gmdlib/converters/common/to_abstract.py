@@ -100,10 +100,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(
                 layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
             if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
-                self.error.fatal(
+                self.error.recoverable(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match "
                     f"expected {layout_struct.bytes_per_vertex}\n"
                     f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
+                abstract_layout = abstract_layout.with_forced_bpv(layout_struct.bytes_per_vertex, self.error)
 
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
                 # Create an empty vertex buffer

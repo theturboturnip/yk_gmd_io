@@ -3,8 +3,8 @@ from typing import Optional, Tuple, List, Sized, Iterable, Set
 
 import numpy as np
 
-from ...meshlib.vertex_buffer import VecStorage, VecCompFmt
 from ..errors.error_reporter import ErrorReporter
+from ...meshlib.vertex_buffer import VecStorage, VecCompFmt
 
 
 # Generic representation of a vertex buffer, that can contain "weights" and "bones" separately.
@@ -183,6 +183,11 @@ class GMDVertexBufferLayout:
 
     packing_flags: int
 
+    # When this is nonzero, all but the position are ignored when generating the
+    # numpy vertex datatype and the size is hardcoded to this value.
+    # This is useful when trying to debug vertex layout decoding errors
+    force_bpv_positions_only: int = 0
+
     def __str__(self):
         return f"GMDVertexBufferLayout(\n" \
                f"assume_skinned: {self.assume_skinned},\n" \
@@ -234,7 +239,8 @@ class GMDVertexBufferLayout:
         # If the vector uses full-precision float components, the length is set by `full_precision_n_comps`.
         # If the vector uses byte-size components, the format of those bytes is set by `byte_fmt`.
         def extract_vector_type(en: bool, start: int,
-                                full_precision_n_comps: int, byte_fmt: VecCompFmt) -> Optional[VecStorage]:
+                                full_precision_n_comps: int, byte_fmt: VecCompFmt,
+                                low_precision_n_comps: int = 4) -> Optional[VecStorage]:
             bits = extract_bits(start, 2)
             if en:
                 if bits == 0:
@@ -244,11 +250,11 @@ class GMDVertexBufferLayout:
                 elif bits == 1:
                     # Float16
                     comp_fmt = VecCompFmt.Float16
-                    n_comps = 4
+                    n_comps = low_precision_n_comps
                 else:
                     # Some kind of fixed
                     comp_fmt = byte_fmt
-                    n_comps = 4
+                    n_comps = low_precision_n_comps
                 return VecStorage(comp_fmt, n_comps)
             else:
                 return None
@@ -261,11 +267,22 @@ class GMDVertexBufferLayout:
             n_comps=3 if pos_count == 3 else 4
         )
 
-        weight_en = extract_bitmask(0x70)
-        weights_storage = extract_vector_type(weight_en, 7, full_precision_n_comps=4, byte_fmt=VecCompFmt.Byte_0_1)
+        # if bits -11---- are set, it implies that we are using 8 weights-per-vertex not 4.
+        double_weight = extract_bitmask(0x30)
+
+        weight_en = extract_bitmask(0x40)
+        weights_storage = extract_vector_type(
+            weight_en, 7,
+            full_precision_n_comps=4,
+            low_precision_n_comps=8 if double_weight else 4,
+            byte_fmt=VecCompFmt.Byte_0_1,
+        )
 
         bones_en = extract_bitmask(0x200)
-        bones_storage = VecStorage(VecCompFmt.Byte_0_255, 4) if bones_en else None
+        bones_storage = VecStorage(
+            VecCompFmt.Byte_0_255,
+            8 if double_weight else 4
+        ) if bones_en else None
 
         normal_en = extract_bitmask(0x400)
         normal_storage = extract_vector_type(normal_en, 11, full_precision_n_comps=3,
@@ -352,6 +369,12 @@ class GMDVertexBufferLayout:
 
         error.debug("BYTES", f"packing-flags: {vertex_packing_flags:x}")
 
+        if assume_skinned:
+            if weight_en and bones_en and (weights_storage.n_comps != bones_storage.n_comps):
+                error.fatal(f"Layout Flags {vertex_packing_flags:016x} is in a skinned context "
+                            f"and imports both weights and bone indices, but uses different widths "
+                            f"{weights_storage.n_comps} for weights and {bones_storage.n_comps} for bones")
+
         return GMDVertexBufferLayout.make_vertex_buffer_layout(
             assume_skinned=assume_skinned,
 
@@ -399,6 +422,32 @@ class GMDVertexBufferLayout:
             uv_storages=tuple(uv_storages),
 
             packing_flags=packing_flags,
+            force_bpv_positions_only=0,
+        )
+
+    def with_forced_bpv(self, force_bpv: int, error: ErrorReporter) -> "GMDVertexBufferLayout":
+        if force_bpv < self.pos_storage.native_size_bytes():
+            error.fatal(
+                f"forced bpv {force_bpv} not enough to fit position {self.pos_storage} {self.pos_storage.native_size_bytes()}")
+        return GMDVertexBufferLayout(
+            assume_skinned=self.assume_skinned,
+
+            pos_storage=self.pos_storage,
+            weights_storage=None,
+            bones_storage=None,
+            normal_storage=None,
+            tangent_storage=None,
+            unk_storage=None,
+            col0_storage=None,
+            col1_storage=None,
+            uv_storages=(),
+
+            # Keep the packing flags even though we're not importing everything.
+            # This means if you try to export,
+            # Blender should still try to recalculate the layout at some point
+            # and notice that it doesn't have the right data...
+            packing_flags=self.packing_flags,
+            force_bpv_positions_only=force_bpv,
         )
 
     def numpy_dtype(self, big_endian: bool) -> np.dtype:
@@ -414,6 +463,14 @@ class GMDVertexBufferLayout:
                 formats.append(storage.numpy_native_dtype(big_endian))
                 offsets.append(curr_offset)
                 curr_offset += storage.native_size_bytes()
+
+        if self.force_bpv_positions_only:
+            return np.dtype({
+                "names": names,
+                "formats": formats,
+                "offsets": offsets,
+                "itemsize": self.force_bpv_positions_only,
+            })
 
         register_storage("weights", self.weights_storage)
         register_storage("bones", self.bones_storage)
@@ -450,8 +507,14 @@ class GMDVertexBufferLayout:
             layout=self,
 
             pos=self.pos_storage.transform_native_fmt_array(vertices_np["pos"]),
-            weight_data=transform_storage_array("weights", self.weights_storage),
-            bone_data=transform_storage_array("bones", self.bones_storage),
+            weight_data=
+            np.zeros((vertex_count, 4), np.float32)
+            if self.assume_skinned and self.force_bpv_positions_only
+            else transform_storage_array("weights", self.weights_storage),
+            bone_data=
+            np.zeros((vertex_count, 4), np.uint8)
+            if self.assume_skinned and self.force_bpv_positions_only
+            else transform_storage_array("bones", self.bones_storage),
             normal=transform_storage_array("normal", self.normal_storage),
             tangent=transform_storage_array("tangent", self.tangent_storage),
             unk=transform_storage_array("unk", self.unk_storage),

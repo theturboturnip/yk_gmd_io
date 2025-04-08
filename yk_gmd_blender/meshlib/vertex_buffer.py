@@ -55,7 +55,7 @@ class VecStorage:
     n_comps: int
 
     def __post_init__(self):
-        assert 1 <= self.n_comps <= 4
+        assert 1 <= self.n_comps <= 8
 
     def native_size_bytes(self):
         return self.comp_fmt.native_size_bytes() * self.n_comps

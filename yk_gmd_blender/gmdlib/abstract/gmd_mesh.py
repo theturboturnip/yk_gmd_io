@@ -130,10 +130,14 @@ class GMDSkinnedMesh(GMDMesh):
         referenced_bone_indices = set(np.unique(
             np.where(self.vertices_data.weight_data > 0, self.vertices_data.bone_data, -1)).flatten())
         referenced_bone_indices.discard(-1)
-        if not self.empty and (not referenced_bone_indices or not self.relevant_bones):
-            raise TypeError(
-                f"Mesh is skinned but references no bones. "
-                f"referenced_indices: {referenced_bone_indices}, relevant_bones: {self.relevant_bones}")
+        # This is allowed: under non-strict circumstances,
+        # particularly with GMDVertexBufferLayout.force_bpv_positions_only,
+        # we can end up importing a vertex buffer that doesn't actually reference bones.
+        # Better to let it work out.
+        # if not self.empty and (not referenced_bone_indices or not self.relevant_bones):
+        #     raise TypeError(
+        #         f"Mesh is skinned but references no bones. "
+        #         f"referenced_indices: {referenced_bone_indices}, relevant_bones: {self.relevant_bones}")
         if referenced_bone_indices and max(referenced_bone_indices) >= len(self.relevant_bones):
             raise Exception(
                 f"Mesh uses {len(self.relevant_bones)} bones "

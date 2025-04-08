@@ -5,7 +5,7 @@ from typing import cast
 import numpy as np
 
 import bpy
-from .extractor import compute_vertex_4weights, loop_indices_for_material, \
+from .extractor import compute_vertex_Nweights, loop_indices_for_material, \
     extract_vertices_for_skinned_material, generate_vertex_byteslices, \
     extract_vertices_for_unskinned_material
 from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet
@@ -33,7 +33,10 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
         if group.name in bone_name_map
     }
 
-    bone_info = compute_vertex_4weights(mesh, relevant_vertex_groups=set(vertex_group_mapping.keys()), error=error)
+    # Compute the Nweights
+    # Always compute 8 weights - if we only need four we'll throw away the bottom ones
+    bone_info = compute_vertex_Nweights(mesh, relevant_vertex_groups=set(vertex_group_mapping.keys()), error=error,
+                                        N=8)
 
     error.debug("MESH", f"Exporting skinned meshes for {object.name}")
     skinned_submeshes: List[SkinnedSubmesh] = []
@@ -225,9 +228,10 @@ def convert_meshloop_tris_to_skinned_submeshes(
         error: ErrorReporter,
         max_bones_per_submesh=32,
 ) -> List[SkinnedSubmesh]:
-    if max_bones_per_submesh < 12:
+    bones_per_vert = attr_set.shader.vertex_buffer_layout.bones_storage.n_comps
+    if max_bones_per_submesh < 3 * bones_per_vert:
         error.fatal(f"Specified MAX_BONES_PER_SUBMESH={max_bones_per_submesh}, which is impossible. "
-                    f"A triangle can reference up to 12 bones (3 verts * 4 bones per vert).")
+                    f"A triangle can reference up to {3 * bones_per_vert} bones (3 verts * {bones_per_vert} bones per vert).")
 
     vert_groups, weights, n_weights = bone_info
 
