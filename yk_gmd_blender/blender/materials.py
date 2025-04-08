@@ -347,7 +347,12 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
                     material.blend_method = "HASHED"
                 else:
                     material.blend_method = "BLEND"
-                material.shadow_method = "NONE"
+                try:
+                    # Try setting the shadow method directly
+                    material.shadow_method = "NONE"
+                except AttributeError:
+                    # Handle Blender 4.3+ where shadow_method is removed
+                    print(f"Warning: shadow_method is not available in Blender {bpy.app.version_string}")
 
     # Attach the other textures.
     multi_tex, next_y = set_texture(yakuza_inputs["texture_multi"], attribute_set.texture_multi, next_y,
