@@ -60,13 +60,13 @@ class GMDTest:
 
     def __str__(self):
         return f"{self.src.parent.name}/{self.src.name}" + \
-               (
-                   f"-skin{self.skinned_method}" if self.skinned_method else ""
-               ) + (
-                   f"-log{self.logging}" if self.logging else "-nolog"
-               ) + (
-                   f"-importanim" if self.animation else ""
-               )
+            (
+                f"-skin{self.skinned_method}" if self.skinned_method else ""
+            ) + (
+                f"-log{self.logging}" if self.logging else "-nolog"
+            ) + (
+                f"-importanim" if self.animation else ""
+            )
 
 
 @pytest.fixture
@@ -159,21 +159,28 @@ def pytest_sessionstart(session):
     Called after the Session object has been created and
     before performing collection and entering the run test loop.
     """
+    output_dir = Path(session.config.getoption("output_dir"))
     blender = Path(session.config.getoption("blender"))
     blender_ver = session.config.getoption("blender_ver")
     isolate_blender = bool(session.config.getoption("--isolate_blender"))
     addon = Path(session.config.getoption("addon"))
 
+    os.makedirs(output_dir, exist_ok=True)
+    shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
     if isolate_blender:
         if not blender_ver:
             raise RuntimeError("Can't figure out which folder to install the script in - set --blender_ver")
         # Extract the addon into Blender's addons directory
-        addon_extract_path = blender / blender_ver / "scripts" / "addons"
+        addon_extract_path = blender / blender_ver / "scripts" / "addons_core"
 
         # Delete the old one first
         addon_output_path = (addon_extract_path / "yk_gmd_blender")
         if addon_output_path.is_dir():
             shutil.rmtree(addon_output_path)
+
+        os.makedirs(addon_extract_path, exist_ok=True)
 
         import zipfile
         with zipfile.ZipFile(addon, "r") as zip_ref:
@@ -206,7 +213,8 @@ def pytest_sessionfinish(session, exitstatus):
     if isolate_blender:
         if not blender_ver:
             raise RuntimeError("Can't figure out which folder to install the script in - set --blender_ver")
-        addon_output_path = blender / blender_ver / "scripts" / "addons"
+        addon_output_path = blender / blender_ver / "scripts" / "addons" / "yk_gmd_blender"
+
         if addon_output_path.is_dir():
             shutil.rmtree(addon_output_path)
     else:

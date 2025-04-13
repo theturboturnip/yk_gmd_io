@@ -37,11 +37,11 @@ COMPARE_FILTER = {
 
 
 @pytest.mark.order(10)
-def test_gmd(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+def test_blender_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     if gmdtest.animation:
         gmd_importanim(gmdtest, blender, isolate_blender)
     else:
-        gmd_importexport_comparelenient(gmdtest, blender, isolate_blender)
+        gmd_importexport(gmdtest, blender, isolate_blender)
 
 
 def gmd_importanim(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
@@ -73,7 +73,7 @@ def gmd_importanim(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
         ], check=True, env=env)
 
 
-def gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+def gmd_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
     # Create subfolder in output for directory
     gmdtest.dst.parent.mkdir(parents=True, exist_ok=True)
     # Copy the file into the output - this should be overwritten by blender
@@ -95,26 +95,34 @@ def gmd_importexport_comparelenient(gmdtest: GMDTest, blender: Path, isolate_ble
         subprocess.run([
             str(blender / "blender"),
             "--factory-startup",
+            "--addons", "yk_gmd_io",
             "-b",
             "--python-exit-code", "1",
             "-P", f"{SCRIPTLOC}/blender_do_importexport.py"
-        ], check=True, env=env)
+        ], check=True, env=env, capture_output=True)
     else:
         subprocess.run([
             str(blender / "blender"),
             "-b",
             "--python-exit-code", "1",
             "-P", f"{SCRIPTLOC}/blender_do_importexport.py"
-        ], check=True, env=env)
+        ], check=True, env=env, capture_output=True)
 
+
+@pytest.mark.order(30)
+def test_gmd_compare_lenient(gmdtest: GMDTest):
+    if gmdtest.animation:
+        return  # Didn't export anything
     # Compare the import/export
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=LenientErrorReporter(allowed_categories=set()),
                           strict=False, mismatch_filter=COMPARE_FILTER.get((gmdtest.src.parent.name, gmdtest.src.name)))
 
 
-@pytest.mark.order(20)
-def test_gmd_compare_strict(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+@pytest.mark.order(30)
+def test_gmd_compare_strict(gmdtest: GMDTest):
+    if gmdtest.animation:
+        return  # Didn't export anything
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=StrictErrorReporter(allowed_categories=set()),
                           strict=True, mismatch_filter=COMPARE_FILTER.get((gmdtest.src.parent.name, gmdtest.src.name)))
