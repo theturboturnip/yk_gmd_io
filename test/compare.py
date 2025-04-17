@@ -676,6 +676,38 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
                  header_dst.overall_bounds.abstractify(),  # type: ignore
                  cmp)
 
+    if len(file_data_src.node_arr) != len(file_data_dst.node_arr):
+        cmp.important_mismatch(
+            f"header: number of nodes differs\n"
+            f"src:\n\t{len(file_data_src.node_arr)}\n"
+            f"dst:\n\t{len(file_data_dst.node_arr)}"
+        )
+
+    for i, (node_src, node_dst) in enumerate(zip(file_data_src.node_arr, file_data_dst.node_arr)):
+        node_src_name = file_data_src.node_name_arr[node_src.name_index].text
+        node_dst_name = file_data_dst.node_name_arr[node_dst.name_index].text
+        if node_src_name != node_dst_name:
+            cmp.important_mismatch(
+                f"header: name differs in node #{i}:\n"
+                f"src:\n\t{node_src_name}\n"
+                f"dst:\n\t{node_dst_name}"
+            )
+
+        def compare_node_field(f: str):
+            if getattr(node_src, f) != getattr(node_dst, f):
+                cmp.important_mismatch(
+                    f"header: field {f} differs in node #{i}:\n"
+                    f"src:\n\t{getattr(node_src, f)}\n"
+                    f"dst:\n\t{getattr(node_dst, f)}"
+                )
+
+        compare_node_field("index")
+        compare_node_field("parent_of")
+        compare_node_field("sibling_of")
+        compare_node_field("stack_op")
+        compare_node_field("node_type")
+        compare_node_field("index")
+
     def compare_name_arrs(f: str):
         list_a = getattr(file_data_src, f)
         list_b = getattr(file_data_dst, f)
