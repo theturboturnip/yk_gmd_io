@@ -522,7 +522,7 @@ def compare_single_node_pair(skinned: bool, vertices: bool, src: GMDNode, dst: G
         assert isinstance(dst, (GMDSkinnedObject, GMDUnskinnedObject))
         compare_bbox(context, src.bbox, dst.bbox, cmp)
 
-    if not isinstance(src, GMDSkinnedObject):
+    if isinstance(src, (GMDUnskinnedObject, GMDBone)):
         compare_mat_field("matrix")
 
     if src.node_type == dst.node_type:
@@ -650,6 +650,16 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
                 f"dst:\n\t{getattr(header_dst, f)}"
             )
 
+    def compare_header_flags():
+        field_src = getattr(header_src, "flags")
+        field_dst = getattr(header_dst, "flags")
+        if field_src != field_dst:
+            cmp.important_mismatch(
+                f"header: field 'flags' differs:\n"
+                f"src:\n\t{[f'{f:x}' for f in field_src]}\n"
+                f"dst:\n\t{[f'{f:x}' for f in field_dst]}"
+            )
+
     compare_header_field("magic")
     # Compare endianness
     if check_are_vertices_big_endian(header_src.vertex_endian_check) != \
@@ -669,7 +679,7 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
     compare_header_field("padding")
 
     # Technically YK1-specific?
-    compare_header_field("flags")
+    compare_header_flags()
 
     compare_bbox("header: ",
                  header_src.overall_bounds.abstractify(),  # type: ignore
