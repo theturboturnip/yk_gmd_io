@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import compare
-from conftest import GMDTest
+from conftest import GMDTest, GMDTestMode
 from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, StrictErrorReporter
 
 # Filter out specific fatal errors for specific files
@@ -38,8 +38,10 @@ COMPARE_FILTER = {
 
 @pytest.mark.order(10)
 def test_blender_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
-    if gmdtest.animation:
+    if gmdtest.mode == GMDTestMode.AnimationImportOnly:
         gmd_importanim(gmdtest, blender, isolate_blender)
+    elif gmdtest.mode == GMDTestMode.LenientImportOnly:
+        gmd_importlenient(gmdtest, blender, isolate_blender)
     else:
         gmd_importexport(gmdtest, blender, isolate_blender)
 
@@ -70,6 +72,35 @@ def gmd_importanim(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
             "-b",
             "--python-exit-code", "1",
             "-P", f"{SCRIPTLOC}/blender_do_importanim.py"
+        ], check=True, env=env)
+
+
+def gmd_importlenient(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
+    # Set the src/dst for the import/export
+    env = os.environ.copy()
+    env.update({
+        "YKGMDIO_TEST_SRC": str(gmdtest.src),
+        "YKGMDIO_SKINNED": str(gmdtest.skinned_method),
+        "YKGMDIO_LOGGING": gmdtest.logging,
+    })
+
+    SCRIPTLOC = os.path.dirname(__file__)
+
+    # Run blender and import/export the file
+    if isolate_blender:
+        subprocess.run([
+            str(blender / "blender"),
+            "--factory-startup",
+            "-b",
+            "--python-exit-code", "1",
+            "-P", f"{SCRIPTLOC}/blender_do_lenientimport.py"
+        ], check=True, env=env)
+    else:
+        subprocess.run([
+            str(blender / "blender"),
+            "-b",
+            "--python-exit-code", "1",
+            "-P", f"{SCRIPTLOC}/blender_do_lenientimport.py"
         ], check=True, env=env)
 
 
@@ -111,7 +142,7 @@ def gmd_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
 
 @pytest.mark.order(30)
 def test_gmd_compare_lenient(gmdtest: GMDTest):
-    if gmdtest.animation:
+    if gmdtest.mode != GMDTestMode.ImportExport:
         return  # Didn't export anything
     # Compare the import/export
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
@@ -121,7 +152,7 @@ def test_gmd_compare_lenient(gmdtest: GMDTest):
 
 @pytest.mark.order(30)
 def test_gmd_compare_strict(gmdtest: GMDTest):
-    if gmdtest.animation:
+    if gmdtest.mode != GMDTestMode.ImportExport:
         return  # Didn't export anything
     compare.compare_files(gmdtest.src, gmdtest.dst, bool(gmdtest.skinned_method), vertices=True,
                           error=StrictErrorReporter(allowed_categories=set()),

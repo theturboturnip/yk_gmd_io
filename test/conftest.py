@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
 
 import pytest
@@ -50,11 +51,17 @@ def pytest_addoption(parser):
     )
 
 
+class GMDTestMode(IntEnum):
+    ImportExport = 0
+    AnimationImportOnly = 1
+    LenientImportOnly = 2
+
+
 @dataclass(frozen=True)
 class GMDTest:
     src: Path
     dst: Path
-    animation: bool
+    mode: GMDTestMode
     skinned_method: str
     logging: str
 
@@ -65,7 +72,9 @@ class GMDTest:
             ) + (
                 f"-log{self.logging}" if self.logging else "-nolog"
             ) + (
-                f"-importanim" if self.animation else ""
+                f"-importanim" if self.mode == GMDTestMode.AnimationImportOnly else ""
+            ) + (
+                f"-importlenient" if self.mode == GMDTestMode.LenientImportOnly else ""
             )
 
 
@@ -97,56 +106,75 @@ def pytest_generate_tests(metafunc):
             if not model_dir.is_dir():
                 continue
             skinned = "-Skinned" in model_dir.name
+            lenientimport = "-LenientImport" in model_dir.name
             for model in model_dir.iterdir():
                 if not model.name.endswith(".gmd"):
                     continue
                 if skinned:
-                    gmdtests.append(GMDTest(
-                        src=model,
-                        dst=output_dir / model_dir.name / model.name,
-                        skinned_method="CALCULATE",
-                        animation=False,
-                        logging=logging
-                    ))
-                    if test_all_skinned:
-                        gmdtests.append(GMDTest(
-                            src=model,
-                            dst=output_dir / model_dir.name / model.name,
-                            skinned_method="FROM_TARGET_FILE",
-                            animation=False,
-                            logging=logging
-                        ))
-                        gmdtests.append(GMDTest(
-                            src=model,
-                            dst=output_dir / model_dir.name / model.name,
-                            skinned_method="FROM_ORIGINAL_GMD_IMPORT",
-                            animation=False,
-                            logging=logging
-                        ))
-                    if test_animation:
+                    if lenientimport:
                         gmdtests.append(GMDTest(
                             src=model,
                             dst=output_dir / model_dir.name / model.name,
                             skinned_method="CALCULATE",
-                            animation=True,
+                            mode=GMDTestMode.LenientImportOnly,
                             logging=logging
                         ))
+                    else:
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="CALCULATE",
+                            mode=GMDTestMode.ImportExport,
+                            logging=logging
+                        ))
+                        if test_all_skinned:
+                            gmdtests.append(GMDTest(
+                                src=model,
+                                dst=output_dir / model_dir.name / model.name,
+                                skinned_method="FROM_TARGET_FILE",
+                                mode=GMDTestMode.ImportExport,
+                                logging=logging
+                            ))
+                            gmdtests.append(GMDTest(
+                                src=model,
+                                dst=output_dir / model_dir.name / model.name,
+                                skinned_method="FROM_ORIGINAL_GMD_IMPORT",
+                                mode=GMDTestMode.ImportExport,
+                                logging=logging
+                            ))
+                        if test_animation:
+                            gmdtests.append(GMDTest(
+                                src=model,
+                                dst=output_dir / model_dir.name / model.name,
+                                skinned_method="CALCULATE",
+                                mode=GMDTestMode.ImportExport,
+                                logging=logging
+                            ))
                 else:
-                    gmdtests.append(GMDTest(
-                        src=model,
-                        dst=output_dir / model_dir.name / model.name,
-                        skinned_method="",
-                        animation=False,
-                        logging=logging
-                    ))
-                    if test_animation:
+                    if lenientimport:
                         gmdtests.append(GMDTest(
                             src=model,
                             dst=output_dir / model_dir.name / model.name,
                             skinned_method="",
-                            animation=True,
+                            mode=GMDTestMode.LenientImportOnly,
                             logging=logging
                         ))
+                    else:
+                        gmdtests.append(GMDTest(
+                            src=model,
+                            dst=output_dir / model_dir.name / model.name,
+                            skinned_method="",
+                            mode=GMDTestMode.ImportExport,
+                            logging=logging
+                        ))
+                        if test_animation:
+                            gmdtests.append(GMDTest(
+                                src=model,
+                                dst=output_dir / model_dir.name / model.name,
+                                skinned_method="",
+                                mode=GMDTestMode.AnimationImportOnly,
+                                logging=logging
+                            ))
 
         # Sort by filesize, to get quick files out of the way first
         gmdtests.sort(key=lambda gmdtest: os.path.getsize(gmdtest.src))
