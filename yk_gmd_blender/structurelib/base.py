@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 T = TypeVar('T')
-TPackable = TypeVar('TPackable', bound='BaseUnpackable')
+TPackable = TypeVar('TPackable', bound='BaseUnpacker')
 
 
 class PackingValidationError(Exception):
@@ -40,7 +40,7 @@ class BaseUnpacker(Generic[T]):
     def sizeof(self):
         raise NotImplementedError()
 
-    def array_of(self: T, count) -> 'FixedSizeArrayUnpacker[T]':
+    def array_of(self, count) -> 'FixedSizeArrayUnpacker[T]':
         return FixedSizeArrayUnpacker(self, count)
 
 
@@ -99,7 +99,7 @@ class BasePrimitive(BaseUnpacker[T]):
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[T, int]:
         return struct.unpack_from(self.be_struct_fmt if big_endian else self.le_struct_fmt, data, offset)[
-                   0], offset + self.sizeof()
+            0], offset + self.sizeof()
 
     def pack(self, big_endian: bool, value: T, append_to: bytearray):
         self.validate_value(value)

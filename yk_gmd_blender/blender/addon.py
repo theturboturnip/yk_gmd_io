@@ -2,10 +2,6 @@
 
 import bpy
 from bpy.props import PointerProperty
-
-from .importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
-from .materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup, \
-    MATERIAL_OT_yakuza_update_expected_layers
 from .common import YakuzaHierarchyNodeData, OBJECT_PT_yakuza_hierarchy_node_data_panel, \
     BONE_PT_yakuza_hierarchy_node_data_panel, YakuzaFileRootData, OBJECT_PT_yakuza_file_root_data_panel
 from .exporter.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, menu_func_export_unskinned, \
@@ -13,6 +9,9 @@ from .exporter.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, m
 from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
     ImportUnskinnedGMD, menu_func_import_animation_unskinned, menu_func_import_animation_skinned, \
     ImportAnimationSkinnedGMD, ImportAnimationUnskinnedGMD
+from .importer.image_relink import YakuzaImageRelink, menu_func_yk_image_relink
+from .materials import YakuzaPropertyGroup, YakuzaPropertyPanel, YakuzaTexturePropertyGroup, \
+    MATERIAL_OT_yakuza_update_expected_layers
 
 classes = (
     ImportSkinnedGMD,

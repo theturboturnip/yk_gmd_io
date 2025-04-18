@@ -50,13 +50,13 @@ NodeStruct_Unpack = StructureUnpacker(
         ("sibling_of", c_int32),
         ("object_index", c_int32),
         ("matrix_index", c_int32),
-        ("stack_op", ValueAdaptor[NodeStackOp, int](NodeStackOp,
+        ("stack_op", ValueAdaptor[int, NodeStackOp](NodeStackOp,
                                                     c_int32,
                                                     NodeStackOp,
                                                     lambda stack_op: stack_op.value
                                                     )),
         ("name_index", c_int32),
-        ("node_type", ValueAdaptor[NodeType, int](NodeType,
+        ("node_type", ValueAdaptor[int, NodeType](NodeType,
                                                   c_int32,
                                                   NodeType,
                                                   lambda node_type: node_type.value

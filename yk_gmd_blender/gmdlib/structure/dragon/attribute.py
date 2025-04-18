@@ -52,15 +52,15 @@ class AttributeStruct_Dragon:
     unk3_always_0: int = 0
 
     @staticmethod
-    def calculate_texture_count(texture_diffuse: Optional,
-                                texture_multi: Optional,
-                                texture_normal: Optional,
+    def calculate_texture_count(texture_diffuse: Optional[str],
+                                texture_multi: Optional[str],
+                                texture_normal: Optional[str],
                                 # Never filled
-                                texture_rd: Optional,
-                                texture_rm: Optional,
-                                texture_rt: Optional,
-                                texture_ts: Optional,
-                                texture_refl: Optional,
+                                texture_rd: Optional[str],
+                                texture_rm: Optional[str],
+                                texture_rt: Optional[str],
+                                texture_ts: Optional[str],
+                                texture_refl: Optional[str],
                                 ):
         count = 0
         if texture_diffuse:
