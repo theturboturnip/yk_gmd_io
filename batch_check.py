@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import List, Dict, Tuple, Union, Callable
 
-from .yk_gmd_blender.structurelib.primitives import c_uint16
 from .yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
 from .yk_gmd_blender.gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
 from .yk_gmd_blender.gmdlib.converters.common.to_abstract import VertexImportMode, FileImportMode
@@ -13,8 +12,9 @@ from .yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
 from .yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from .yk_gmd_blender.gmdlib.structure.common.node import NodeType
 from .yk_gmd_blender.gmdlib.structure.kenzan.file import FileData_Kenzan
+from .yk_gmd_blender.gmdlib.structure.y3.mesh import MeshStruct_Y3
 from .yk_gmd_blender.gmdlib.structure.yk1.file import FileData_YK1
-from .yk_gmd_blender.gmdlib.structure.yk1.mesh import MeshStruct_YK1
+from .yk_gmd_blender.structurelib.primitives import c_uint16
 
 
 def batch_process_files(args, f: Callable[[str, Union[FileData_Kenzan, FileData_YK1], GMDScene], None]):
@@ -98,7 +98,7 @@ def print_attrs(args):
 
 
 def print_meshes(args):
-    mesh_files: Dict[str, List[Tuple[str, MeshStruct_YK1]]] = {}
+    mesh_files: Dict[str, List[Tuple[str, MeshStruct_Y3]]] = {}
 
     def process_meshes(_, file_data: FileData_YK1, __):
         if any([m.flags_maybe for m in file_data.mesh_arr]):
@@ -137,10 +137,7 @@ def print_meshes(args):
 
 
 def check_vertex_layouts(args):
-    # mesh_files: Dict[str, List[Tuple[str, MeshStruct_YK1]]] = {}
     relevant_files = []
-
-    # vertex_buffer_layouts = set()
 
     def process_meshes(_, file_data: FileData_YK1, scene: GMDScene):
         for node in scene.overall_hierarchy:

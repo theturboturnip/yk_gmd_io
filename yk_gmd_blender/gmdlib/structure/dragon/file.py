@@ -3,21 +3,21 @@ from typing import List, Tuple, Union, Type
 
 import mathutils
 
-from ....structurelib.base import BaseUnpacker
+from .attribute import AttributeStruct_Dragon, AttributeStruct_Dragon_Unpack
+from .header import GMDHeader_Dragon_Unpack
 from ..common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from ..common.file import FileData_Common, FilePacker
 from ..common.matrix import MatrixUnpacker
 from ..common.node import NodeStruct_Unpack, NodeStruct
 from ..common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, \
     Unk14Struct
-from .attribute import AttributeStruct_Dragon, AttributeStruct_Dragon_Unpack
-from .header import GMDHeader_Dragon_Unpack
+from ..y3.material import MaterialStruct_Y3_Unpack, MaterialStruct_Y3
+from ..y3.mesh import MeshStruct_Y3_Unpack, MeshStruct_Y3
+from ..y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3_Unpack, VertexBufferLayoutStruct_Y3
 from ..yk1.bbox import BoundsDataStruct_YK1
-from ..yk1.material import MaterialStruct_YK1_Unpack, c_uint16, MaterialStruct_YK1
-from ..yk1.mesh import MeshStruct_YK1, MeshStruct_YK1_Unpack
 from ..yk1.object import ObjectStruct_YK1, ObjectStruct_YK1_Unpack
-from ..yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1_Unpack, \
-    VertexBufferLayoutStruct_YK1
+from ....structurelib.base import BaseUnpacker
+from ....structurelib.primitives import c_uint16
 
 
 @dataclass(repr=False)
@@ -26,11 +26,11 @@ class FileData_Dragon(FileData_Common):
 
     node_arr: List[NodeStruct]
     obj_arr: List[ObjectStruct_YK1]
-    mesh_arr: List[MeshStruct_YK1]
+    mesh_arr: List[MeshStruct_Y3]
     attribute_arr: List[AttributeStruct_Dragon]
-    material_arr: List[MaterialStruct_YK1]
+    material_arr: List[MaterialStruct_Y3]
     matrix_arr: List[mathutils.Matrix]
-    vertex_buffer_arr: List[VertexBufferLayoutStruct_YK1]
+    vertex_buffer_arr: List[VertexBufferLayoutStruct_Y3]
     vertex_data: bytes  # byte data
     texture_arr: List[ChecksumStrStruct]
     shader_arr: List[ChecksumStrStruct]
@@ -58,11 +58,11 @@ class FileData_Dragon(FileData_Common):
         return FileData_Common.header_pointer_fields() + [
             ("node_arr", NodeStruct_Unpack),
             ("obj_arr", ObjectStruct_YK1_Unpack),
-            ("mesh_arr", MeshStruct_YK1_Unpack),
+            ("mesh_arr", MeshStruct_Y3_Unpack),
             ("attribute_arr", AttributeStruct_Dragon_Unpack),
-            ("material_arr", MaterialStruct_YK1_Unpack),
+            ("material_arr", MaterialStruct_Y3_Unpack),
             ("matrix_arr", MatrixUnpacker),
-            ("vertex_buffer_arr", VertexBufferLayoutStruct_YK1_Unpack),
+            ("vertex_buffer_arr", VertexBufferLayoutStruct_Y3_Unpack),
             ("vertex_data", bytes),
             ("texture_arr", ChecksumStrStruct_Unpack),
             ("shader_arr", ChecksumStrStruct_Unpack),

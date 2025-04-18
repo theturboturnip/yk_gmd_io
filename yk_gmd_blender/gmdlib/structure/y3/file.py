@@ -3,9 +3,13 @@ from typing import List, Tuple, Union, Type
 
 import mathutils
 
-from .bbox import BoundsDataStruct_YK1
-from .header import GMDHeader_YK1_Unpack
-from .object import ObjectStruct_YK1_Unpack, ObjectStruct_YK1
+from .bbox import TopLevelBoundsDataStruct_Y3
+from .header import GMDHeader_Y3_Unpack
+from .material import MaterialStruct_Y3_Unpack, c_uint16, MaterialStruct_Y3
+from .mesh import MeshStruct_Y3, MeshStruct_Y3_Unpack
+from .object import ObjectStruct_Y3, ObjectStruct_Y3_Unpack
+from .vertex_buffer_layout import VertexBufferLayoutStruct_Y3_Unpack, \
+    VertexBufferLayoutStruct_Y3
 from ..common.attribute import AttributeStruct_Unpack, AttributeStruct
 from ..common.checksum_str import ChecksumStrStruct, ChecksumStrStruct_Unpack
 from ..common.file import FileData_Common, FilePacker
@@ -13,19 +17,15 @@ from ..common.matrix import MatrixUnpacker
 from ..common.node import NodeStruct_Unpack, NodeStruct
 from ..common.unks import Unk14Struct_Unpack, Unk12Struct_Unpack, Unk12Struct, \
     Unk14Struct
-from ..y3.material import MaterialStruct_Y3, MaterialStruct_Y3_Unpack
-from ..y3.mesh import MeshStruct_Y3, MeshStruct_Y3_Unpack
-from ..y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3, VertexBufferLayoutStruct_Y3_Unpack
 from ....structurelib.base import BaseUnpacker
-from ....structurelib.primitives import c_uint16
 
 
 @dataclass(repr=False)
-class FileData_YK1(FileData_Common):
-    overall_bounds: BoundsDataStruct_YK1
+class FileData_Y3(FileData_Common):
+    overall_bounds: TopLevelBoundsDataStruct_Y3
 
     node_arr: List[NodeStruct]
-    obj_arr: List[ObjectStruct_YK1]
+    obj_arr: List[ObjectStruct_Y3]
     mesh_arr: List[MeshStruct_Y3]
     attribute_arr: List[AttributeStruct]
     material_arr: List[MaterialStruct_Y3]
@@ -57,7 +57,7 @@ class FileData_YK1(FileData_Common):
     def header_pointer_fields(cls) -> List[Tuple[str, Union[BaseUnpacker, Type[bytes]]]]:
         return FileData_Common.header_pointer_fields() + [
             ("node_arr", NodeStruct_Unpack),
-            ("obj_arr", ObjectStruct_YK1_Unpack),
+            ("obj_arr", ObjectStruct_Y3_Unpack),
             ("mesh_arr", MeshStruct_Y3_Unpack),
             ("attribute_arr", AttributeStruct_Unpack),
             ("material_arr", MaterialStruct_Y3_Unpack),
@@ -83,7 +83,7 @@ class FileData_YK1(FileData_Common):
         ]
 
 
-FilePacker_YK1 = FilePacker(
-    FileData_YK1,
-    GMDHeader_YK1_Unpack
+FilePacker_Y3 = FilePacker(
+    FileData_Y3,
+    GMDHeader_Y3_Unpack
 )

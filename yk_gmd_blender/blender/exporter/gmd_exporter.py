@@ -5,12 +5,12 @@ from bpy.props import (StringProperty,
                        EnumProperty, IntProperty)
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
-from ..common import GMDGame
-from ..error_reporter import BlenderErrorReporter
 from .scene_gatherers.base import GMDSceneGathererConfig, BoundingBoxCalc
 from .scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGatherer, \
     GMDSkinnedSceneGathererConfig
 from .scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
+from ..common import GMDGame
+from ..error_reporter import BlenderErrorReporter
 from ...gmdlib.converters.common.to_abstract import VertexImportMode, FileImportMode
 from ...gmdlib.errors.error_classes import GMDImportExportError
 from ...gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
@@ -59,6 +59,7 @@ class BaseExportGMD(Operator, ExportHelper):
     def create_gmd_config(self, gmd_version: VersionProperties, error: BlenderErrorReporter) -> GMDSceneGathererConfig:
         engine_from_version = {
             GMDVersion.Kenzan: GMDGame.Engine_MagicalV,
+            GMDVersion.Yakuza3: GMDGame.Engine_Y3,
             GMDVersion.Kiwami1: GMDGame.Engine_Kiwami,
             GMDVersion.Dragon: GMDGame.Engine_Dragon
         }

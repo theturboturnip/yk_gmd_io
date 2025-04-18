@@ -9,12 +9,12 @@ from bpy.types import (
     OperatorFileListElement,
 )
 from bpy_extras.io_utils import ImportHelper
-from ..common import GMDGame
-from ..error_reporter import BlenderErrorReporter
 from .scene_creators.animation import GMDAnimationSceneCreator
 from .scene_creators.base import GMDSceneCreatorConfig, MaterialNamingType
 from .scene_creators.skinned import GMDSkinnedSceneCreator
 from .scene_creators.unskinned import GMDUnskinnedSceneCreator
+from ..common import GMDGame
+from ..error_reporter import BlenderErrorReporter
 from ...gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
 from ...gmdlib.errors.error_classes import GMDImportExportError
 from ...gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
@@ -86,6 +86,7 @@ class BaseImportGMD:
     def create_gmd_config(self, gmd_version: VersionProperties, error: BlenderErrorReporter) -> GMDSceneCreatorConfig:
         engine_from_version = {
             GMDVersion.Kenzan: GMDGame.Engine_MagicalV,
+            GMDVersion.Yakuza3: GMDGame.Engine_Y3,
             GMDVersion.Kiwami1: GMDGame.Engine_Kiwami,
             GMDVersion.Dragon: GMDGame.Engine_Dragon
         }

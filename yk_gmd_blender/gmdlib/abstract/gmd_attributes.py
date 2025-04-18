@@ -5,7 +5,7 @@ from typing import List, Optional, Union, TypeVar
 from .gmd_shader import GMDShader
 from ..structure.kenzan.material import MaterialStruct_Kenzan
 from ..structure.version import GMDVersion
-from ..structure.yk1.material import MaterialStruct_YK1
+from ..structure.y3.material import MaterialStruct_Y3
 
 T = TypeVar('T')
 
@@ -24,19 +24,21 @@ class GMDMaterial(GMDVersionRestricted):
     """
     This consists of 64 bytes of data, and is not transferrable between engines.
     """
-    origin_data: Union[MaterialStruct_YK1, MaterialStruct_Kenzan]
+    origin_data: Union[MaterialStruct_Y3, MaterialStruct_Kenzan]
 
     @staticmethod
     def target_struct_type(version: GMDVersion):
-        if version in [GMDVersion.Kiwami1, GMDVersion.Dragon]:
-            return MaterialStruct_YK1
-        else:
+        if version == GMDVersion.Kenzan:
             return MaterialStruct_Kenzan
+        else:
+            return MaterialStruct_Y3
 
     def port_to_version(self, new_version: GMDVersion) -> 'GMDMaterial':
         if self.target_struct_type(new_version) == self.target_struct_type(self.origin_version):
             return self
-        if isinstance(self.origin_data, MaterialStruct_YK1) and new_version == GMDVersion.Kenzan:
+        # There are exactly two permutations of MaterialStruct: MaterialStruct_Kenzan and MaterialStruct_Y3.
+        # MaterialStruct_Kenzan is only used for GMDVersion.Kenzan
+        if isinstance(self.origin_data, MaterialStruct_Y3) and new_version == GMDVersion.Kenzan:
             return GMDMaterial(
                 origin_version=new_version,
                 origin_data=MaterialStruct_Kenzan(
@@ -51,11 +53,10 @@ class GMDMaterial(GMDVersionRestricted):
                     padding=0,
                 )
             )
-        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version in [GMDVersion.Kiwami1,
-                                                                                     GMDVersion.Dragon]:
+        elif isinstance(self.origin_data, MaterialStruct_Kenzan) and new_version != GMDVersion.Kenzan:
             return GMDMaterial(
                 origin_version=new_version,
-                origin_data=MaterialStruct_YK1(
+                origin_data=MaterialStruct_Y3(
                     diffuse=self.origin_data.diffuse,
                     opacity=int(self.origin_data.opacity * 255),
                     specular=self.origin_data.specular,

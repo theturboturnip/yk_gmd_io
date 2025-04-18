@@ -3,7 +3,9 @@ from typing import List
 
 import mathutils
 
-from .bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
+from .bbox import TopLevelBoundsData_Y3_Unpack, TopLevelBoundsDataStruct_Y3
+from .material import MaterialStruct_Y3
+from .vertex_buffer_layout import VertexBufferLayoutStruct_Y3
 from ..common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
 from ..common.attribute import AttributeStruct
 from ..common.checksum_str import ChecksumStrStruct
@@ -13,14 +15,12 @@ from ..common.node import NodeStruct
 from ..common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
 from ..common.unks import Unk12Struct, Unk14Struct
 from ..kenzan.object import ObjectStruct_Kenzan
-from ..y3.material import MaterialStruct_Y3
-from ..y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3
 from ....structurelib.base import FixedSizeArrayUnpacker
 from ....structurelib.primitives import c_uint32
 
 
 @dataclass(frozen=True)
-class GMDHeader_YK1(GMDHeaderStruct):
+class GMDHeader_Y3(GMDHeaderStruct):
     node_arr: ArrayPointerStruct[NodeStruct]
     obj_arr: ArrayPointerStruct[ObjectStruct_Kenzan]
     mesh_arr: ArrayPointerStruct[MeshStruct]
@@ -36,7 +36,7 @@ class GMDHeader_YK1(GMDHeaderStruct):
     object_drawlist_bytes: SizedPointerStruct
     mesh_matrixlist_bytes: SizedPointerStruct
 
-    overall_bounds: BoundsDataStruct_YK1
+    overall_bounds: TopLevelBoundsDataStruct_Y3
 
     unk12: ArrayPointerStruct[Unk12Struct]  # Material properties
     unk13: ArrayPointerStruct[int]  # List of root node indices - those without parents
@@ -44,8 +44,8 @@ class GMDHeader_YK1(GMDHeaderStruct):
     flags: List[int]
 
 
-GMDHeader_YK1_Unpack = StructureUnpacker(
-    GMDHeader_YK1,
+GMDHeader_Y3_Unpack = StructureUnpacker(
+    GMDHeader_Y3,
     fields=[
         ("node_arr", ArrayPointerStruct_Unpack),
         ("obj_arr", ArrayPointerStruct_Unpack),
@@ -65,7 +65,7 @@ GMDHeader_YK1_Unpack = StructureUnpacker(
         ("object_drawlist_bytes", SizedPointerStruct_Unpack),
         ("mesh_matrixlist_bytes", SizedPointerStruct_Unpack),
 
-        ("overall_bounds", BoundsData_YK1_Unpack),
+        ("overall_bounds", TopLevelBoundsData_Y3_Unpack),
 
         ("unk12", ArrayPointerStruct_Unpack),
         ("unk13", ArrayPointerStruct_Unpack),

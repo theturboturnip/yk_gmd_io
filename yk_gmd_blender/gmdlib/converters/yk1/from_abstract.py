@@ -13,11 +13,11 @@ from ...structure.common.mesh import IndicesStruct
 from ...structure.common.node import NodeStruct, NodeType
 from ...structure.common.unks import Unk12Struct, Unk14Struct
 from ...structure.version import VersionProperties
+from ...structure.y3.mesh import MeshStruct_Y3
+from ...structure.y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3
 from ...structure.yk1.bbox import BoundsDataStruct_YK1
 from ...structure.yk1.file import FileData_YK1
-from ...structure.yk1.mesh import MeshStruct_YK1
 from ...structure.yk1.object import ObjectStruct_YK1
-from ...structure.yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
 from ....structurelib.base import PackingValidationError
 from ....structurelib.primitives import c_uint16
 
@@ -102,7 +102,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
             rearranged_data.vertex_layout_groups):
         buffer_vertex_count = sum(m.vertices_data.vertex_count() for m in meshes_for_buffer)
 
-        vertex_buffer_arr.append(VertexBufferLayoutStruct_YK1(
+        vertex_buffer_arr.append(VertexBufferLayoutStruct_Y3(
             index=buffer_idx,
 
             vertex_count=buffer_vertex_count,
@@ -192,7 +192,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         )
         # then add them to the data
         index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_reset]
-        mesh_arr.append(MeshStruct_YK1(
+        mesh_arr.append(MeshStruct_Y3(
             index=len(mesh_arr),
             attribute_index=rearranged_data.attribute_set_id_to_index[id(gmd_mesh.attribute_set)],
             vertex_buffer_index=buffer_idx,

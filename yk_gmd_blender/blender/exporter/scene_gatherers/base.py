@@ -19,7 +19,7 @@ from ....gmdlib.abstract.nodes.gmd_object import GMDBoundingBox
 from ....gmdlib.errors.error_reporter import ErrorReporter
 from ....gmdlib.structure.kenzan.material import MaterialStruct_Kenzan
 from ....gmdlib.structure.version import GMDVersion
-from ....gmdlib.structure.yk1.material import MaterialStruct_YK1
+from ....gmdlib.structure.y3.material import MaterialStruct_Y3
 
 
 class BoundingBoxCalc(Enum):
@@ -248,18 +248,17 @@ class BaseGMDSceneGatherer(abc.ABC):
             return image_name
 
         gmd_material_origin_version = GMDVersion(yakuza_data.material_origin_type)
-        if gmd_material_origin_version == GMDVersion.Kiwami1 or gmd_material_origin_version == GMDVersion.Dragon:
-            gmd_material = GMDMaterial(
-                origin_version=gmd_material_origin_version,
-                origin_data=MaterialStruct_YK1(**json.loads(yakuza_data.material_json))
-            )
-        elif gmd_material_origin_version == GMDVersion.Kenzan:
+
+        if gmd_material_origin_version == GMDVersion.Kenzan:
             gmd_material = GMDMaterial(
                 origin_version=gmd_material_origin_version,
                 origin_data=MaterialStruct_Kenzan(**json.loads(yakuza_data.material_json))
             )
         else:
-            self.error.fatal(f"Unknown GMDVersion {gmd_material_origin_version}")
+            gmd_material = GMDMaterial(
+                origin_version=gmd_material_origin_version,
+                origin_data=MaterialStruct_Y3(**json.loads(yakuza_data.material_json))
+            )
 
         # TODO - Add a check for "missing expected texture". Put "expected textures" in Material Yakuza Data,
         #  and compare against provided in the node.

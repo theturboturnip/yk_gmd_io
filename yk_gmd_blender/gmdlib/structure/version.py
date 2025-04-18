@@ -7,7 +7,8 @@ from typing import Tuple
 # Could name FeatureSet or something
 class GMDVersion(Enum):
     Kenzan = 1  # a.k.a Magical V-Engine?
-    # 5?/0/Kiwami era - unknown what this engine was called
+    Yakuza3 = 2
+    # 5/0/Kiwami era - unknown what this engine was called
     Kiwami1 = 3
     Dragon = 4
 
@@ -55,17 +56,17 @@ def get_version_properties(version_major: int, version_minor: int) -> VersionPro
                 indices_offset_by_min_index=False
             )
     elif version_major == 2:
-        # Yakuza 3
+        # Yakuza 3 and 4
         if version_minor != 8:
             print(f"WARNING: THIS HAS NOT BEEN TESTED WITH 2.{version_minor}. something may be broken!")
         return VersionProperties(
-            major_version=GMDVersion.Kiwami1,
+            major_version=GMDVersion.Yakuza3,
             version_tuple=(version_major, version_minor),
             relative_indices_used=False,
             indices_offset_by_min_index=True
         )
     elif version_major == 3:
-        # All 0/Kiwami-era files
+        # Yakuza 5 onwards, including all 0/Kiwami-era files
         return VersionProperties(
             major_version=GMDVersion.Kiwami1,
             version_tuple=(version_major, version_minor),

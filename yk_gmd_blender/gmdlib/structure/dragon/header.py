@@ -3,8 +3,7 @@ from typing import List
 
 import mathutils
 
-from ....structurelib.base import FixedSizeArrayUnpacker
-from ....structurelib.primitives import c_uint32
+from .attribute import AttributeStruct_Dragon
 from ..common.array_pointer import ArrayPointerStruct, ArrayPointerStruct_Unpack
 from ..common.checksum_str import ChecksumStrStruct
 from ..common.header import GMDHeaderStruct, StructureUnpacker, GMDHeaderStruct_Unpack
@@ -12,11 +11,12 @@ from ..common.mesh import MeshStruct
 from ..common.node import NodeStruct
 from ..common.sized_pointer import SizedPointerStruct_Unpack, SizedPointerStruct
 from ..common.unks import Unk12Struct, Unk14Struct
-from .attribute import AttributeStruct_Dragon
 from ..kenzan.object import ObjectStruct_Kenzan
+from ..y3.material import MaterialStruct_Y3
+from ..y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3
 from ..yk1.bbox import BoundsDataStruct_YK1, BoundsData_YK1_Unpack
-from ..yk1.material import MaterialStruct_YK1
-from ..yk1.vertex_buffer_layout import VertexBufferLayoutStruct_YK1
+from ....structurelib.base import FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_uint32
 
 
 @dataclass(frozen=True)
@@ -25,9 +25,9 @@ class GMDHeader_Dragon(GMDHeaderStruct):
     obj_arr: ArrayPointerStruct[ObjectStruct_Kenzan]
     mesh_arr: ArrayPointerStruct[MeshStruct]
     attribute_arr: ArrayPointerStruct[AttributeStruct_Dragon]
-    material_arr: ArrayPointerStruct[MaterialStruct_YK1]
+    material_arr: ArrayPointerStruct[MaterialStruct_Y3]
     matrix_arr: ArrayPointerStruct[mathutils.Matrix]
-    vertex_buffer_arr: ArrayPointerStruct[VertexBufferLayoutStruct_YK1]
+    vertex_buffer_arr: ArrayPointerStruct[VertexBufferLayoutStruct_Y3]
     vertex_data: SizedPointerStruct  # byte data
     texture_arr: ArrayPointerStruct[ChecksumStrStruct]
     shader_arr: ArrayPointerStruct[ChecksumStrStruct]

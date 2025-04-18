@@ -18,10 +18,16 @@ class GMDGame(IntEnum):
     """
     Engine_MagicalV = 0x10
     Kenzan = 0x11
+
+    Engine_Y3 = 0x12
+    # 0x12 = 0b1_0010
     Yakuza3 = 0x12
-    Yakuza4 = 0x13
-    DeadSouls = 0x14
-    BinaryDomain = 0x15
+    # 0x16 = 0b1_0110
+    Yakuza4 = 0x16
+    # 0x1A = 0b1_1010
+    DeadSouls = 0x1A
+    # 0x1E = 0b1_1110
+    BinaryDomain = 0x1E
 
     Engine_Kiwami = 0x20
     Yakuza5 = 0x21
@@ -38,8 +44,10 @@ class GMDGame(IntEnum):
     @staticmethod
     def blender_props() -> List[Tuple[str, str, str]]:
         return [
-            ("ENGINE_MAGICALV", "Old Engine", "Magical-V Engine (Kenzan - Binary Domain)"),
+            ("ENGINE_MAGICALV", "Old Engine (Kenzan)", "Magical-V Engine (Kenzan - Binary Domain)"),
             ("KENZAN", "Yakuza Kenzan", "Yakuza Kenzan"),
+
+            ("ENGINE_Y3", "Old Engine (Y3+)", "Magical-V Engine Version from Y3 onwards"),
             ("YAKUZA3", "Yakuza 3", "Yakuza 3"),
             ("YAKUZA4", "Yakuza 4", "Yakuza 4"),
             ("DEADSOULS", "Yakuza Dead Souls", "Yakuza Dead Souls"),
@@ -63,6 +71,8 @@ class GMDGame(IntEnum):
         return {
             "ENGINE_MAGICALV": GMDGame.Engine_MagicalV,
             "KENZAN": GMDGame.Kenzan,
+
+            "ENGINE_Y3": GMDGame.Engine_Y3,
             "YAKUZA3": GMDGame.Yakuza3,
             "YAKUZA4": GMDGame.Yakuza4,
             "DEADSOULS": GMDGame.DeadSouls,

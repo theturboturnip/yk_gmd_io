@@ -1,17 +1,17 @@
 from dataclasses import dataclass
 
+from ..common.mesh import MeshStruct, IndicesStruct_Unpack
 from ....structurelib.base import StructureUnpacker
 from ....structurelib.primitives import c_uint32
-from ..common.mesh import MeshStruct, IndicesStruct_Unpack
 
 
 @dataclass(frozen=True)
-class MeshStruct_YK1(MeshStruct):
+class MeshStruct_Y3(MeshStruct):
     pass
 
 
-MeshStruct_YK1_Unpack = StructureUnpacker(
-    MeshStruct_YK1,
+MeshStruct_Y3_Unpack = StructureUnpacker(
+    MeshStruct_Y3,
     fields=[
         ("index", c_uint32),
         ("attribute_index", c_uint32),

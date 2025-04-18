@@ -1,47 +1,59 @@
-from typing import Dict
-
 from mathutils import Vector
 from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
-from ..yk1.from_abstract import yk1_bounds_from_gmd
 from ...abstract.gmd_attributes import GMDUnk12
 from ...abstract.gmd_mesh import GMDSkinnedMesh
 from ...abstract.gmd_scene import GMDScene
 from ...abstract.nodes.gmd_bone import GMDBone
 from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
 from ...errors.error_reporter import ErrorReporter
+from ...structure.common.attribute import AttributeStruct, TextureIndexStruct
 from ...structure.common.checksum_str import ChecksumStrStruct
 from ...structure.common.mesh import IndicesStruct
 from ...structure.common.node import NodeStruct, NodeType
 from ...structure.common.unks import Unk12Struct, Unk14Struct
-from ...structure.dragon.attribute import AttributeStruct_Dragon, TextureIndexStruct_Dragon
-from ...structure.dragon.file import FileData_Dragon
 from ...structure.version import VersionProperties
+from ...structure.y3.bbox import TopLevelBoundsDataStruct_Y3, ObjectBoundsDataStruct_Y3
+from ...structure.y3.file import FileData_Y3
 from ...structure.y3.mesh import MeshStruct_Y3
+from ...structure.y3.object import ObjectStruct_Y3
 from ...structure.y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3
-from ...structure.yk1.object import ObjectStruct_YK1
 from ....structurelib.base import PackingValidationError
 from ....structurelib.primitives import c_uint16
+
+
+def toplevel_y3_bounds_from_gmd(gmd_bounds: GMDBoundingBox) -> TopLevelBoundsDataStruct_Y3:
+    return TopLevelBoundsDataStruct_Y3(
+        center=gmd_bounds.center,
+        sphere_radius=gmd_bounds.sphere_radius,
+        aabb_extents=gmd_bounds.aabb_extents,
+    )
+
+
+def object_y3_bounds_from_gmd(gmd_bounds: GMDBoundingBox) -> ObjectBoundsDataStruct_Y3:
+    return ObjectBoundsDataStruct_Y3(
+        center=gmd_bounds.center,
+        center_distance_from_origin=gmd_bounds.center.length,
+        sphere_radius=gmd_bounds.sphere_radius,
+        aabb_extents=gmd_bounds.aabb_extents,
+    )
 
 
 def vec3_to_vec4(vec: Vector, w: float = 0.0):
     return Vector((vec.x, vec.y, vec.z, w))
 
 
-def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool,
-                                  vertices_big_endian: bool,
-                                  scene: GMDScene, old_file_contents: FileData_Dragon, error: ErrorReporter,
-                                  base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
-    old_file_had_triangle_strips = any(
-        (m.noreset_strip_indices.index_count > 0) or (m.reset_strip_indices.index_count > 0)
-        for m in old_file_contents.mesh_arr
-    )
-
+def pack_abstract_contents_Y3(version_properties: VersionProperties, file_big_endian: bool, vertices_big_endian: bool,
+                              scene: GMDScene, error: ErrorReporter) -> FileData_Y3:
     rearranged_data: RearrangedData = arrange_data_for_export(scene, error)
 
     # Set >255 bones flag
     bones_count = len([x for x, stackop in rearranged_data.ordered_nodes if isinstance(x, GMDBone)])
     int16_bone_indices = bones_count > 255
+
+    if int16_bone_indices:
+        error.recoverable(f"This file has >255 bones. Pre-dragon engine titles have not been tested with this value.\n"
+                          f"To keep going uncheck \"Strict Export\" in the Export window.")
 
     packed_mesh_matrixlists, packed_mesh_matrix_strings_index = pack_mesh_matrix_strings(
         rearranged_data.mesh_matrixlist, int16_bone_indices, big_endian=file_big_endian)
@@ -69,32 +81,6 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         world_pos = gmd_node.world_pos
         anim_axis = gmd_node.anim_axis
         flags = gmd_node.flags
-
-        if gmd_node.node_type == NodeType.MatrixTransform and gmd_node.name.endswith("_phy"):
-            # Find the node in the old file that maps to it
-            relevant_old_nodes = [
-                (i, node)
-                for i, node in enumerate(old_file_contents.node_arr)
-                if old_file_contents.node_name_arr[node.name_index].text == gmd_node.name
-                   and node.node_type == NodeType.MatrixTransform
-            ]
-            if not relevant_old_nodes:
-                error.recoverable(f"Phys bone {gmd_node.name} is not present in the target file,"
-                                  f"and will not behave as a phys bone in-game. \n"
-                                  f"Turn off Strict Export to ignore this error and continue.")
-            elif len(relevant_old_nodes) > 1:
-                error.recoverable(f"Phys bone {gmd_node.name} has two bones in the target file with the same name???\n"
-                                  f"Things will likely break if you export this file.\n"
-                                  f"Turn off Strict Export to ignore this and continue.")
-            else:
-                # len(relevant_old_nodes) == 1
-                old_node_idx, old_node = relevant_old_nodes[0]
-                if old_node_idx != i:
-                    error.recoverable(f"Phys bone {gmd_node.name} was previously node number {old_node_idx}, but is "
-                                      f"now number {i}. "
-                                      f"Dragon engine games seem to hardcode phys bone numbers, so this will "
-                                      f"likely break this bone or other bones.\n"
-                                      f"Turn off Strict Export to ignore this and continue.")
 
         node_arr.append(NodeStruct(
             index=i,
@@ -199,26 +185,21 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         # then add them to the data
         index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_list]
 
-        if old_file_had_triangle_strips:
-            # Set up the pointer for the next set of indices
-            triangle_strip_noreset_indices = IndicesStruct(
-                index_offset=len(index_buffer),
-                index_count=len(gmd_mesh.triangles.triangle_strips_noreset)
-            )
-            # then add them to the data
-            index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_noreset]
+        # Set up the pointer for the next set of indices
+        triangle_strip_noreset_indices = IndicesStruct(
+            index_offset=len(index_buffer),
+            index_count=len(gmd_mesh.triangles.triangle_strips_noreset)
+        )
+        # then add them to the data
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_noreset]
 
-            # Set up the pointer for the next set of indices
-            triangle_strip_reset_indices = IndicesStruct(
-                index_offset=len(index_buffer),
-                index_count=len(gmd_mesh.triangles.triangle_strips_reset)
-            )
-            # then add them to the data
-            index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_reset]
-        else:
-            triangle_strip_noreset_indices = IndicesStruct(0, 0)
-            triangle_strip_reset_indices = IndicesStruct(0, 0)
-
+        # Set up the pointer for the next set of indices
+        triangle_strip_reset_indices = IndicesStruct(
+            index_offset=len(index_buffer),
+            index_count=len(gmd_mesh.triangles.triangle_strips_reset)
+        )
+        # then add them to the data
+        index_buffer += [pack_index(x) for x in gmd_mesh.triangles.triangle_strips_reset]
         mesh_arr.append(MeshStruct_Y3(
             index=len(mesh_arr),
             attribute_index=rearranged_data.attribute_set_id_to_index[id(gmd_mesh.attribute_set)],
@@ -248,19 +229,20 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         drawlist_rel_ptr = len(drawlist_bytearray)
         c_uint16.pack(file_big_endian, len(obj.mesh_list), drawlist_bytearray)
         c_uint16.pack(file_big_endian, 0, drawlist_bytearray)
+        # TODO - is order important here?
         for mesh in obj.mesh_list:
             c_uint16.pack(file_big_endian, rearranged_data.attribute_set_id_to_index[id(mesh.attribute_set)],
                           drawlist_bytearray)
             c_uint16.pack(file_big_endian, rearranged_data.mesh_id_to_index[id(mesh)], drawlist_bytearray)
             touched_meshes.add(id(mesh))
 
-        obj_arr.append(ObjectStruct_YK1(
+        obj_arr.append(ObjectStruct_Y3(
             index=i,
             node_index_1=node_index,
             node_index_2=node_index,  # TODO: This could be a matrix index - I'm pretty sure those are interchangeable
             drawlist_rel_ptr=drawlist_rel_ptr,
 
-            bbox=yk1_bounds_from_gmd(obj.bbox),
+            bbox=object_y3_bounds_from_gmd(obj.bbox),
         ))
     if len(touched_meshes) != len(mesh_arr):
         error.fatal(f"Didn't export drawlists for all meshes")
@@ -272,25 +254,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
-    # DRAGON ENGINE DIFFERENCE - ordered textures
-    # Dragon Engine games sometimes keep a cache of 'when rendering, replace texture #i with X' for certain models.
-    # To maintain consistency with the cache, the texture-list order needs to stay the same as the original file -
-    # at least, for the textures the game caches.
-    ordered_texture_arr = old_file_contents.texture_arr[:]
-    textures_in_new_texture_arr: Dict[str, int] = {
-        t.text: i
-        for i, t in enumerate(ordered_texture_arr)
-    }
-
-    def make_texture_index(s: str) -> TextureIndexStruct_Dragon:
-        idx = textures_in_new_texture_arr.get(s) if s else -1
-        if idx is None:
-            idx = len(ordered_texture_arr)
-            ordered_texture_arr.append(ChecksumStrStruct.make_from_str(s))
-            textures_in_new_texture_arr[s] = idx
-        return TextureIndexStruct_Dragon(idx)
-
-    # make_texture_index = lambda s: TextureIndexStruct_Dragon(rearranged_data.texture_names_index[s] if s else -1)
+    make_texture_index = lambda s: TextureIndexStruct(rearranged_data.texture_names_index[s] if s else -1)
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.float_data  # .port_to_version(version_properties.major_version).float_data
@@ -302,17 +266,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         ))
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
-        texture_index = AttributeStruct_Dragon.calculate_texture_count(
-            texture_diffuse=(gmd_attribute_set.texture_diffuse),
-            texture_refl=(gmd_attribute_set.texture_refl),
-            texture_multi=(gmd_attribute_set.texture_multi),
-            texture_rm=(gmd_attribute_set.texture_rm),
-            texture_ts=(gmd_attribute_set.texture_rs),
-            texture_normal=(gmd_attribute_set.texture_normal),
-            texture_rt=(gmd_attribute_set.texture_rt),
-            texture_rd=(gmd_attribute_set.texture_rd),
-        )
-        attribute_arr.append(AttributeStruct_Dragon(
+        attribute_arr.append(AttributeStruct(
             index=i,
             material_index=rearranged_data.material_id_to_index[id(gmd_attribute_set.material)],
             shader_index=rearranged_data.shader_names_index[gmd_attribute_set.shader.name],
@@ -321,22 +275,18 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=texture_index,  # TODO: Set this properly?
+            texture_init_count=8,  # TODO: Set this properly?
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
             texture_diffuse=make_texture_index(gmd_attribute_set.texture_diffuse),
-            texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
-            texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
-            texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
-            texture_rm=make_texture_index(gmd_attribute_set.texture_rm),
-            texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
-            texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
             texture_refl=make_texture_index(gmd_attribute_set.texture_refl),
-
-            unk1_always_1=0,
-            unk2_always_0=1,
-            unk3_always_0=0
+            texture_multi=make_texture_index(gmd_attribute_set.texture_multi),
+            texture_rm=make_texture_index(gmd_attribute_set.texture_rm),
+            texture_ts=make_texture_index(gmd_attribute_set.texture_rs),  # TODO: ugh, name mismatch
+            texture_normal=make_texture_index(gmd_attribute_set.texture_normal),
+            texture_rt=make_texture_index(gmd_attribute_set.texture_rt),
+            texture_rd=make_texture_index(gmd_attribute_set.texture_rd),
         ))
 
     file_endian_check = 1 if file_big_endian else 0
@@ -348,7 +298,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     else:
         flags[5] &= ~0x8000_0000
 
-    return FileData_Dragon(
+    return FileData_Y3(
         magic="GSGM",
         file_endian_check=file_endian_check,
         vertex_endian_check=vertex_endian_check,
@@ -356,7 +306,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
 
         name=ChecksumStrStruct.make_from_str(scene.name),
 
-        overall_bounds=yk1_bounds_from_gmd(overall_bounds),
+        overall_bounds=toplevel_y3_bounds_from_gmd(overall_bounds),
 
         node_arr=node_arr,
         obj_arr=obj_arr,
@@ -366,7 +316,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         matrix_arr=rearranged_data.ordered_matrices,
         vertex_buffer_arr=vertex_buffer_arr,
         vertex_data=bytes(vertex_data_bytearray),
-        texture_arr=ordered_texture_arr,  # DRAGON ENGINE DIFFERENCE
+        texture_arr=rearranged_data.texture_names,
         shader_arr=rearranged_data.shader_names,
         node_name_arr=rearranged_data.node_names,
         index_data=index_buffer,
