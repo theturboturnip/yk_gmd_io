@@ -1,15 +1,14 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Type, Union, Tuple, List
+from typing import Type, Union, Tuple, List, Generic, TypeVar
 
-from ....structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
 from .array_pointer import ArrayPointerStruct
 from .checksum_str import ChecksumStrStruct
-from .header import GMDHeaderStruct
 from .sized_pointer import SizedPointerStruct
 from ..endianness import check_is_file_big_endian, check_are_vertices_big_endian
 from ..version import VersionProperties, \
     get_combined_version_properties
+from ....structurelib.base import StructureUnpacker, BaseUnpacker, PackingValidationError
 
 
 class PackType(Enum):
@@ -66,17 +65,22 @@ class FileData_Common:
         ]
 
 
+TFileData = TypeVar("TFileData", bound="FileData_Common")
+THeaderStruct = TypeVar("THeaderStruct", bound="GMDHeaderStruct")
+
+
 # TODO: Generics?
 # TODO: Refactor to do typechecking for header_pointer_fields, header_fields_to_copy, including missing fields
-class FilePacker(BaseUnpacker[FileData_Common]):
-    header_packer: StructureUnpacker[GMDHeaderStruct]
+class FilePacker(Generic[TFileData, THeaderStruct]):
+    python_type: Type[TFileData]
+    header_packer: StructureUnpacker[THeaderStruct]
 
-    def __init__(self, filedata_type: Type[FileData_Common], header_packer: StructureUnpacker[GMDHeaderStruct]):
-        super().__init__(filedata_type)
+    def __init__(self, filedata_type: Type[TFileData], header_packer: StructureUnpacker[THeaderStruct]):
+        self.python_type = filedata_type
         self.header_packer = header_packer
         # TODO: Check python_type.packing_type() fields to ensure correctness
 
-    def pack(self, big_endian: bool, value: FileData_Common, append_to: bytearray):
+    def pack(self, big_endian: bool, value: TFileData) -> bytearray:
         # Packing phases
         # 1. Pack contents (NOT HEADER) into bytes to get addresses and sizes
         # Requires subclass intervention - subclass must be able to supply new data to be packed
@@ -90,6 +94,7 @@ class FilePacker(BaseUnpacker[FileData_Common]):
 
         # TODO: Pad header_size to a constant value like the games do
         header_size = self.header_packer.sizeof()
+        append_to = bytearray()
         collective_data = bytearray()
 
         def pack_data(name: str, packer: Union[Type[bytes], BaseUnpacker], collective_data: bytearray) -> Union[
@@ -138,8 +143,9 @@ class FilePacker(BaseUnpacker[FileData_Common]):
 
         self.header_packer.pack(big_endian, header, append_to)
         append_to += collective_data
+        return append_to
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[FileData_Common, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[TFileData, int]:
         # Unpacking phases
         # 1. Unpack the header
         # No subclass intervention required as long as header_packer is set
@@ -184,10 +190,3 @@ class FilePacker(BaseUnpacker[FileData_Common]):
         )
 
         return file_data, -1
-
-    def validate_value(self, value: FileData_Common):
-        raise NotImplementedError()
-
-    # TODO: Better way of doing this would be to have sizeof relegated to BaseConstantSizeUnpacker?
-    def sizeof(self):
-        raise NotImplementedError("The size of GMD Files is not constant")

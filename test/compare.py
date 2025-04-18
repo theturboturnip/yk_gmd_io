@@ -17,6 +17,7 @@ from yk_gmd_blender.gmdlib.errors.error_classes import GMDImportExportError
 from yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter, ErrorReporter
 from yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object
 from yk_gmd_blender.gmdlib.structure.common.node import NodeType
+from yk_gmd_blender.gmdlib.structure.dragon.file import FileData_Dragon
 from yk_gmd_blender.gmdlib.structure.endianness import check_are_vertices_big_endian, check_is_file_big_endian
 from yk_gmd_blender.gmdlib.structure.version import GMDVersion
 from yk_gmd_blender.meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
@@ -737,6 +738,19 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
         # compare_name_arrs("shader_arr")
         compare_name_arrs("texture_arr")
         # compare_name_arrs("node_name_arr") # This has not been proven essential. TODO do this in the future?
+
+        blendshape_src = cast(FileData_Dragon, file_data_src).blendshape
+        blendshape_dst = cast(FileData_Dragon, file_data_dst).blendshape
+        if (blendshape_src is None) != (blendshape_dst is None):
+            cmp.important_mismatch("file_data: field blendshape differs:\n"
+                                   f"src:\n\t{blendshape_src}\n"
+                                   f"dst:\n\t{blendshape_dst}")
+        elif blendshape_src is not None and blendshape_dst is not None:
+            if blendshape_src[1] != blendshape_dst[1]:
+                cmp.important_mismatch("file_data: blendshape target mesh differs:\n"
+                                       f"src:\n\t{blendshape_src[1]}\n"
+                                       f"dst:\n\t{blendshape_dst[1]}")
+            # TODO advanced checking of meshes...
 
     # Load and compare scene hierarchies
     import_mode = VertexImportMode.IMPORT_VERTICES if vertices else VertexImportMode.NO_VERTICES
