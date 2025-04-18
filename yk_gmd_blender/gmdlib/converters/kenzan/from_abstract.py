@@ -1,11 +1,11 @@
 from mathutils import Vector
+from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
+    pack_mesh_matrix_strings
 from ...abstract.gmd_attributes import GMDUnk12
 from ...abstract.gmd_mesh import GMDSkinnedMesh
 from ...abstract.gmd_scene import GMDScene
 from ...abstract.nodes.gmd_bone import GMDBone
 from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDBoundingBox
-from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
-    pack_mesh_matrix_strings
 from ...errors.error_reporter import ErrorReporter
 from ...structure.common.attribute import AttributeStruct, TextureIndexStruct
 from ...structure.common.checksum_str import ChecksumStrStruct
@@ -89,7 +89,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             rot=gmd_node.rot,
             scale=vec3_to_vec4(gmd_node.scale),
 
-            world_pos=vec3_to_vec4(world_pos, 1),
+            world_pos=vec3_to_vec4(world_pos, 0 if gmd_node.is_in_relative_gmd else 1),
             anim_axis=anim_axis,
             flags=flags,
         ))

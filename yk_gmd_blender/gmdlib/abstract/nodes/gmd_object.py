@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Iterable, Tuple
 
 from mathutils import Vector, Quaternion, Matrix
-from ..gmd_mesh import GMDMesh, GMDSkinnedMesh
 from .gmd_node import GMDNode
+from ..gmd_mesh import GMDMesh, GMDSkinnedMesh
 from ...structure.common.node import NodeType
 
 
@@ -69,13 +69,16 @@ class GMDUnskinnedObject(GMDNode):
                  parent: Optional[GMDNode],
                  matrix: Matrix,
                  flags: List[int],
-                 bbox: GMDBoundingBox):
+                 bbox: GMDBoundingBox,
+                 is_in_relative_gmd: bool):
         super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, parent, flags)
         self.mesh_list = []
         self.bbox = bbox
 
         self.matrix = matrix.copy()
         self.matrix.resize_4x4()
+
+        self.is_in_relative_gmd = is_in_relative_gmd
 
         if self.node_type != NodeType.UnskinnedMesh:
             raise TypeError(f"GMDUnskinnedObject {name} expected NodeType.UnskinnedMesh, got {self.node_type}")
@@ -102,11 +105,14 @@ class GMDSkinnedObject(GMDNode):
                  world_pos: Vector, anim_axis: Vector,
                  parent: Optional[GMDNode],
                  flags: List[int],
-                 bbox: GMDBoundingBox):
+                 bbox: GMDBoundingBox,
+                 is_in_relative_gmd: bool):
         super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, parent=parent,
                          flags=flags)
         self.mesh_list = []
         self.bbox = bbox
+
+        self.is_in_relative_gmd = is_in_relative_gmd
 
         if self.node_type != NodeType.SkinnedMesh:
             raise TypeError(f"GMDSkinnedObject expected NodeType.SkinnedMesh, got {self.node_type}")

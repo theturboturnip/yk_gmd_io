@@ -10,6 +10,7 @@ from ...abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDM
 from ...abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh, GMDMeshIndices
 from ...abstract.gmd_scene import GMDScene
 from ...abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
+from ...abstract.nodes.gmd_blendshape import GMDBlendShape
 from ...abstract.nodes.gmd_bone import GMDBone
 from ...abstract.nodes.gmd_node import GMDNode
 from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject, GMDBoundingBox
@@ -28,13 +29,20 @@ from ....structurelib.primitives import c_uint16, c_uint8
 
 
 class ParentStack:
-    def __init__(self):
+    def __init__(self, error: ErrorReporter):
         self.stack = []
+        self.error = error
 
-    def handle_node(self, stack_op: NodeStackOp, to_push: GMDNode):
-        if stack_op in [NodeStackOp.PopPush, NodeStackOp.Pop]:
-            self.stack.pop()
-        if stack_op in [NodeStackOp.PopPush, NodeStackOp.Push]:
+    def handle_node(self, node_struct: NodeStruct, to_push: GMDNode):
+        if node_struct.stack_op in [NodeStackOp.PopPush, NodeStackOp.Pop]:
+            if not self.stack:
+                self.error.fatal("The hierarchy is trying to pop() out the top of the GMD.")
+                # "This GMD is likely intended to be included underneath another hierarchy,"
+                # "so exporting it may not work."
+                # "Disable Strict Import to hide this message and continue importing.")
+            else:
+                self.stack.pop()
+        if node_struct.stack_op in [NodeStackOp.PopPush, NodeStackOp.Push]:
             self.stack.append(to_push)
 
     def __bool__(self):
@@ -221,18 +229,43 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                           object_bboxes: List[GMDBoundingBox]) \
             -> List[GMDNode]:
         nodes = []
-        parent_stack = ParentStack()
+        parent_stack = ParentStack(self.error)
         for bone_idx, node_struct in enumerate(node_arr):
             name = node_name_arr[node_struct.name_index].text
 
             if node_struct.node_type == NodeType.SkinnedMesh and parent_stack:
                 # As far as we know Skinned Objects having a "parent" in the hierarchy is meaningless
-                self.error.fatal(f"Node {name} of type {node_struct.node_type} found inside hierarchy of Bone")
+                self.error.fatal(
+                    f"Node '{name}' of type SkinnedMesh found inside hierarchy of "
+                    f"{[type(parent).__name__ for parent in parent_stack.stack]}"
+                )
 
             node: GMDNode
 
-            # This is guaranteed to be a bone node
-            if node_struct.node_type == NodeType.MatrixTransform:
+            is_in_relative_gmd = node_struct.node_type != NodeType.MatrixTransform and node_struct.stack_op == NodeStackOp.PopPush and node_struct.parent_of < 0
+            if is_in_relative_gmd and abs(node_struct.world_pos.w) > 0.000001:
+                self.error.recoverable(f"Encountered a 'relative GMD' node '{name}' with a nonzero world_pos.w. "
+                                       f"This is unexpected and will break export. "
+                                       f"Disable Strict Import to continue.")
+
+            if node_struct.node_type == NodeType.BlendShape:
+                node = GMDBlendShape(
+                    name=name,
+                    node_type=node_struct.node_type,
+
+                    pos=node_struct.pos,
+                    rot=node_struct.rot,
+                    scale=node_struct.scale,
+
+                    world_pos=node_struct.world_pos,
+                    anim_axis=node_struct.anim_axis,
+
+                    parent=parent_stack.peek() if parent_stack else None,
+                    flags=node_struct.flags,
+
+                    is_in_relative_gmd=is_in_relative_gmd,
+                )
+            elif node_struct.node_type == NodeType.MatrixTransform:
                 node = GMDBone(
                     name=name,
                     node_type=node_struct.node_type,
@@ -267,7 +300,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     parent=parent_stack.peek() if parent_stack else None,
                     flags=node_struct.flags,
 
-                    bbox=object_bboxes[node_struct.object_index]
+                    bbox=object_bboxes[node_struct.object_index],
+
+                    is_in_relative_gmd=is_in_relative_gmd,
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -290,14 +325,17 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     parent=parent_stack.peek() if parent_stack else None,
                     flags=node_struct.flags,
 
-                    bbox=object_bboxes[node_struct.object_index]
+                    bbox=object_bboxes[node_struct.object_index],
+
+                    is_in_relative_gmd=is_in_relative_gmd,
                 )
             else:
                 self.error.fatal(f"Unknown node type enum value {node_struct.node_type} for {name}")
 
             nodes.append(node)
-            # Apply the stack operation to the parent_stack
-            parent_stack.handle_node(node_struct.stack_op, node)
+            if not is_in_relative_gmd:
+                # Apply the stack operation to the parent_stack
+                parent_stack.handle_node(node_struct, node)
 
         return nodes
 

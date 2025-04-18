@@ -4,18 +4,19 @@ from dataclasses import dataclass
 from typing import TypeVar, Tuple, List, Dict, Iterable, Callable, Set, Union
 
 from mathutils import Matrix
-from ....structurelib.base import FixedSizeArrayUnpacker
-from ....structurelib.primitives import c_uint16
 from ...abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
 from ...abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
 from ...abstract.gmd_scene import depth_first_iterate, GMDScene
 from ...abstract.gmd_shader import GMDVertexBufferLayout
+from ...abstract.nodes.gmd_blendshape import GMDBlendShape
 from ...abstract.nodes.gmd_bone import GMDBone
 from ...abstract.nodes.gmd_node import GMDNode
 from ...abstract.nodes.gmd_object import GMDSkinnedObject, GMDUnskinnedObject
 from ...errors.error_reporter import ErrorReporter
 from ...structure.common.checksum_str import ChecksumStrStruct
 from ...structure.common.node import NodeStackOp
+from ....structurelib.base import FixedSizeArrayUnpacker
+from ....structurelib.primitives import c_uint16
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,15 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
 
         if len(gmd_node.name.encode("shift-jis")) > 30:
             error.fatal(f"Node {gmd_node.name} has a name that's longer than 30 bytes long. Please shorten it!")
+
+        # In certain GMDs mesh nodes without children stack_op=0. This is indicated by is_in_relative_gmd
+        # but if a node is marked with that and has children that's a problem
+        if isinstance(gmd_node, (GMDBlendShape, GMDUnskinnedObject, GMDSkinnedObject)) and gmd_node.is_in_relative_gmd:
+            if gmd_node.children:
+                error.fatal(
+                    f"Node {gmd_node.name} is marked as in-relative-gmd but it has children. Please remove the children."
+                )
+            stack_op = NodeStackOp.PopPush  # i.e. 0
 
         # emit (node, stackop)
         ordered_nodes.append((gmd_node, stack_op))

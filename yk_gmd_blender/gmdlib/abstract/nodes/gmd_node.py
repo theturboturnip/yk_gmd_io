@@ -25,6 +25,8 @@ class GMDNode:
     parent: Optional['GMDNode']
     children: List['GMDNode']
 
+    is_in_relative_gmd: bool
+
     def __init__(self, name: str, node_type: NodeType,
                  pos: Vector, rot: Quaternion, scale: Vector,
                  world_pos: Vector, anim_axis: Vector,
@@ -49,6 +51,8 @@ class GMDNode:
 
         if self.parent:
             self.parent.children.append(self)
+
+        self.is_in_relative_gmd = False
 
     def __repr__(self):
         return str(self)

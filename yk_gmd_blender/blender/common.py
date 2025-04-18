@@ -107,6 +107,8 @@ class YakuzaHierarchyNodeData(PropertyGroup):
     # The order of this node with respect to siblings
     sort_order: IntProperty(name="Sort Order", default=0,
                             description="Order of this node with respect to siblings. Applied on export.")
+    relative_import_mesh: BoolProperty(name="Mesh from a Relative GMD", default=False,
+                                       description="Was imported from a file that is likely a 'relative GMD', which affects the export process.")
 
 
 def yakuza_hierarchy_node_data_sort_key(x) -> int:
@@ -132,6 +134,7 @@ class OBJECT_PT_yakuza_hierarchy_node_data_panel(Panel):
         layout.prop(ob.yakuza_hierarchy_node_data, "anim_axis")
         layout.prop(ob.yakuza_hierarchy_node_data, "flags_json")
         layout.prop(ob.yakuza_hierarchy_node_data, "sort_order")
+        layout.prop(ob.yakuza_hierarchy_node_data, "relative_import_mesh")
 
         if ob.yakuza_file_root_data.is_valid_root:
             layout.label(text="This is a Yakuza File Root, it shouldn't have hierarchy-node data")

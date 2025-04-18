@@ -3,8 +3,8 @@ from typing import Dict, Optional, Union, cast
 
 import bpy
 from mathutils import Matrix, Vector, Quaternion
-from ...coordinate_converter import transform_rotation_gmd_to_blender
 from .base import BaseGMDSceneCreator, GMDSceneCreatorConfig
+from ...coordinate_converter import transform_rotation_gmd_to_blender
 from ....gmdlib.abstract.gmd_scene import GMDScene
 from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
 from ....gmdlib.abstract.nodes.gmd_node import GMDNode
@@ -218,6 +218,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
             # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
             # This means you can insert new objects between other ones more easily
             mesh_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
+            mesh_obj.yakuza_hierarchy_node_data.relative_import_mesh = gmd_node.is_in_relative_gmd
 
             # Skinned Objects are parented to the armature, with an Armature modifier to deform them.
             if armature_object:

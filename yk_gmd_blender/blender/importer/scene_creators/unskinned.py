@@ -90,6 +90,8 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
             # Say the sort_order = the (sibling_order + 1) * 10, so objects are 10, 20, 30, 40...
             # This means you can insert new objects between other ones more easily
             node_obj.yakuza_hierarchy_node_data.sort_order = (sibling_order + 1) * 10
+            if not isinstance(gmd_node, GMDBone):
+                node_obj.yakuza_hierarchy_node_data.relative_import_mesh = gmd_node.is_in_relative_gmd
 
             # Add the object to the gmd_objects map, and link it to the scene. We're done!
             gmd_objects[id(gmd_node)] = node_obj

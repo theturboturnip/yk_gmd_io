@@ -6,12 +6,12 @@ from typing import List, Dict, Optional, cast, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector, Quaternion
+from .base import BaseGMDSceneGatherer, remove_blender_duplicate, \
+    GMDSceneGathererConfig
+from ..mesh.functions import split_skinned_blender_mesh_object
 from ...common import yakuza_hierarchy_node_data_sort_key
 from ...coordinate_converter import transform_position_blender_to_gmd, \
     transform_rotation_blender_to_gmd
-from ..mesh.functions import split_skinned_blender_mesh_object
-from .base import BaseGMDSceneGatherer, remove_blender_duplicate, \
-    GMDSceneGathererConfig
 from ....gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
 from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
 from ....gmdlib.abstract.nodes.gmd_object import GMDSkinnedObject
@@ -345,11 +345,15 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             scale=Vector((1, 1, 1)),
             parent=None,
 
+            # The W component changes in the export process if is_in_relative_gmd.
+            # That's handled later, don't touch it now.
             world_pos=Vector((0, 0, 0, 1)),
             anim_axis=object.yakuza_hierarchy_node_data.anim_axis,
             flags=flags,
 
-            bbox=self.gmd_bounding_box(object)
+            bbox=self.gmd_bounding_box(object),
+
+            is_in_relative_gmd=object.yakuza_hierarchy_node_data.relative_import_mesh,
         )
         self.node_roots.append(gmd_object)
 

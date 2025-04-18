@@ -3,9 +3,9 @@ from enum import IntEnum
 from typing import List
 
 from mathutils import Vector, Quaternion
+from .vector import Vec4Unpacker, QuatUnpacker
 from ....structurelib.base import StructureUnpacker, ValueAdaptor, FixedSizeArrayUnpacker
 from ....structurelib.primitives import c_int32, c_uint32
-from .vector import Vec4Unpacker, QuatUnpacker
 
 
 class NodeStackOp(IntEnum):
@@ -19,6 +19,7 @@ class NodeType(IntEnum):
     MatrixTransform = 0
     UnskinnedMesh = 1
     SkinnedMesh = 2
+    BlendShape = 4
 
 
 @dataclass(frozen=True)

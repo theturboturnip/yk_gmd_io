@@ -4,11 +4,11 @@ from typing import Optional, Union, Tuple
 import bpy
 from bpy.types import ShaderNodeGroup
 from mathutils import Matrix, Vector
-from ...common import yakuza_hierarchy_node_data_sort_key
-from ...coordinate_converter import transform_blender_to_gmd
-from ..mesh.functions import split_unskinned_blender_mesh_object
 from .base import BaseGMDSceneGatherer, remove_blender_duplicate, \
     GMDSceneGathererConfig
+from ..mesh.functions import split_unskinned_blender_mesh_object
+from ...common import yakuza_hierarchy_node_data_sort_key
+from ...coordinate_converter import transform_blender_to_gmd
 from ....gmdlib.abstract.gmd_scene import GMDScene, depth_first_iterate
 from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
 from ....gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject
@@ -124,6 +124,8 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
         adjusted_matrix = (inv_s @ inv_r @ inv_t @ parent_mat)
 
         world_pos = parent_mat.inverted_safe() @ adjusted_pos.to_3d()
+        if object.yakuza_hierarchy_node_data.relative_import_mesh:
+            world_pos.w = 0
         anim_axis = object.yakuza_hierarchy_node_data.anim_axis
         flags = json.loads(object.yakuza_hierarchy_node_data.flags_json)
         if len(flags) != 4 or any(not isinstance(x, int) for x in flags):
@@ -146,7 +148,9 @@ class UnskinnedGMDSceneGatherer(BaseGMDSceneGatherer):
 
                 matrix=adjusted_matrix,
 
-                bbox=self.gmd_bounding_box(object)
+                bbox=self.gmd_bounding_box(object),
+
+                is_in_relative_gmd=object.yakuza_hierarchy_node_data.relative_import_mesh,
             )
             if object.data.vertices:
                 if not object.material_slots:
