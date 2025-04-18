@@ -339,6 +339,8 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             unk3_always_0=0
         ))
 
+    blendshapes = None
+
     file_endian_check = 1 if file_big_endian else 0
     vertex_endian_check = 1 if vertices_big_endian else 0
 
@@ -347,6 +349,8 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
         flags[5] |= 0x8000_0000
     else:
         flags[5] &= ~0x8000_0000
+    if flags[5] & 256 and blendshapes is None:
+        error.fatal("Output file expects blendshapes when none were provided.")
 
     return FileData_Dragon(
         magic="GSGM",
