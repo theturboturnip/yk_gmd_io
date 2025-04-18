@@ -12,8 +12,12 @@ $ZipFile = "${path}\yk_gmd_blender.zip"
 # change current directory
 Set-Location "$path"
 
+git name-rev HEAD | Out-File repo_commit_hash.txt
+Add-Content -Path repo_commit_hash.txt -Value "$( git rev-parse HEAD )"
+
 # collecting list of files that we want to archive excluding those that we don't want to preserve
 $Files = @(Get-ChildItem "${subdir}" -Recurse -File | Where-Object { $_ -Match "^*.(py|blend)$" })
+$Files += Get-Item "repo_commit_hash.txt"
 $FullFilenames = $files | ForEach-Object -Process { Write-Output -InputObject $_.FullName }
 
 # remove old zip file
