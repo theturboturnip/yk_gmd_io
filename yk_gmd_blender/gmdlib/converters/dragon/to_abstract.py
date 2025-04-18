@@ -1,7 +1,7 @@
 import time
 
-from ...abstract.gmd_scene import HierarchyData, GMDScene
 from ..common.to_abstract import GMDAbstractor_Common
+from ...abstract.gmd_scene import HierarchyData, GMDScene
 from ...structure.dragon.file import FileData_Dragon
 
 
@@ -15,9 +15,16 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
 
         # TODO - thought on dragon engine normals - they're kinda weird
         #  they could be compressed into 2 floats and then the other ones used for other stuff? like the w component
-        abstract_vertex_buffers = self.build_vertex_buffers_from_structs(
+        abstract_vertex_buffers, blendshape = self.build_vertex_buffers_from_structs(
             self.file_data.vertex_buffer_arr, self.file_data.vertex_data,
+            blendshape=(
+                self.file_data.blendshape[0],
+                self.file_data.blendshape[2]
+            ) if self.file_data.blendshape else None,
         )
+        if self.file_data.blendshape and (blendshape is None):
+            self.error.recoverable("Found a blendshape in this file but didn't import it. "
+                                   "Disable Strict Import to ignore this error.")
         self.error.debug("TIME", f"Time after build_vertex_buffers_from_structs: {time.time() - start_time}")
 
         abstract_shaders = self.build_shaders_from_structs(abstract_vertex_buffers,
@@ -51,7 +58,12 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
 
                                                          self.file_data.mesh_arr, self.file_data.index_data,
                                                          self.file_data.mesh_matrixlist_bytes,
-                                                         bytestrings_are_16bit)
+                                                         bytestrings_are_16bit,
+                                                         blendshape_vertex_buffer=(
+                                                             self.file_data.blendshape[1].text,
+                                                             blendshape
+                                                         ) if (blendshape is not None) and (
+                                                                     self.file_data.blendshape is not None) else None)
 
         self.error.debug("TIME", f"Time after build_meshes_from_structs: {time.time() - start_time}")
 
@@ -65,7 +77,7 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
             self.file_data.node_arr, object_drawlist_ptrs, self.file_data.object_drawlist_bytes
         )
 
-        roots = [n for n in abstract_nodes if not n.parent]
+        roots = [n for n in abstract_nodes.values() if not n.parent]
         return GMDScene(
             name=self.file_data.name.text,
             flags=tuple(self.file_data.flags),

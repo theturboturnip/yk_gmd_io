@@ -212,7 +212,8 @@ class SkinnedSubmesh(Submesh):
             vertices_data=vertices,
             triangles=triangles,
             attribute_set=self.attr_set,
-            relevant_bones=self.relevant_bones
+            relevant_bones=self.relevant_bones,
+            blendshape=None,
         )
 
 

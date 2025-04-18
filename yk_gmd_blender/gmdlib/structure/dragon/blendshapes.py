@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from ..common.sized_pointer import SizedPointerStruct, SizedPointerStruct_Unpack
 from ....structurelib.base import StructureUnpacker
-from ....structurelib.primitives import c_uint32
+from ....structurelib.primitives import c_uint32, c_uint64
 
 
 @dataclass
@@ -16,7 +15,8 @@ class BlendshapeSpec:
     original_vertex_stride: int
     blendshape_vertex_offset_stride: int
     blendshape_vertex_offset_count: int
-    blendshape_vertex_offset_data: SizedPointerStruct
+    blendshape_vertex_offset_data_offset: int
+    blendshape_vertex_offset_data_size: int
 
 
 BlendshapeSpec_Unpack = StructureUnpacker(
@@ -24,11 +24,12 @@ BlendshapeSpec_Unpack = StructureUnpacker(
     fields=[
         ("n_blendshapes_always_one", c_uint32),
         ("blendshape_name_offset", c_uint32),
-        ("original_vertex_packing_flags", c_uint32),
-        ("blendshape_vertex_offset_packing_flags", c_uint32),
+        ("original_vertex_packing_flags", c_uint64),
+        ("blendshape_vertex_offset_packing_flags", c_uint64),
         ("original_vertex_stride", c_uint32),
         ("blendshape_vertex_offset_stride", c_uint32),
         ("blendshape_vertex_offset_count", c_uint32),
-        ("blendshape_vertex_offset_data", SizedPointerStruct_Unpack),
+        ("blendshape_vertex_offset_data_size", c_uint32),
+        ("blendshape_vertex_offset_data_offset", c_uint32),
     ]
 )

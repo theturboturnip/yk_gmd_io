@@ -3,14 +3,13 @@ import abc
 import array
 import time
 from enum import Enum
-from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional
+from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional, Dict
 
 from mathutils import Matrix
 from ...abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
 from ...abstract.gmd_mesh import GMDMesh, GMDSkinnedMesh, GMDMeshIndices
 from ...abstract.gmd_scene import GMDScene
 from ...abstract.gmd_shader import GMDShader, GMDVertexBufferLayout, GMDVertexBuffer
-from ...abstract.nodes.gmd_blendshape import GMDBlendShape
 from ...abstract.nodes.gmd_bone import GMDBone
 from ...abstract.nodes.gmd_node import GMDNode
 from ...abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject, GMDBoundingBox
@@ -23,6 +22,7 @@ from ...structure.common.mesh import IndicesStruct, MeshStruct
 from ...structure.common.node import NodeType, NodeStruct, NodeStackOp
 from ...structure.common.unks import Unk14Struct, Unk12Struct
 from ...structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
+from ...structure.dragon.blendshapes import BlendshapeSpec
 from ...structure.version import VersionProperties
 from ....structurelib.base import FixedSizeArrayUnpacker
 from ....structurelib.primitives import c_uint16, c_uint8
@@ -96,23 +96,22 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def build_vertex_buffers_from_structs(self,
 
                                           vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
+                                          blendshape: Optional[Tuple[BlendshapeSpec, bytes]],
 
                                           profile: bool = False) \
-            -> List[GMDVertexBuffer]:
-        assume_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
+            -> Tuple[List[GMDVertexBuffer], Optional[GMDVertexBuffer]]:
 
-        abstract_vertex_buffers = []
-        vertex_bytes_offset = 0
-        for layout_struct in vertex_layout_arr:
+        def generate_vertex_buffer(layout_flags: int, assume_skinned: bool, bpv: int, vertex_count: int,
+                                   vertex_bytes: bytes, vertex_bytes_offset: int):
             layout_build_start = time.time()
             abstract_layout = GMDVertexBufferLayout.build_vertex_buffer_layout_from_flags(
-                layout_struct.vertex_packing_flags, assume_skinned_vertex_buffers, self.error)
-            if abstract_layout.bytes_per_vertex() != layout_struct.bytes_per_vertex:
+                layout_flags, assume_skinned, self.error)
+            if abstract_layout.bytes_per_vertex() != bpv:
                 self.error.recoverable(
                     f"Abstract Layout BPV {abstract_layout.bytes_per_vertex()} didn't match "
-                    f"expected {layout_struct.bytes_per_vertex}\n"
-                    f"Packing Flags {layout_struct.vertex_packing_flags:08x} created layout {abstract_layout}")
-                abstract_layout = abstract_layout.with_forced_bpv(layout_struct.bytes_per_vertex, self.error)
+                    f"expected {bpv}\n"
+                    f"Packing Flags {layout_flags:08x} created layout {abstract_layout}")
+                abstract_layout = abstract_layout.with_forced_bpv(bpv, self.error)
 
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
                 # Create an empty vertex buffer
@@ -122,7 +121,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 unpack_start = time.time()
 
                 abstract_vertex_buffer, vertex_bytes_offset = \
-                    abstract_layout.unpack_from(self.vertices_are_big_endian, layout_struct.vertex_count,
+                    abstract_layout.unpack_from(self.vertices_are_big_endian, vertex_count,
                                                 vertex_bytes, vertex_bytes_offset)
 
                 unpack_finish = time.time()
@@ -133,12 +132,61 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     # This profiling is here incase we want to optimize vertex unpacking
                     self.error.debug("TIME", f"Time to build layout: {unpack_start - layout_build_start}")
                     self.error.debug("TIME",
-                                     f"Time to unpack {layout_struct.vertex_count} verts: {unpack_delta} "
-                                     f"({unpack_delta / layout_struct.vertex_count * 1000:2f}ms/vert)")
+                                     f"Time to unpack {vertex_count} verts: {unpack_delta} "
+                                     f"({unpack_delta / vertex_count * 1000:2f}ms/vert)")
+            return abstract_vertex_buffer, vertex_bytes_offset
+
+        assume_skinned_vertex_buffers = (self.file_import_mode == FileImportMode.SKINNED)
+
+        abstract_vertex_buffers = []
+        vertex_bytes_offset = 0
+        for layout_struct in vertex_layout_arr:
+            abstract_vertex_buffer, vertex_bytes_offset = generate_vertex_buffer(layout_struct.vertex_packing_flags,
+                                                                                 assume_skinned_vertex_buffers,
+                                                                                 layout_struct.bytes_per_vertex,
+                                                                                 layout_struct.vertex_count,
+                                                                                 vertex_bytes,
+                                                                                 vertex_bytes_offset)
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
-        return abstract_vertex_buffers
+        if blendshape:
+            blendshape_spec, blendshape_bytes = blendshape
+            # Do error checking
+            if len(vertex_layout_arr) == 1:
+                base_layout_spec = {
+                    "packing": vertex_layout_arr[0].vertex_packing_flags,
+                    "bpv": vertex_layout_arr[0].bytes_per_vertex,
+                    "count": vertex_layout_arr[0].vertex_count
+                }
+                blendshape_layout_spec = {
+                    "packing": blendshape_spec.original_vertex_packing_flags,
+                    "bpv": blendshape_spec.original_vertex_stride,
+                    "count": blendshape_spec.blendshape_vertex_offset_count
+                }
+                if base_layout_spec != blendshape_layout_spec:
+                    self.error.recoverable("Found a Blendshape in a GMD file which does not correlate to the "
+                                           "single vertex buffer.\n"
+                                           f"base {base_layout_spec} blendshape {blendshape_layout_spec}\n"
+                                           f"Disable Strict Import to ignore this error.")
+
+            else:
+                self.error.recoverable("Found a Blendshape in a GMD file with multiple vertex buffers. "
+                                       "Expected there to be a single mesh with a single vertex buffer "
+                                       "that the blendshape applies to."
+                                       "Disable Strict Import to ignore this error.")
+            blendshape_buffer, _offset = generate_vertex_buffer(
+                blendshape_spec.blendshape_vertex_offset_packing_flags,
+                assume_skinned=False,
+                bpv=blendshape_spec.blendshape_vertex_offset_stride,
+                vertex_count=blendshape_spec.blendshape_vertex_offset_count,
+                vertex_bytes=blendshape_bytes,
+                vertex_bytes_offset=0
+            )
+        else:
+            blendshape_buffer = None
+
+        return (abstract_vertex_buffers, blendshape_buffer)
 
     def build_shaders_from_structs(self,
 
@@ -227,8 +275,14 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                           node_arr: List[NodeStruct],
                                           node_name_arr: List[ChecksumStrStruct], matrix_arr: List[Matrix],
                                           object_bboxes: List[GMDBoundingBox]) \
-            -> List[GMDNode]:
-        nodes = []
+            -> Dict[int, GMDNode]:
+        nodes = {}
+        node_types = {
+            GMDBone: 0,
+            GMDUnskinnedObject: 0,
+            GMDSkinnedObject: 0,
+        }
+        file_blendshape = None
         parent_stack = ParentStack(self.error)
         for bone_idx, node_struct in enumerate(node_arr):
             name = node_name_arr[node_struct.name_index].text
@@ -240,31 +294,28 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     f"{[type(parent).__name__ for parent in parent_stack.stack]}"
                 )
 
-            node: GMDNode
-
             is_in_relative_gmd = node_struct.node_type != NodeType.MatrixTransform and node_struct.stack_op == NodeStackOp.PopPush and node_struct.parent_of < 0
             if is_in_relative_gmd and abs(node_struct.world_pos.w) > 0.000001:
                 self.error.recoverable(f"Encountered a 'relative GMD' node '{name}' with a nonzero world_pos.w. "
                                        f"This is unexpected and will break export. "
                                        f"Disable Strict Import to continue.")
 
+            node: Optional[GMDNode] = None
+
             if node_struct.node_type == NodeType.BlendShape:
-                node = GMDBlendShape(
-                    name=name,
-                    node_type=node_struct.node_type,
-
-                    pos=node_struct.pos,
-                    rot=node_struct.rot,
-                    scale=node_struct.scale,
-
-                    world_pos=node_struct.world_pos,
-                    anim_axis=node_struct.anim_axis,
-
-                    parent=parent_stack.peek() if parent_stack else None,
-                    flags=node_struct.flags,
-
-                    is_in_relative_gmd=is_in_relative_gmd,
-                )
+                if any(f != 0 for f in node_struct.flags):
+                    self.error.recoverable(
+                        f"Encountered a GMD blendshape node '{name}' with nonzero flags {node_struct.flags}. "
+                        f"Expected flags = 0. "
+                        f"Disable Strict Import to ignore this error."
+                    )
+                if node_types[GMDSkinnedObject] > 0:
+                    self.error.recoverable(
+                        f"Encountered a GMD blendshape node '{name}' after {node_types[GMDSkinnedObject]} skinned objects had already been imported. "
+                        "This addon expects GMD files with exactly one blendshape for exactly one skinned object. "
+                        "Disable Strict Import to ignore this error."
+                    )
+                file_blendshape = name
             elif node_struct.node_type == NodeType.MatrixTransform:
                 node = GMDBone(
                     name=name,
@@ -303,6 +354,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     bbox=object_bboxes[node_struct.object_index],
 
                     is_in_relative_gmd=is_in_relative_gmd,
+                    references_blendshape=file_blendshape,
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -332,21 +384,31 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             else:
                 self.error.fatal(f"Unknown node type enum value {node_struct.node_type} for {name}")
 
-            nodes.append(node)
-            if not is_in_relative_gmd:
-                # Apply the stack operation to the parent_stack
-                parent_stack.handle_node(node_struct, node)
+            if node is not None:
+                node_types[type(node)] += 1
+                nodes[node_struct.index] = node
+                if not is_in_relative_gmd:
+                    # Apply the stack operation to the parent_stack
+                    parent_stack.handle_node(node_struct, node)
 
-        return nodes
+        if file_blendshape is not None and (node_types[GMDUnskinnedObject] > 0 or node_types[GMDSkinnedObject] != 1):
+            self.error.recoverable(
+                f"Encountered a blendshape in a file with {node_types[GMDUnskinnedObject]} unskinned "
+                f"and {node_types[GMDUnskinnedObject]} skinned objects - expected 0 and 1. "
+                f"Disable Strict Import to ignore this error."
+            )
+
+        return cast(Dict[int, GMDNode], nodes)
 
     def build_meshes_from_structs(self,
 
                                   abstract_attributes: List[GMDAttributeSet],
                                   abstract_vertex_buffers: List[GMDVertexBuffer],
-                                  abstract_nodes_ordered: List[GMDNode],
+                                  abstract_nodes_ordered: Dict[int, GMDNode],
 
                                   mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
                                   bytestrings_are_16bit: bool,
+                                  blendshape_vertex_buffer: Optional[Tuple[str, GMDVertexBuffer]],
                                   ) \
             -> List[Union[GMDSkinnedMesh, GMDMesh]]:
         file_uses_relative_indices = self.version_props.relative_indices_used
@@ -497,7 +559,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     triangles=triangles,
 
-                    attribute_set=abstract_attributes[mesh_struct.attribute_index]
+                    attribute_set=abstract_attributes[mesh_struct.attribute_index],
+
+                    blendshape=blendshape_vertex_buffer,
                 ))
             else:
                 meshes.append(GMDMesh(
@@ -515,13 +579,15 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def connect_object_meshes(self,
 
                               abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
-                              abstract_nodes: List[GMDNode],
+                              abstract_nodes: Dict[int, GMDNode],
 
                               node_arr: List[NodeStruct],
                               object_drawlist_ptrs: List[int], mesh_drawlists: bytes):
         for i, node_struct in enumerate(node_arr):
             if node_struct.node_type in [NodeType.UnskinnedMesh, NodeType.SkinnedMesh]:
-                abstract_node = abstract_nodes[i]
+                abstract_node = abstract_nodes.get(i)
+                if abstract_node is None:
+                    self.error.fatal("Didn't load a Mesh node with the correct ID")
 
                 if not isinstance(abstract_node, (GMDSkinnedObject, GMDUnskinnedObject)):
                     self.error.fatal(

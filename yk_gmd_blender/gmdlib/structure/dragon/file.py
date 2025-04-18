@@ -213,7 +213,8 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
                 original_vertex_stride=value.blendshape[0].original_vertex_stride,
                 blendshape_vertex_offset_stride=value.blendshape[0].blendshape_vertex_offset_stride,
                 blendshape_vertex_offset_count=value.blendshape[0].blendshape_vertex_offset_count,
-                blendshape_vertex_offset_data=blendshape_vertex_ptr,
+                blendshape_vertex_offset_data_offset=blendshape_vertex_ptr.ptr,
+                blendshape_vertex_offset_data_size=blendshape_vertex_ptr.size,
             ), header_bytes)
         data[:len(header_bytes)] = header_bytes
 
@@ -227,8 +228,8 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
                                                               offset + GMDHeader_Dragon_Unpack.sizeof())
             blendshape_name, _ = ChecksumStrStruct_Unpack.unpack(big_endian, data,
                                                                  offset + blendshape_spec.blendshape_name_offset)
-            voffset_start = offset + blendshape_spec.blendshape_vertex_offset_data.ptr
-            voffset_end = voffset_start + blendshape_spec.blendshape_vertex_offset_data.size
+            voffset_start = offset + blendshape_spec.blendshape_vertex_offset_data_offset
+            voffset_end = voffset_start + blendshape_spec.blendshape_vertex_offset_data_size
             blendshape_vertex_data = data[voffset_start:voffset_end]
 
             value.blendshape = (blendshape_spec, blendshape_name, blendshape_vertex_data)

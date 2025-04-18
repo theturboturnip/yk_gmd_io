@@ -354,6 +354,7 @@ class SkinnedGMDSceneGatherer(BaseGMDSceneGatherer):
             bbox=self.gmd_bounding_box(object),
 
             is_in_relative_gmd=object.yakuza_hierarchy_node_data.relative_import_mesh,
+            references_blendshape=None,
         )
         self.node_roots.append(gmd_object)
 
