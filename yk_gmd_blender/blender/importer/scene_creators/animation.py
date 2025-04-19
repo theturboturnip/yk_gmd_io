@@ -3,9 +3,9 @@ from typing import Dict, Tuple, Set
 
 import bpy
 from mathutils import Quaternion, Matrix, Vector
-from ...coordinate_converter import transform_rotation_gmd_to_blender
 from .base import BaseGMDSceneCreator, GMDSceneCreatorConfig
 from .skinned import armature_name_for_gmd_file
+from ...coordinate_converter import transform_rotation_gmd_to_blender
 from ....gmdlib.abstract.gmd_scene import GMDScene
 from ....gmdlib.abstract.nodes.gmd_bone import GMDBone
 from ....gmdlib.abstract.nodes.gmd_object import GMDUnskinnedObject, GMDSkinnedObject
@@ -183,9 +183,8 @@ class GMDAnimationSceneCreator(BaseGMDSceneCreator):
         for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if isinstance(gmd_node, (GMDSkinnedObject, GMDUnskinnedObject)):
                 # Build the mesh, providing the vertex group indices in case it's a skinned object
-                overall_mesh = self.build_object_mesh(collection, gmd_node,
-                                                      skinned_vertex_group_indices)
-                node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
+                node_obj = self.build_mesh_object(collection, gmd_node,
+                                                  skinned_vertex_group_indices)
 
                 # Objects use an Armature modifier to deform them.
                 modifier = node_obj.modifiers.new(type='ARMATURE', name="Armature")

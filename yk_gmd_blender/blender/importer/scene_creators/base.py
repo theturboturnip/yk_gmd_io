@@ -7,8 +7,8 @@ from typing import Dict, Union
 
 import bpy
 from mathutils import Vector, Matrix
+from ..mesh.mesh_importer import gmd_meshes_to_bobj
 from ...common import GMDGame
-from ..mesh.mesh_importer import gmd_meshes_to_bmesh
 from ...materials import get_yakuza_shader_node_group, get_uv_scaler_node_group, \
     set_yakuza_shader_material_from_attributeset, YakuzaPropertyGroup, RDRT_SHADERS
 from ....gmdlib.abstract.gmd_attributes import GMDAttributeSet
@@ -88,9 +88,9 @@ class BaseGMDSceneCreator(abc.ABC):
         context.collection.children.link(collection)
         return collection
 
-    def build_object_mesh(self, collection: bpy.types.Collection,
+    def build_mesh_object(self, collection: bpy.types.Collection,
                           gmd_node: Union[GMDSkinnedObject, GMDUnskinnedObject],
-                          vertex_group_indices: Dict[str, int]) -> bpy.types.Mesh:
+                          vertex_group_indices: Dict[str, int]) -> bpy.types.Object:
         if isinstance(gmd_node, GMDSkinnedObject) and not vertex_group_indices:
             self.error.fatal(f"Trying to make a skinned object without any vertex groups")
 
@@ -117,7 +117,7 @@ class BaseGMDSceneCreator(abc.ABC):
 
         # If we have any meshes, merge them into an overall BMesh
         if gmd_node.mesh_list:
-            overall_mesh = gmd_meshes_to_bmesh(
+            overall_obj = gmd_meshes_to_bobj(
                 gmd_node.name,
                 gmd_node.mesh_list,
                 vertex_group_indices,
@@ -129,13 +129,13 @@ class BaseGMDSceneCreator(abc.ABC):
             )
             if self.config.import_materials:
                 for mat in blender_material_list:
-                    overall_mesh.materials.append(mat)
+                    overall_obj.data.materials.append(mat)
         else:
             # Else use an empty mesh
-            overall_mesh = bpy.data.meshes.new(gmd_node.name)
+            overall_obj = bpy.data.meshes.new(gmd_node.name)
             self.error.debug("OBJ", f"Empty mesh")
 
-        return overall_mesh
+        return overall_obj
 
     def make_material(self, collection: bpy.types.Collection, gmd_attribute_set: GMDAttributeSet) -> bpy.types.Material:
         """

@@ -192,10 +192,7 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
                 continue
             gmd_node: GMDSkinnedObject = cast(GMDSkinnedObject, gmd_node)
 
-            overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
-
-            # Create the final object representing this GMDNode
-            mesh_obj: bpy.types.Object = bpy.data.objects.new(gmd_node.name, overall_mesh)
+            mesh_obj = self.build_mesh_object(collection, gmd_node, vertex_group_indices)
 
             # Set the GMDNode position, rotation, scale
             mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz

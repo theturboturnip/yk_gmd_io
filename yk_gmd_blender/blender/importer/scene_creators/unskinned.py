@@ -58,8 +58,7 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
 
         for sibling_order, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if isinstance(gmd_node, GMDUnskinnedObject):
-                overall_mesh = self.build_object_mesh(collection, gmd_node, vertex_group_indices)
-                node_obj = bpy.data.objects.new(f"{gmd_node.name}", overall_mesh)
+                node_obj = self.build_mesh_object(collection, gmd_node, vertex_group_indices)
             else:
                 node_obj = bpy.data.objects.new(f"{gmd_node.name}", None)
                 node_obj.empty_display_size = 0.1

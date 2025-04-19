@@ -1,5 +1,5 @@
 import array
-from typing import Union, List, Dict, cast, Tuple, Set
+from typing import Union, List, Dict, cast, Tuple, Set, Optional
 
 import bmesh
 import bpy.types
@@ -11,7 +11,7 @@ from ....gmdlib.errors.error_reporter import ErrorReporter
 from ....meshlib.vertex_fusion import vertex_fusion, make_bone_indices_consistent
 
 
-def gmd_meshes_to_bmesh(
+def gmd_meshes_to_bobj(
         name: str,
         gmd_meshes: Union[List[GMDMesh], List[GMDSkinnedMesh]],
         vertex_group_indices: Dict[str, int],
@@ -20,7 +20,7 @@ def gmd_meshes_to_bmesh(
         fuse_vertices: bool,
         custom_split_normals: bool,
         error: ErrorReporter
-) -> bpy.types.Mesh:
+) -> bpy.types.Object:
     if len(gmd_meshes) == 0:
         error.fatal("Called gmd_meshes_to_bmesh with 0 meshes!")
     if len([m for m in gmd_meshes if m.empty]) > 0:
@@ -33,11 +33,17 @@ def gmd_meshes_to_bmesh(
 
     # If necessary, rewrite bone indices to be consistent
     vertices: Union[List[GMDVertexBuffer], List[GMDSkinnedVertexBuffer]]
+    blendshape: Optional[Tuple[str, GMDVertexBuffer]] = None
     if is_skinned:
         if not all(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")
 
         gmd_meshes = cast(List[GMDSkinnedMesh], gmd_meshes)
+
+        blendshape = gmd_meshes[0].blendshape
+        if not all((m.blendshape is not None) and (m.blendshape[0] == blendshape[0]) for m in gmd_meshes):
+            error.fatal("Called gmd_meshes_to_bmesh with skinned meshes that use different blendshapes")
+
         # Rewrite vertices data to use consistent bone indices throughout
         relevant_bones, vertices = make_bone_indices_consistent(gmd_meshes)
     else:
@@ -57,6 +63,10 @@ def gmd_meshes_to_bmesh(
     if deform and (relevant_bones is None):
         error.fatal(f"Mismatch between deform/is_skinned, and the existence of relevant_bones")
 
+    # If a GMD-blendshape (i.e. Blender Shape Key) is present, at some point we need to tell Blender
+    # where the new positions in the blendshape are.
+    bm_vertex_idx_to_blendshape_offset_vertex_idx: List[int] = []
+
     # Add a single vertex's (position, normal, bone weights) to the BMesh
     def add_vertex_to_bmesh(buf, i: int):
         yk_pos = buf.pos[i]
@@ -74,6 +84,8 @@ def gmd_meshes_to_bmesh(
                     break
                 vertex_group_index = vertex_group_indices[relevant_bones[bones[j]].name]
                 vert[deform][vertex_group_index] = weights[j]
+        if blendshape:
+            bm_vertex_idx_to_blendshape_offset_vertex_idx.append(i)
 
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
     # before adding all vertices in order
@@ -273,4 +285,27 @@ def gmd_meshes_to_bmesh(
 
     bm.free()
 
-    return overall_mesh
+    overall_obj = bpy.data.objects.new(name, overall_mesh)
+
+    # Apply the blendshape from the GMD as a shape key in blender
+    # We make a few assumptions:
+    # 1. the vertices from bm.verts are in the same order in overall_mesh.vertices
+    # 2. the blendshapes are intended to be used as 'relative' shape keys and not 'absolute' shape keys -
+    #       there is a difference https://blender.stackexchange.com/questions/195396/how-do-you-differentiate-relative-and-absolute-shape-keys
+    # 3. we currently IGNORE custom split normals and tangents.
+    if blendshape:
+        # https://blender.stackexchange.com/a/111751
+        sk_basis = overall_obj.shape_key_add(name="YkGmdIo_Basis")
+        sk_basis.interpolation = 'KEY_LINEAR'
+        overall_mesh.shape_keys.use_relative = True
+
+        shape_key_name, offset_vertices = blendshape
+        sk = overall_obj.shape_key_add(name=shape_key_name, from_mix=True)
+        sk.interpolation = 'KEY_LINEAR'
+
+        for bmesh_vtx, blendshape_vtx in enumerate(bm_vertex_idx_to_blendshape_offset_vertex_idx):
+            sk.data[bmesh_vtx].co.x += -offset_vertices.pos[blendshape_vtx][0]
+            sk.data[bmesh_vtx].co.y += offset_vertices.pos[blendshape_vtx][1]
+            sk.data[bmesh_vtx].co.z += offset_vertices.pos[blendshape_vtx][2]
+
+    return overall_obj
