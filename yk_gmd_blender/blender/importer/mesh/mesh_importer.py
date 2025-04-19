@@ -308,4 +308,8 @@ def gmd_meshes_to_bobj(
             sk.data[bmesh_vtx].co.y += offset_vertices.pos[blendshape_vtx][1]
             sk.data[bmesh_vtx].co.z += offset_vertices.pos[blendshape_vtx][2]
 
+        overall_mesh.shape_keys.yakuza_shape_key.is_yakuza = True
+        overall_mesh.shape_keys.yakuza_shape_key.blendshape_name = shape_key_name
+        overall_mesh.shape_keys.yakuza_shape_key.blendshape_attribute_set_flags = f"{offset_vertices.layout.packing_flags:016x}"
+
     return overall_obj

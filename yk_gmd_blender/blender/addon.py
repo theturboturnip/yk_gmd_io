@@ -3,7 +3,8 @@
 import bpy
 from bpy.props import PointerProperty
 from .common import YakuzaHierarchyNodeData, OBJECT_PT_yakuza_hierarchy_node_data_panel, \
-    BONE_PT_yakuza_hierarchy_node_data_panel, YakuzaFileRootData, OBJECT_PT_yakuza_file_root_data_panel
+    BONE_PT_yakuza_hierarchy_node_data_panel, YakuzaFileRootData, OBJECT_PT_yakuza_file_root_data_panel, \
+    YakuzaShapeKeyData, KEY_PT_yakuza_shape_key_data_panel
 from .exporter.gmd_exporter import ExportSkinnedGMD, menu_func_export_skinned, menu_func_export_unskinned, \
     ExportUnskinnedGMD
 from .importer.gmd_importers import ImportSkinnedGMD, menu_func_import_skinned, menu_func_import_unskinned, \
@@ -25,11 +26,13 @@ classes = (
     YakuzaPropertyPanel,
     YakuzaTexturePropertyGroup,
     YakuzaHierarchyNodeData,
+    YakuzaShapeKeyData,
     OBJECT_PT_yakuza_hierarchy_node_data_panel,
     BONE_PT_yakuza_hierarchy_node_data_panel,
     YakuzaFileRootData,
     OBJECT_PT_yakuza_file_root_data_panel,
     MATERIAL_OT_yakuza_update_expected_layers,
+    KEY_PT_yakuza_shape_key_data_panel,
 )
 
 
@@ -51,9 +54,11 @@ def register():
     bpy.types.Object.yakuza_hierarchy_node_data = PointerProperty(type=YakuzaHierarchyNodeData)
     bpy.types.Object.yakuza_file_root_data = PointerProperty(type=YakuzaFileRootData)
     bpy.types.Bone.yakuza_hierarchy_node_data = PointerProperty(type=YakuzaHierarchyNodeData)
+    bpy.types.Key.yakuza_shape_key = PointerProperty(type=YakuzaShapeKeyData)
 
 
 def unregister():
+    del bpy.types.Key.yakuza_shape_key
     del bpy.types.Bone.yakuza_hierarchy_node_data
     del bpy.types.Object.yakuza_file_root_data
     del bpy.types.Object.yakuza_hierarchy_node_data

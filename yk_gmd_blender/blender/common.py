@@ -573,3 +573,46 @@ class AttribSetLayers_bmesh:
     # Stores (component length, layer)
     uv_layers: List[Tuple[int, BMLayerCollection]]
     primary_uv_i: Optional[int]
+
+
+class YakuzaShapeKeyData(PropertyGroup):
+    is_yakuza: BoolProperty(name="Is Yakuza Blendshape", default=False)
+    blendshape_name: StringProperty(name="Exported Blendshape")
+    blendshape_attribute_set_flags: StringProperty(name="Blendshape Attribute Layout Flags")
+
+
+class KEY_PT_yakuza_shape_key_data_panel(Panel):
+    bl_label = "Yakuza Shape Key"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'data'
+    bl_category = "Tool"
+    bl_order = 1  # Make it appear near the top
+
+    def draw_header(self, context):
+        ob = context.object
+        if not ob:
+            return
+        if not isinstance(ob.data, bpy.types.Mesh):
+            return
+
+        key = context.object.data.shape_keys
+
+        self.layout.prop(key.yakuza_shape_key, "is_yakuza", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        ob = context.object
+        if not ob:
+            return
+        if not isinstance(ob.data, bpy.types.Mesh):
+            return
+
+        key = context.object.data.shape_keys
+
+        layout.active = key.yakuza_shape_key.is_yakuza
+
+        layout.prop(key.yakuza_shape_key, "blendshape_name")
+        layout.prop(key.yakuza_shape_key, "blendshape_attribute_set_flags")
