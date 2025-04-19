@@ -14,7 +14,7 @@ class GMDAbstractor_Y3(GMDAbstractor_Common[FileData_Y3]):
         vertices_are_big_endian = self.file_data.vertices_are_big_endian()
 
         abstract_vertex_buffers, _no_blendshape = self.build_vertex_buffers_from_structs(
-            self.file_data.vertex_buffer_arr, self.file_data.vertex_data, blendshape=None,
+            self.file_data.vertex_buffer_arr, self.file_data.vertex_data, blendshapes=None,
         )
         self.error.debug("TIME", f"Time after build_vertex_buffers_from_structs: {time.time() - start_time}")
 
@@ -49,7 +49,7 @@ class GMDAbstractor_Y3(GMDAbstractor_Common[FileData_Y3]):
 
                                                          self.file_data.mesh_arr, self.file_data.index_data,
                                                          self.file_data.mesh_matrixlist_bytes,
-                                                         bytestrings_are_16bit, blendshape_vertex_buffer=None)
+                                                         bytestrings_are_16bit, blendshapes=[])
 
         self.error.debug("TIME", f"Time after build_meshes_from_structs: {time.time() - start_time}")
 

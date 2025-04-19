@@ -739,8 +739,8 @@ def compare_files(file_src: Path, file_dst: Path, skinned: bool, vertices: bool,
         compare_name_arrs("texture_arr")
         # compare_name_arrs("node_name_arr") # This has not been proven essential. TODO do this in the future?
 
-        blendshape_src = cast(FileData_Dragon, file_data_src).blendshape
-        blendshape_dst = cast(FileData_Dragon, file_data_dst).blendshape
+        blendshape_src = cast(FileData_Dragon, file_data_src).blendshapes
+        blendshape_dst = cast(FileData_Dragon, file_data_dst).blendshapes
         if (blendshape_src is None) != (blendshape_dst is None):
             cmp.important_mismatch("file_data: field blendshape differs:\n"
                                    f"src:\n\t{blendshape_src}\n"

@@ -48,7 +48,7 @@ class FileData_Dragon(FileData_Common):
     flags: List[int]
 
     # This filled in by the DragonFilePacker later, but the default packers don't touch it.
-    blendshape: Optional[Tuple[BlendshapeSpec, ChecksumStrStruct, bytes]] = None
+    blendshapes: Optional[Tuple[BlendshapeSpec, List[ChecksumStrStruct], bytes]] = None
 
     def __str__(self):
         s = "{\n"
@@ -137,7 +137,7 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
 
         # Pad the data out with zeroes where the header and blendshape spec will go
         data += bytes().zfill(GMDHeader_Dragon_Unpack.sizeof())
-        if value.blendshape:
+        if value.blendshapes:
             data += bytes().zfill(BlendshapeSpec_Unpack.sizeof())
 
         # Fill in the contents
@@ -163,10 +163,13 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
         unk13 = pack_array(big_endian, "unk13", value.unk13, c_uint16, data)
         unk14 = pack_array(big_endian, "unk14", value.unk14, Unk14Struct_Unpack, data)
 
-        if value.blendshape:
-            blendshape_name_offset = pack_array(big_endian, "blendshape_name", [value.blendshape[1]],
-                                                ChecksumStrStruct_Unpack, data).ptr
-            blendshape_vertex_ptr = pack_array(big_endian, "blendshape_vertices", value.blendshape[2], bytes, data)
+        if value.blendshapes:
+            _blendshape_spec, name_arr, _blendshape_buffers = value.blendshapes
+            blendshape_name_array_ptr = pack_array(big_endian, "blendshape_name", name_arr,
+                                                   ChecksumStrStruct_Unpack, data).ptr
+
+            blendshape_vertex_buffer_array_ptr = pack_array(big_endian, "blendshape_vertices", value.blendshapes[2],
+                                                            bytes, data).ptr
 
         # Go back and overwrite the start with the header and blendshape spec if necessary
         header_bytes = bytearray()
@@ -202,19 +205,23 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
             file_size=len(data),
             padding=0,
         ), header_bytes)
-        if value.blendshape:
+        if value.blendshapes:
+            blendshape_spec, name_arr, _blendshape_buffers = value.blendshapes
             BlendshapeSpec_Unpack.pack(big_endian, BlendshapeSpec(
-                n_blendshapes_always_one=1,
+                num_blendshapes=blendshape_spec.num_blendshapes,
 
                 # The offset in the file of the ChecksumStr indicating the name of the blendshape
-                blendshape_name_offset=blendshape_name_offset,
-                original_vertex_packing_flags=value.blendshape[0].original_vertex_packing_flags,
-                blendshape_vertex_offset_packing_flags=value.blendshape[0].blendshape_vertex_offset_packing_flags,
-                original_vertex_stride=value.blendshape[0].original_vertex_stride,
-                blendshape_vertex_offset_stride=value.blendshape[0].blendshape_vertex_offset_stride,
-                blendshape_vertex_offset_count=value.blendshape[0].blendshape_vertex_offset_count,
-                blendshape_vertex_offset_data_offset=blendshape_vertex_ptr.ptr,
-                blendshape_vertex_offset_data_size=blendshape_vertex_ptr.size,
+                blendshape_name_array_ptr=blendshape_name_array_ptr,
+
+                original_vertex_packing_flags=blendshape_spec.original_vertex_packing_flags,
+                blendshape_vertex_packing_flags=blendshape_spec.blendshape_vertex_packing_flags,
+
+                original_vertex_stride=blendshape_spec.original_vertex_stride,
+                blendshape_vertex_stride=blendshape_spec.blendshape_vertex_stride,
+                per_blendshape_vertex_count=blendshape_spec.per_blendshape_vertex_count,
+                per_blendshape_vertex_buffer_size=blendshape_spec.per_blendshape_vertex_buffer_size,
+
+                blendshape_vertex_buffer_array_ptr=blendshape_vertex_buffer_array_ptr,
             ), header_bytes)
         data[:len(header_bytes)] = header_bytes
 
@@ -226,13 +233,19 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
         if value.flags[5] & 256:
             blendshape_spec, _ = BlendshapeSpec_Unpack.unpack(big_endian, data,
                                                               offset + GMDHeader_Dragon_Unpack.sizeof())
-            blendshape_name, _ = ChecksumStrStruct_Unpack.unpack(big_endian, data,
-                                                                 offset + blendshape_spec.blendshape_name_offset)
-            voffset_start = offset + blendshape_spec.blendshape_vertex_offset_data_offset
-            voffset_end = voffset_start + blendshape_spec.blendshape_vertex_offset_data_size
+            blendshape_names = ArrayPointerStruct(
+                SizedPointerStruct(
+                    offset + blendshape_spec.blendshape_name_array_ptr,
+                    blendshape_spec.num_blendshapes
+                )
+            ).extract(ChecksumStrStruct_Unpack, big_endian, data)
+            voffset_start = offset + blendshape_spec.blendshape_vertex_buffer_array_ptr
+            voffset_end = voffset_start + (
+                    blendshape_spec.per_blendshape_vertex_buffer_size * blendshape_spec.num_blendshapes
+            )
             blendshape_vertex_data = data[voffset_start:voffset_end]
 
-            value.blendshape = (blendshape_spec, blendshape_name, blendshape_vertex_data)
+            value.blendshapes = (blendshape_spec, blendshape_names, blendshape_vertex_data)
 
         return value, end_offset
 

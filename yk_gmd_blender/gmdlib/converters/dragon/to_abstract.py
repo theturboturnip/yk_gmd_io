@@ -15,16 +15,26 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
 
         # TODO - thought on dragon engine normals - they're kinda weird
         #  they could be compressed into 2 floats and then the other ones used for other stuff? like the w component
-        abstract_vertex_buffers, blendshape = self.build_vertex_buffers_from_structs(
+        abstract_vertex_buffers, blendshape_buffers = self.build_vertex_buffers_from_structs(
             self.file_data.vertex_buffer_arr, self.file_data.vertex_data,
-            blendshape=(
-                self.file_data.blendshape[0],
-                self.file_data.blendshape[2]
-            ) if self.file_data.blendshape else None,
+            blendshapes=(
+                self.file_data.blendshapes[0],
+                self.file_data.blendshapes[2]
+            ) if self.file_data.blendshapes else None,
         )
-        if self.file_data.blendshape and (blendshape is None):
-            self.error.recoverable("Found a blendshape in this file but didn't import it. "
+        if self.file_data.blendshapes and not blendshape_buffers:
+            self.error.recoverable("Found blendshapes in this file but didn't import them. "
                                    "Disable Strict Import to ignore this error.")
+        if self.file_data.blendshapes:
+            blendshape_names = [name.text for name in self.file_data.blendshapes[1]]
+            if len(blendshape_names) != len(blendshape_buffers):
+                self.error.recoverable(f"Found {len(blendshape_names)} blendshape names in the file but imported "
+                                       f"{len(blendshape_buffers)} buffers. Will only use the fewer of the two. "
+                                       f"Disable Strict Import to ignore this error.")
+            blendshapes = list(zip(blendshape_names, blendshape_buffers))
+        else:
+            blendshapes = []
+
         self.error.debug("TIME", f"Time after build_vertex_buffers_from_structs: {time.time() - start_time}")
 
         abstract_shaders = self.build_shaders_from_structs(abstract_vertex_buffers,
@@ -59,11 +69,7 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
                                                          self.file_data.mesh_arr, self.file_data.index_data,
                                                          self.file_data.mesh_matrixlist_bytes,
                                                          bytestrings_are_16bit,
-                                                         blendshape_vertex_buffer=(
-                                                             self.file_data.blendshape[1].text,
-                                                             blendshape
-                                                         ) if (blendshape is not None) and (
-                                                                     self.file_data.blendshape is not None) else None)
+                                                         blendshapes=blendshapes)
 
         self.error.debug("TIME", f"Time after build_meshes_from_structs: {time.time() - start_time}")
 

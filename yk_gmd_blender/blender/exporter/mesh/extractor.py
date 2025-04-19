@@ -148,7 +148,14 @@ def compute_vertex_Nweights(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Given a bpy Mesh, find the top (N in {4,8}) bones and weights of each vertex.
-    Returns two ndarrays, one for bones and one for weights.
+    Returns (bones, weights, n_weights).
+
+    bones = n_vertices x N u16s, up to N active bones for each vertex sorted in descending weight
+
+    weights = n_vertices x N f32s, up to N active weights for each vertex
+
+    n_weights = n_vertices x 1 u8s, the number 0 <= x <= N of the number of active bones for that vertex
+
     bones[vertex][i] = 0 if weights[vertex][i] is 0, else = the index of a vertex group in relevant_vertex_groups.
     weights[vertex][i] = float in [0, 1].
     n_weights[vertex] = the number of active weights for the vertex (max N).
@@ -157,6 +164,9 @@ def compute_vertex_Nweights(
     bones[v] = [0, 1, 2, 3]
     weights[v] = [0.5, 0.3, 0.1, 0.1]
 
+    :param N: number of active bones to compute for
+    :param error:
+    :param mesh:
     :param relevant_vertex_groups: A set of relevant (mesh vertex group index) values. Weights for other groups are ignored.
     :return:
     """

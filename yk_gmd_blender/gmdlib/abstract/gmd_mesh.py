@@ -123,7 +123,7 @@ class GMDMesh:
 @dataclass(repr=False, eq=False)
 class GMDSkinnedMesh(GMDMesh):
     vertices_data: GMDSkinnedVertexBuffer
-    blendshape: Optional[Tuple[str, GMDVertexBuffer]]
+    blendshapes: List[Tuple[str, GMDVertexBuffer]]
     relevant_bones: List[GMDBone]
 
     def __post_init__(self):

@@ -42,13 +42,15 @@ def split_skinned_blender_mesh_object(context: bpy.types.Context, object: bpy.ty
     skinned_submeshes: List[SkinnedSubmesh] = []
 
     for (attr_set_idx, attr_set) in enumerate(materials):
-        # Get the set of MeshLoopIdxs that are related to this material
+        # Get the set of MeshLoopIdxs that are related to this material.
+        # These MeshLoopIdxs
         loops_with_dupes = loop_indices_for_material(mesh, attr_set_idx)
         # Generate a vertex buffer with data for all of them
         # Set want_expanded so we get 16-bit bone buffers, which is necessary in case more than 255 bones are relevant
         base_vertices = extract_vertices_for_skinned_material(mesh, attr_set, loops_with_dupes, bone_info, error)
-        # Convert them to bytes and deduplicate them
+        # Convert the vertex buffer to bytes
         vertex_bytes = generate_vertex_byteslices(base_vertices, big_endian=False)
+        # Dedupe any vertices with identical byte content
         deduped_verts, loop_idx_to_deduped_verts_idx = dedupe_loops(loops_with_dupes, vertex_bytes)
         # Generate the submeshes
         skinned_submeshes += convert_meshloop_tris_to_skinned_submeshes(
@@ -213,7 +215,7 @@ class SkinnedSubmesh(Submesh):
             triangles=triangles,
             attribute_set=self.attr_set,
             relevant_bones=self.relevant_bones,
-            blendshape=None,
+            blendshapes=[],
         )
 
 

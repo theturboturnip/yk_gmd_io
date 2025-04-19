@@ -96,10 +96,10 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
     def build_vertex_buffers_from_structs(self,
 
                                           vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
-                                          blendshape: Optional[Tuple[BlendshapeSpec, bytes]],
+                                          blendshapes: Optional[Tuple[BlendshapeSpec, bytes]],
 
                                           profile: bool = False) \
-            -> Tuple[List[GMDVertexBuffer], Optional[GMDVertexBuffer]]:
+            -> Tuple[List[GMDVertexBuffer], List[GMDVertexBuffer]]:
 
         def generate_vertex_buffer(layout_flags: int, assume_skinned: bool, bpv: int, vertex_count: int,
                                    vertex_bytes: bytes, vertex_bytes_offset: int):
@@ -150,8 +150,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
             abstract_vertex_buffers.append(abstract_vertex_buffer)
 
-        if blendshape:
-            blendshape_spec, blendshape_bytes = blendshape
+        if blendshapes:
+            blendshape_spec, blendshape_bytes = blendshapes
             # Do error checking
             if len(vertex_layout_arr) == 1:
                 base_layout_spec = {
@@ -162,31 +162,34 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 blendshape_layout_spec = {
                     "packing": blendshape_spec.original_vertex_packing_flags,
                     "bpv": blendshape_spec.original_vertex_stride,
-                    "count": blendshape_spec.blendshape_vertex_offset_count
+                    "count": blendshape_spec.per_blendshape_vertex_count
                 }
                 if base_layout_spec != blendshape_layout_spec:
-                    self.error.recoverable("Found a Blendshape in a GMD file which does not correlate to the "
+                    self.error.recoverable("Found blendshapes in a GMD file which does not correlate to the "
                                            "single vertex buffer.\n"
                                            f"base {base_layout_spec} blendshape {blendshape_layout_spec}\n"
                                            f"Disable Strict Import to ignore this error.")
 
             else:
-                self.error.recoverable("Found a Blendshape in a GMD file with multiple vertex buffers. "
+                self.error.recoverable("Found blendshapes in a GMD file with multiple vertex buffers. "
                                        "Expected there to be a single mesh with a single vertex buffer "
-                                       "that the blendshape applies to."
+                                       "that the blendshapes apply to."
                                        "Disable Strict Import to ignore this error.")
-            blendshape_buffer, _offset = generate_vertex_buffer(
-                blendshape_spec.blendshape_vertex_offset_packing_flags,
-                assume_skinned=False,
-                bpv=blendshape_spec.blendshape_vertex_offset_stride,
-                vertex_count=blendshape_spec.blendshape_vertex_offset_count,
-                vertex_bytes=blendshape_bytes,
-                vertex_bytes_offset=0
-            )
+            blendshape_buffers = [
+                generate_vertex_buffer(
+                    blendshape_spec.blendshape_vertex_packing_flags,
+                    assume_skinned=False,
+                    bpv=blendshape_spec.blendshape_vertex_stride,
+                    vertex_count=blendshape_spec.per_blendshape_vertex_count,
+                    vertex_bytes=blendshape_bytes,
+                    vertex_bytes_offset=blendshape_spec.per_blendshape_vertex_buffer_size * i
+                )[0]
+                for i in range(blendshape_spec.num_blendshapes)
+            ]
         else:
-            blendshape_buffer = None
+            blendshape_buffers = []
 
-        return (abstract_vertex_buffers, blendshape_buffer)
+        return abstract_vertex_buffers, blendshape_buffers
 
     def build_shaders_from_structs(self,
 
@@ -282,7 +285,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             GMDUnskinnedObject: 0,
             GMDSkinnedObject: 0,
         }
-        file_blendshape = None
+        file_blendshapes = []
         parent_stack = ParentStack(self.error)
         for bone_idx, node_struct in enumerate(node_arr):
             name = node_name_arr[node_struct.name_index].text
@@ -315,7 +318,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                         "This addon expects GMD files with exactly one blendshape for exactly one skinned object. "
                         "Disable Strict Import to ignore this error."
                     )
-                file_blendshape = name
+                file_blendshapes.append(name)
             elif node_struct.node_type == NodeType.MatrixTransform:
                 node = GMDBone(
                     name=name,
@@ -354,7 +357,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     bbox=object_bboxes[node_struct.object_index],
 
                     is_in_relative_gmd=is_in_relative_gmd,
-                    references_blendshape=file_blendshape,
+                    references_blendshapes=file_blendshapes,
                 )
             elif node_struct.node_type == NodeType.UnskinnedMesh:
                 if not (0 <= node_struct.matrix_index < len(matrix_arr)):
@@ -391,10 +394,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                     # Apply the stack operation to the parent_stack
                     parent_stack.handle_node(node_struct, node)
 
-        if file_blendshape is not None and (node_types[GMDUnskinnedObject] > 0 or node_types[GMDSkinnedObject] != 1):
+        if file_blendshapes and (node_types[GMDUnskinnedObject] > 0 or node_types[GMDSkinnedObject] != 1):
             self.error.recoverable(
-                f"Encountered a blendshape in a file with {node_types[GMDUnskinnedObject]} unskinned "
-                f"and {node_types[GMDUnskinnedObject]} skinned objects - expected 0 and 1. "
+                f"Encountered {len(file_blendshapes)} blendshapes in a file with "
+                f"{node_types[GMDUnskinnedObject]} unskinned and {node_types[GMDUnskinnedObject]} skinned objects "
+                f"- expected 0 and 1.\n"
                 f"Disable Strict Import to ignore this error."
             )
 
@@ -408,7 +412,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                   mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
                                   bytestrings_are_16bit: bool,
-                                  blendshape_vertex_buffer: Optional[Tuple[str, GMDVertexBuffer]],
+                                  blendshapes: List[Tuple[str, GMDVertexBuffer]],
                                   ) \
             -> List[Union[GMDSkinnedMesh, GMDMesh]]:
         file_uses_relative_indices = self.version_props.relative_indices_used
@@ -561,7 +565,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                     attribute_set=abstract_attributes[mesh_struct.attribute_index],
 
-                    blendshape=blendshape_vertex_buffer,
+                    blendshapes=blendshapes,
                 ))
             else:
                 meshes.append(GMDMesh(

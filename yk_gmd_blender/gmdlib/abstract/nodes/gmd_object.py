@@ -99,7 +99,7 @@ class GMDUnskinnedObject(GMDNode):
 class GMDSkinnedObject(GMDNode):
     mesh_list: List[GMDSkinnedMesh]
     bbox: GMDBoundingBox
-    references_blendshape: Optional[str]
+    references_blendshapes: List[str]
 
     def __init__(self, name: str, node_type: NodeType,
                  pos: Vector, rot: Quaternion, scale: Vector,
@@ -108,14 +108,14 @@ class GMDSkinnedObject(GMDNode):
                  flags: List[int],
                  bbox: GMDBoundingBox,
                  is_in_relative_gmd: bool,
-                 references_blendshape: Optional[str]):
+                 references_blendshapes: List[str]):
         super().__init__(name, node_type, pos, rot, scale, world_pos, anim_axis, parent=parent,
                          flags=flags)
         self.mesh_list = []
         self.bbox = bbox
 
         self.is_in_relative_gmd = is_in_relative_gmd
-        self.references_blendshape = references_blendshape
+        self.references_blendshape = references_blendshapes
 
         if self.node_type != NodeType.SkinnedMesh:
             raise TypeError(f"GMDSkinnedObject expected NodeType.SkinnedMesh, got {self.node_type}")
@@ -124,8 +124,8 @@ class GMDSkinnedObject(GMDNode):
         if not isinstance(mesh, GMDSkinnedMesh):
             raise TypeError(f"GMDSkinnedObject {self.name} got not-skinned-mesh {mesh}")
 
-        mesh_blendshape_name = (mesh.blendshape[0] if mesh.blendshape else None)
-        if self.references_blendshape != mesh_blendshape_name:
-            raise TypeError(f"Tried to attach a GMDSkinnedMesh referencing blendshape {mesh_blendshape_name} "
+        mesh_blendshape_names = [name for (name, _data) in mesh.blendshapes]
+        if self.references_blendshape != mesh_blendshape_names:
+            raise TypeError(f"Tried to attach a GMDSkinnedMesh referencing blendshapes {mesh_blendshape_names} "
                             f"to a GMDSkinnedObject referencing {self.references_blendshape}")
         self.mesh_list.append(mesh)

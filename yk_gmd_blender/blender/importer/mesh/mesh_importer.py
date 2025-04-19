@@ -1,5 +1,5 @@
 import array
-from typing import Union, List, Dict, cast, Tuple, Set, Optional
+from typing import Union, List, Dict, cast, Tuple, Set
 
 import bmesh
 import bpy.types
@@ -33,16 +33,26 @@ def gmd_meshes_to_bobj(
 
     # If necessary, rewrite bone indices to be consistent
     vertices: Union[List[GMDVertexBuffer], List[GMDSkinnedVertexBuffer]]
-    blendshape: Optional[Tuple[str, GMDVertexBuffer]] = None
+    blendshapes: List[Tuple[str, GMDVertexBuffer]] = []
     if is_skinned:
         if not all(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")
 
         gmd_meshes = cast(List[GMDSkinnedMesh], gmd_meshes)
 
-        blendshape = gmd_meshes[0].blendshape
-        if not all((m.blendshape is not None) and (m.blendshape[0] == blendshape[0]) for m in gmd_meshes):
-            error.fatal("Called gmd_meshes_to_bmesh with skinned meshes that use different blendshapes")
+        # Blendshapes are present
+        blendshapes = gmd_meshes[0].blendshapes
+        if blendshapes:
+            # Ensure that all meshes use the same blendshapes
+            blendshape_names = [name for (name, _data) in blendshapes]
+            if not all([name for (name, _data) in m.blendshapes] == blendshape_names for m in gmd_meshes):
+                error.fatal("Called gmd_meshes_to_bmesh with skinned meshes that use different blendshapes")
+            # We can now ensure all blendshapes use the same vertex layout
+            blendshape_vertex_format = blendshapes[0][1].layout
+            if not all(
+                    blendshape_verts.layout == blendshape_vertex_format for (_name, blendshape_verts) in blendshapes):
+                error.fatal(
+                    "Called gmd_meshes_to_bmesh with skinned meshes that use different blendshape vertex formats")
 
         # Rewrite vertices data to use consistent bone indices throughout
         relevant_bones, vertices = make_bone_indices_consistent(gmd_meshes)
@@ -84,7 +94,7 @@ def gmd_meshes_to_bobj(
                     break
                 vertex_group_index = vertex_group_indices[relevant_bones[bones[j]].name]
                 vert[deform][vertex_group_index] = weights[j]
-        if blendshape:
+        if blendshapes:
             bm_vertex_idx_to_blendshape_offset_vertex_idx.append(i)
 
     # Optionally apply vertex fusion (merging "adjacent" vertices while keeping per-loop data)
@@ -293,23 +303,22 @@ def gmd_meshes_to_bobj(
     # 2. the blendshapes are intended to be used as 'relative' shape keys and not 'absolute' shape keys -
     #       there is a difference https://blender.stackexchange.com/questions/195396/how-do-you-differentiate-relative-and-absolute-shape-keys
     # 3. we currently IGNORE custom split normals and tangents.
-    if blendshape:
+    if blendshapes:
         # https://blender.stackexchange.com/a/111751
         sk_basis = overall_obj.shape_key_add(name="YkGmdIo_Basis")
         sk_basis.interpolation = 'KEY_LINEAR'
         overall_mesh.shape_keys.use_relative = True
 
-        shape_key_name, offset_vertices = blendshape
-        sk = overall_obj.shape_key_add(name=shape_key_name, from_mix=True)
-        sk.interpolation = 'KEY_LINEAR'
+        for (blendshape_name, blendshape_offset_verts) in blendshapes:
+            sk = overall_obj.shape_key_add(name=blendshape_name, from_mix=True)
+            sk.interpolation = 'KEY_LINEAR'
 
-        for bmesh_vtx, blendshape_vtx in enumerate(bm_vertex_idx_to_blendshape_offset_vertex_idx):
-            sk.data[bmesh_vtx].co.x += -offset_vertices.pos[blendshape_vtx][0]
-            sk.data[bmesh_vtx].co.y += offset_vertices.pos[blendshape_vtx][1]
-            sk.data[bmesh_vtx].co.z += offset_vertices.pos[blendshape_vtx][2]
+            for bmesh_vtx, blendshape_vtx in enumerate(bm_vertex_idx_to_blendshape_offset_vertex_idx):
+                sk.data[bmesh_vtx].co.x += -blendshape_offset_verts.pos[blendshape_vtx][0]
+                sk.data[bmesh_vtx].co.y += blendshape_offset_verts.pos[blendshape_vtx][1]
+                sk.data[bmesh_vtx].co.z += blendshape_offset_verts.pos[blendshape_vtx][2]
 
-        overall_mesh.shape_keys.yakuza_shape_key.is_yakuza = True
-        overall_mesh.shape_keys.yakuza_shape_key.blendshape_name = shape_key_name
-        overall_mesh.shape_keys.yakuza_shape_key.blendshape_attribute_set_flags = f"{offset_vertices.layout.packing_flags:016x}"
+            overall_mesh.shape_keys.yakuza_shape_key.is_yakuza = True
+            overall_mesh.shape_keys.yakuza_shape_key.blendshape_attribute_set_flags = f"{blendshape_offset_verts.layout.packing_flags:016x}"
 
     return overall_obj

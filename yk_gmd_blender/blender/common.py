@@ -576,8 +576,7 @@ class AttribSetLayers_bmesh:
 
 
 class YakuzaShapeKeyData(PropertyGroup):
-    is_yakuza: BoolProperty(name="Is Yakuza Blendshape", default=False)
-    blendshape_name: StringProperty(name="Exported Blendshape")
+    is_yakuza: BoolProperty(name="Uses Yakuza Blendshapes", default=False)
     blendshape_attribute_set_flags: StringProperty(name="Blendshape Attribute Layout Flags")
 
 
@@ -597,6 +596,8 @@ class KEY_PT_yakuza_shape_key_data_panel(Panel):
             return
 
         key = context.object.data.shape_keys
+        if not key:
+            return
 
         self.layout.prop(key.yakuza_shape_key, "is_yakuza", text="")
 
@@ -611,6 +612,8 @@ class KEY_PT_yakuza_shape_key_data_panel(Panel):
             return
 
         key = context.object.data.shape_keys
+        if not key:
+            return
 
         layout.active = key.yakuza_shape_key.is_yakuza
 
