@@ -19,6 +19,11 @@ from ....structurelib.primitives import c_uint16
 
 
 @dataclass(frozen=True)
+class PackParams:
+    dragon_engine_retain_texture_order: bool = True
+
+
+@dataclass(frozen=True)
 class RearrangedData:
     ordered_nodes: List[Tuple[GMDNode, NodeStackOp]]
     ordered_matrices: List[Matrix]

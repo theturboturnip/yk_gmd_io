@@ -11,6 +11,7 @@ from .scene_gatherers.skinned import SkinnedBoneMatrixOrigin, SkinnedGMDSceneGat
 from .scene_gatherers.unskinned import UnskinnedGMDSceneGatherer
 from ..common import GMDGame
 from ..error_reporter import BlenderErrorReporter
+from ...gmdlib.converters.common.from_abstract import PackParams
 from ...gmdlib.converters.common.to_abstract import VertexImportMode, FileImportMode
 from ...gmdlib.errors.error_classes import GMDImportExportError
 from ...gmdlib.errors.error_reporter import StrictErrorReporter, LenientErrorReporter
@@ -50,6 +51,15 @@ class BaseExportGMD(Operator, ExportHelper):
                                                      "between the original file and the new file.",
                                          default=False)
 
+    dragon_engine_retain_texture_order: BoolProperty(name="Retain Texture Order",
+                                                     description="If True, Dragon Engine exports will keep the "
+                                                                 "list of textures in the same order as they are in "
+                                                                 "the original file. This allows exported GMDs to be "
+                                                                 "used by users without updating tex_change_table.bin.\n"
+                                                                 "If False, textures may be exported in a different order,"
+                                                                 "which can be useful for fully custom models and textures.",
+                                                     default=True)
+
     def create_logger(self) -> BlenderErrorReporter:
         debug_categories = set(self.logging_categories.split(" "))
         base_error_reporter = StrictErrorReporter(debug_categories) if self.strict else LenientErrorReporter(
@@ -79,6 +89,9 @@ class BaseExportGMD(Operator, ExportHelper):
             bounding_box_calc=BoundingBoxCalc.map_from_blender_props(self.bounding_box_enum),
             debug_compare_matrices=self.debug_compare_matrices
         )
+
+    def create_pack_params(self) -> PackParams:
+        return PackParams(self.dragon_engine_retain_texture_order)
 
 
 class ExportSkinnedGMD(BaseExportGMD):
@@ -134,6 +147,8 @@ class ExportSkinnedGMD(BaseExportGMD):
         if not self.autodetect_bone_limit:
             layout.prop(self, 'manual_bone_limit')
 
+        layout.prop(self, 'dragon_engine_retain_texture_order')
+
     def create_skinned_gmd_config(
             self, gmd_version: VersionProperties, error: BlenderErrorReporter
     ) -> GMDSkinnedSceneGathererConfig:
@@ -187,6 +202,7 @@ class ExportSkinnedGMD(BaseExportGMD):
             self.report({"INFO"}, f"Writing scene out...")
             write_abstract_scene_out(gmd_version,
                                      gmd_contents.file_is_big_endian(), gmd_contents.vertices_are_big_endian(),
+                                     self.create_pack_params(),
                                      gmd_scene,
                                      gmd_contents,
                                      filepath,
@@ -225,6 +241,7 @@ class ExportUnskinnedGMD(BaseExportGMD):
         layout.prop(self, "bounding_box_enum")
 
         layout.prop(self, 'debug_compare_matrices')
+        layout.prop(self, 'dragon_engine_retain_texture_order')
 
     def execute(self, context):
         error = self.create_logger()
@@ -260,6 +277,7 @@ class ExportUnskinnedGMD(BaseExportGMD):
             self.report({"INFO"}, f"Writing scene out...")
             write_abstract_scene_out(gmd_version,
                                      gmd_contents.file_is_big_endian(), gmd_contents.vertices_are_big_endian(),
+                                     self.create_pack_params(),
                                      gmd_scene,
                                      gmd_contents,
                                      filepath,

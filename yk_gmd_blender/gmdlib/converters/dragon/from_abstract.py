@@ -2,7 +2,7 @@ from typing import Dict
 
 from mathutils import Vector
 from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
-    pack_mesh_matrix_strings
+    pack_mesh_matrix_strings, PackParams
 from ..yk1.from_abstract import yk1_bounds_from_gmd
 from ...abstract.gmd_attributes import GMDUnk12
 from ...abstract.gmd_mesh import GMDSkinnedMesh
@@ -30,6 +30,7 @@ def vec3_to_vec4(vec: Vector, w: float = 0.0):
 
 def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_big_endian: bool,
                                   vertices_big_endian: bool,
+                                  pack_params: PackParams,
                                   scene: GMDScene, old_file_contents: FileData_Dragon, error: ErrorReporter,
                                   base_flags=(0, 0, 0, 0, 0, 0)) -> FileData_Dragon:
     old_file_had_triangle_strips = any(
@@ -272,15 +273,20 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
-    # DRAGON ENGINE DIFFERENCE - ordered textures
-    # Dragon Engine games sometimes keep a cache of 'when rendering, replace texture #i with X' for certain models.
-    # To maintain consistency with the cache, the texture-list order needs to stay the same as the original file -
-    # at least, for the textures the game caches.
-    ordered_texture_arr = old_file_contents.texture_arr[:]
-    textures_in_new_texture_arr: Dict[str, int] = {
-        t.text: i
-        for i, t in enumerate(ordered_texture_arr)
-    }
+
+    if pack_params.dragon_engine_retain_texture_order:
+        # DRAGON ENGINE DIFFERENCE - ordered textures
+        # Dragon Engine games sometimes keep a cache of 'when rendering, replace texture #i with X' for certain models.
+        # To maintain consistency with the cache, the texture-list order needs to stay the same as the original file -
+        # at least, for the textures the game caches.
+        ordered_texture_arr = old_file_contents.texture_arr[:]
+        textures_in_new_texture_arr: Dict[str, int] = {
+            t.text: i
+            for i, t in enumerate(ordered_texture_arr)
+        }
+    else:
+        ordered_texture_arr = []
+        textures_in_new_texture_arr: Dict[str, int] = {}
 
     def make_texture_index(s: str) -> TextureIndexStruct_Dragon:
         idx = textures_in_new_texture_arr.get(s) if s else -1
@@ -303,14 +309,14 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
         texture_index = AttributeStruct_Dragon.calculate_texture_count(
-            texture_diffuse=(gmd_attribute_set.texture_diffuse),
-            texture_refl=(gmd_attribute_set.texture_refl),
-            texture_multi=(gmd_attribute_set.texture_multi),
-            texture_rm=(gmd_attribute_set.texture_rm),
-            texture_ts=(gmd_attribute_set.texture_rs),
-            texture_normal=(gmd_attribute_set.texture_normal),
-            texture_rt=(gmd_attribute_set.texture_rt),
-            texture_rd=(gmd_attribute_set.texture_rd),
+            texture_diffuse=gmd_attribute_set.texture_diffuse,
+            texture_refl=gmd_attribute_set.texture_refl,
+            texture_multi=gmd_attribute_set.texture_multi,
+            texture_rm=gmd_attribute_set.texture_rm,
+            texture_ts=gmd_attribute_set.texture_rs,
+            texture_normal=gmd_attribute_set.texture_normal,
+            texture_rt=gmd_attribute_set.texture_rt,
+            texture_rd=gmd_attribute_set.texture_rd,
         )
         attribute_arr.append(AttributeStruct_Dragon(
             index=i,

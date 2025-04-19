@@ -4,6 +4,7 @@ import pstats
 from pathlib import Path
 from typing import TypeVar, Callable
 
+from .yk_gmd_blender.gmdlib.converters.common.from_abstract import PackParams
 from .yk_gmd_blender.gmdlib.converters.common.to_abstract import FileImportMode, VertexImportMode
 from .yk_gmd_blender.gmdlib.errors.error_reporter import LenientErrorReporter
 from .yk_gmd_blender.gmdlib.io import read_gmd_structures, read_abstract_scene_from_filedata_object, \
@@ -37,7 +38,8 @@ def import_file(path: Path, skinned: bool, error: LenientErrorReporter):
 
 def export_file(version_props, file_data, scene, error: LenientErrorReporter):
     unabstracted_file_data = pack_abstract_scene(version_props, file_data.file_is_big_endian(),
-                                                 file_data.vertices_are_big_endian(), scene, file_data, error)
+                                                 file_data.vertices_are_big_endian(), PackParams(), scene, file_data,
+                                                 error)
     return pack_file_data(version_props, unabstracted_file_data, error)
 
 

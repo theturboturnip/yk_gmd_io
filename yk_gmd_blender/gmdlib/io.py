@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Union, Tuple, cast
 
 from .abstract.gmd_scene import GMDScene
+from .converters.common.from_abstract import PackParams
 from .converters.common.to_abstract import FileImportMode, VertexImportMode
 from .converters.dragon.from_abstract import pack_abstract_contents_Dragon
 from .converters.dragon.to_abstract import GMDAbstractor_Dragon
@@ -130,7 +131,8 @@ def check_version_writeable(version_props: VersionProperties, error_reporter: Er
 
 
 def pack_abstract_scene(version_props: VersionProperties, file_is_big_endian: bool, vertices_are_big_endian: bool,
-                        scene: GMDScene, old_file_contents: Union[FileData_Kenzan, FileData_YK1, FileData_Dragon],
+                        pack_params: PackParams, scene: GMDScene,
+                        old_file_contents: Union[FileData_Kenzan, FileData_YK1, FileData_Dragon],
                         error_reporter: ErrorReporter) -> FileData_Common:
     file_data: FileData_Common
     if version_props.major_version == GMDVersion.Kiwami1:
@@ -138,7 +140,9 @@ def pack_abstract_scene(version_props: VersionProperties, file_is_big_endian: bo
                                                error_reporter)
         return file_data
     elif version_props.major_version == GMDVersion.Dragon:
-        file_data = pack_abstract_contents_Dragon(version_props, file_is_big_endian, vertices_are_big_endian, scene,
+        file_data = pack_abstract_contents_Dragon(version_props, file_is_big_endian, vertices_are_big_endian,
+                                                  pack_params,
+                                                  scene,
                                                   old_file_contents,
                                                   error_reporter)
         return file_data
@@ -181,9 +185,10 @@ def pack_file_data(version_props: VersionProperties, file_data: FileData_Common,
 
 
 def write_abstract_scene_out(version_props: VersionProperties, file_is_big_endian: bool, vertices_are_big_endian: bool,
+                             pack_params: PackParams,
                              scene: GMDScene, old_file_contents: Union[FileData_Kenzan, FileData_YK1, FileData_Dragon],
                              path: Union[Path, str], error_reporter: ErrorReporter):
-    file_data = pack_abstract_scene(version_props, file_is_big_endian, vertices_are_big_endian, scene,
+    file_data = pack_abstract_scene(version_props, file_is_big_endian, vertices_are_big_endian, pack_params, scene,
                                     old_file_contents, error_reporter)
     data_bytearray = pack_file_data(version_props, file_data, error_reporter)
     try:
