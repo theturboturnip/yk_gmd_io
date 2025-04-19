@@ -412,7 +412,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                   mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
                                   bytestrings_are_16bit: bool,
-                                  blendshapes: List[Tuple[str, GMDVertexBuffer]],
+                                  blendshapes: Dict[str, GMDVertexBuffer],
                                   ) \
             -> List[Union[GMDSkinnedMesh, GMDMesh]]:
         file_uses_relative_indices = self.version_props.relative_indices_used

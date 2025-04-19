@@ -115,7 +115,7 @@ class GMDSkinnedObject(GMDNode):
         self.bbox = bbox
 
         self.is_in_relative_gmd = is_in_relative_gmd
-        self.references_blendshape = references_blendshapes
+        self.references_blendshapes = references_blendshapes
 
         if self.node_type != NodeType.SkinnedMesh:
             raise TypeError(f"GMDSkinnedObject expected NodeType.SkinnedMesh, got {self.node_type}")
@@ -124,8 +124,8 @@ class GMDSkinnedObject(GMDNode):
         if not isinstance(mesh, GMDSkinnedMesh):
             raise TypeError(f"GMDSkinnedObject {self.name} got not-skinned-mesh {mesh}")
 
-        mesh_blendshape_names = [name for (name, _data) in mesh.blendshapes]
-        if self.references_blendshape != mesh_blendshape_names:
+        mesh_blendshape_names = [name for (name, _data) in mesh.blendshapes.items()]
+        if self.references_blendshapes != mesh_blendshape_names:
             raise TypeError(f"Tried to attach a GMDSkinnedMesh referencing blendshapes {mesh_blendshape_names} "
-                            f"to a GMDSkinnedObject referencing {self.references_blendshape}")
+                            f"to a GMDSkinnedObject referencing {self.references_blendshapes}")
         self.mesh_list.append(mesh)

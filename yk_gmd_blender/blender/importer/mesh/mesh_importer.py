@@ -33,7 +33,7 @@ def gmd_meshes_to_bobj(
 
     # If necessary, rewrite bone indices to be consistent
     vertices: Union[List[GMDVertexBuffer], List[GMDSkinnedVertexBuffer]]
-    blendshapes: List[Tuple[str, GMDVertexBuffer]] = []
+    blendshapes: Dict[str, GMDVertexBuffer] = {}
     if is_skinned:
         if not all(isinstance(x, GMDSkinnedMesh) for x in gmd_meshes):
             error.fatal("Called gmd_meshes_to_bmesh with a mix of skinned and unskinned meshes")
@@ -44,13 +44,14 @@ def gmd_meshes_to_bobj(
         blendshapes = gmd_meshes[0].blendshapes
         if blendshapes:
             # Ensure that all meshes use the same blendshapes
-            blendshape_names = [name for (name, _data) in blendshapes]
-            if not all([name for (name, _data) in m.blendshapes] == blendshape_names for m in gmd_meshes):
+            blendshape_names = [name for (name, _data) in blendshapes.items()]
+            if not all([name for (name, _data) in m.blendshapes.items()] == blendshape_names for m in gmd_meshes):
                 error.fatal("Called gmd_meshes_to_bmesh with skinned meshes that use different blendshapes")
             # We can now ensure all blendshapes use the same vertex layout
-            blendshape_vertex_format = blendshapes[0][1].layout
+            blendshape_vertex_format = next(iter(blendshapes.values())).layout
             if not all(
-                    blendshape_verts.layout == blendshape_vertex_format for (_name, blendshape_verts) in blendshapes):
+                    blendshape_verts.layout == blendshape_vertex_format for (_name, blendshape_verts) in
+                    blendshapes.items()):
                 error.fatal(
                     "Called gmd_meshes_to_bmesh with skinned meshes that use different blendshape vertex formats")
 
@@ -309,14 +310,19 @@ def gmd_meshes_to_bobj(
         sk_basis.interpolation = 'KEY_LINEAR'
         overall_mesh.shape_keys.use_relative = True
 
-        for (blendshape_name, blendshape_offset_verts) in blendshapes:
+        for (blendshape_name, blendshape_offset_verts) in blendshapes.items():
             sk = overall_obj.shape_key_add(name=blendshape_name, from_mix=True)
             sk.interpolation = 'KEY_LINEAR'
 
             for bmesh_vtx, blendshape_vtx in enumerate(bm_vertex_idx_to_blendshape_offset_vertex_idx):
-                sk.data[bmesh_vtx].co.x += -blendshape_offset_verts.pos[blendshape_vtx][0]
-                sk.data[bmesh_vtx].co.y += blendshape_offset_verts.pos[blendshape_vtx][1]
-                sk.data[bmesh_vtx].co.z += blendshape_offset_verts.pos[blendshape_vtx][2]
+                sk.data[bmesh_vtx].co.x -= -blendshape_offset_verts.pos[blendshape_vtx][0]
+                sk.data[bmesh_vtx].co.y -= blendshape_offset_verts.pos[blendshape_vtx][1]
+                sk.data[bmesh_vtx].co.z -= blendshape_offset_verts.pos[blendshape_vtx][2]
+
+            # Convenience just in case
+            sk.slider_min = -1
+            sk.value = 0
+            sk.slider_max = 1
 
             overall_mesh.shape_keys.yakuza_shape_key.is_yakuza = True
             overall_mesh.shape_keys.yakuza_shape_key.blendshape_attribute_set_flags = f"{blendshape_offset_verts.layout.packing_flags:016x}"

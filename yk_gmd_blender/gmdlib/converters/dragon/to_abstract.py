@@ -31,9 +31,15 @@ class GMDAbstractor_Dragon(GMDAbstractor_Common[FileData_Dragon]):
                 self.error.recoverable(f"Found {len(blendshape_names)} blendshape names in the file but imported "
                                        f"{len(blendshape_buffers)} buffers. Will only use the fewer of the two. "
                                        f"Disable Strict Import to ignore this error.")
-            blendshapes = list(zip(blendshape_names, blendshape_buffers))
+            blendshapes = {}
+            for (name, buffer) in zip(blendshape_names, blendshape_buffers):
+                if name in blendshapes:
+                    self.error.recoverable(f"Found multiple blendshapes named '{name}' in this file. "
+                                           f"Disable Strict Import to continue, only the first blendshape will be imported.")
+                    continue
+                blendshapes[name] = buffer
         else:
-            blendshapes = []
+            blendshapes = {}
 
         self.error.debug("TIME", f"Time after build_vertex_buffers_from_structs: {time.time() - start_time}")
 

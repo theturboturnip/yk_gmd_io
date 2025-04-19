@@ -49,7 +49,7 @@ class GMDAbstractor_Y3(GMDAbstractor_Common[FileData_Y3]):
 
                                                          self.file_data.mesh_arr, self.file_data.index_data,
                                                          self.file_data.mesh_matrixlist_bytes,
-                                                         bytestrings_are_16bit, blendshapes=[])
+                                                         bytestrings_are_16bit, blendshapes={})
 
         self.error.debug("TIME", f"Time after build_meshes_from_structs: {time.time() - start_time}")
 

@@ -1,6 +1,6 @@
 import array
 from dataclasses import dataclass
-from typing import List, Optional, Generator, Tuple, Iterable
+from typing import List, Optional, Generator, Tuple, Iterable, Dict
 
 import numpy as np
 
@@ -123,7 +123,7 @@ class GMDMesh:
 @dataclass(repr=False, eq=False)
 class GMDSkinnedMesh(GMDMesh):
     vertices_data: GMDSkinnedVertexBuffer
-    blendshapes: List[Tuple[str, GMDVertexBuffer]]
+    blendshapes: Dict[str, GMDVertexBuffer]
     relevant_bones: List[GMDBone]
 
     def __post_init__(self):

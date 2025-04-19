@@ -132,7 +132,7 @@ class BaseGMDSceneCreator(abc.ABC):
                     overall_obj.data.materials.append(mat)
         else:
             # Else use an empty mesh
-            overall_obj = bpy.data.meshes.new(gmd_node.name)
+            overall_obj = bpy.data.objects.new(gmd_node.name, bpy.data.meshes.new(gmd_node.name))
             self.error.debug("OBJ", f"Empty mesh")
 
         return overall_obj
