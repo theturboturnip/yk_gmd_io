@@ -2,7 +2,9 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from subprocess import CalledProcessError
 
 import pytest
 
@@ -38,12 +40,16 @@ COMPARE_FILTER = {
 
 @pytest.mark.order(10)
 def test_blender_importexport(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
-    if gmdtest.mode == GMDTestMode.AnimationImportOnly:
-        gmd_importanim(gmdtest, blender, isolate_blender)
-    elif gmdtest.mode == GMDTestMode.LenientImportOnly:
-        gmd_importlenient(gmdtest, blender, isolate_blender)
-    else:
-        gmd_importexport(gmdtest, blender, isolate_blender)
+    try:
+        if gmdtest.mode == GMDTestMode.AnimationImportOnly:
+            gmd_importanim(gmdtest, blender, isolate_blender)
+        elif gmdtest.mode == GMDTestMode.LenientImportOnly:
+            gmd_importlenient(gmdtest, blender, isolate_blender)
+        else:
+            gmd_importexport(gmdtest, blender, isolate_blender)
+    except CalledProcessError as ex:
+        print(ex.stderr, file=sys.stderr)
+        raise
 
 
 def gmd_importanim(gmdtest: GMDTest, blender: Path, isolate_blender: bool):
