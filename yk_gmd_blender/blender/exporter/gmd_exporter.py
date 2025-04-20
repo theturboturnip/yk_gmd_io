@@ -23,35 +23,35 @@ from ...gmdlib.structure.version import GMDVersion, VersionProperties
 class BaseExportGMD(Operator, ExportHelper):
     filename_ext = '.gmd'
 
-    filter_glob: StringProperty(default='*.gmd', options={'HIDDEN'})
+    filter_glob: StringProperty(default='*.gmd', options={'HIDDEN'})  # type: ignore
 
-    strict: BoolProperty(name="Strict File Export",
+    strict: BoolProperty(name="Strict File Export",  # type: ignore
                          description="If True, will fail the export even on recoverable errors.",
                          default=True)
 
-    game_enum: EnumProperty(name="Game/Engine Version",
+    game_enum: EnumProperty(name="Game/Engine Version",  # type: ignore
                             description="The Game or Engine version you're importing from."
                                         "If the specific game isn't available, you can select the engine type.",
                             items=GMDGame.blender_props() + [
                                 ("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
                             default="AUTODETECT")
 
-    bounding_box_enum: EnumProperty(name="Bounding Boxes",
+    bounding_box_enum: EnumProperty(name="Bounding Boxes",  # type: ignore
                                     description="How bounding boxes are calculated for each item. May affect stage export.",
                                     items=BoundingBoxCalc.blender_props(),
                                     default="OLD_INFINITE")
 
-    logging_categories: StringProperty(name="Debug Log Categories",
+    logging_categories: StringProperty(name="Debug Log Categories",  # type: ignore
                                        description="Space-separated string of debug categories for logging.",
                                        default="ALL")
 
-    debug_compare_matrices: BoolProperty(name="[DEBUG] Compare Matrices",
+    debug_compare_matrices: BoolProperty(name="[DEBUG] Compare Matrices",  # type: ignore
                                          description="If True, will print out a comparison of the scene matrices "
                                                      "(for bones and unskinned objects)\n"
                                                      "between the original file and the new file.",
                                          default=False)
 
-    dragon_engine_retain_texture_order: BoolProperty(name="Retain Texture Order",
+    dragon_engine_retain_texture_order: BoolProperty(name="Retain Texture Order",  # type: ignore
                                                      description="If True, Dragon Engine exports will keep the "
                                                                  "list of textures in the same order as they are in "
                                                                  "the original file. This allows exported GMDs to be "
@@ -99,7 +99,7 @@ class ExportSkinnedGMD(BaseExportGMD):
     bl_idname = 'export_scene.gmd_skinned'
     bl_label = "Export Yakuza GMD [Skinned]"
 
-    bone_matrix_origin: EnumProperty(name="Bone Matrices",
+    bone_matrix_origin: EnumProperty(name="Bone Matrices",  # type: ignore
                                      description="How the addon should calculate a bone's animation matrices.",
                                      items=[
                                          ("CALCULATE", "Arbitrary Skeleton [ADVANCED]",
@@ -115,13 +115,13 @@ class ExportSkinnedGMD(BaseExportGMD):
                                      ],
                                      default="FROM_TARGET_FILE")
 
-    autodetect_bone_limit: BoolProperty(name="Autodetect Bone Limit",
+    autodetect_bone_limit: BoolProperty(name="Autodetect Bone Limit",  # type: ignore
                                         description="Automatically find the maximum amount of bones per mesh.\n"
                                                     "Pre-DE games have at most 32 bones per mesh, the addon splits\n"
                                                     "meshes up to stay within this. DE doesn't have a known limit,\n"
                                                     "but we use 256 to be on the safe side.",
                                         default=True)
-    manual_bone_limit: IntProperty(name="Manual Bone Limit",
+    manual_bone_limit: IntProperty(name="Manual Bone Limit",  # type: ignore
                                    description="Set the maximum bone count manually.\nUse at your own risk!",
                                    default=32,
                                    min=1)

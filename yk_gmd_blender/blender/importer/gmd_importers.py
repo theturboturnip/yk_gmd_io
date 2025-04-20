@@ -24,29 +24,29 @@ from ...gmdlib.structure.version import VersionProperties, GMDVersion
 
 
 class BaseImportGMD:
-    filter_glob: StringProperty(default="*.gmd", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.gmd", options={"HIDDEN"})  # type: ignore
 
     # Selected files (allows for multi-import)
-    files: CollectionProperty(name="File Path",
+    files: CollectionProperty(name="File Path",  # type: ignore
                               type=OperatorFileListElement)
-    directory: StringProperty(
+    directory: StringProperty(  # type: ignore
         subtype='DIR_PATH',
     )
 
-    strict: BoolProperty(name="Strict File Import",
+    strict: BoolProperty(name="Strict File Import",  # type: ignore
                          description="If True, will fail the import even on recoverable errors.",
                          default=True)
-    stop_on_fail: BoolProperty(name="Stop on Failure",
+    stop_on_fail: BoolProperty(name="Stop on Failure",  # type: ignore
                                description="If True, when importing multiple GMDs, an import failure in one file will "
                                            "stop all subsequent files from importing.",
                                default=True)
 
-    import_materials: BoolProperty(name="Import Materials",
+    import_materials: BoolProperty(name="Import Materials",  # type: ignore
                                    description="If True, will import materials. "
                                                "If False, all objects will not have any materials. "
                                                "This is required if you want to export the scene later.",
                                    default=True)
-    material_naming: EnumProperty(name="Material Naming",
+    material_naming: EnumProperty(name="Material Naming",  # type: ignore
                                   description="How materials are named",
                                   items=[
                                       ("COLLECTION_SHADER", "[Collection]_[Shader]", "Collection name and Shader name"),
@@ -56,24 +56,24 @@ class BaseImportGMD:
                                   ],
                                   default="COLLECTION_TEXTURE")
 
-    fuse_vertices: BoolProperty(name="Fuse Vertices",
+    fuse_vertices: BoolProperty(name="Fuse Vertices",  # type: ignore
                                 description="If True, meshes that are attached to the same object "
                                             "will have duplicate vertices removed.",
                                 default=True)
 
-    custom_split_normals: BoolProperty(name="Custom Split Normals",
+    custom_split_normals: BoolProperty(name="Custom Split Normals",  # type: ignore
                                        description="If True, will use the custom split normals feature "
                                                    "to exactly preserve normals.",
                                        default=True)
 
-    game_enum: EnumProperty(name="Game/Engine Version",
+    game_enum: EnumProperty(name="Game/Engine Version",  # type: ignore
                             description="The Game or Engine version you're importing from."
                                         "If the specific game isn't available, you can select the engine type.",
                             items=GMDGame.blender_props() + [
                                 ("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
                             default="AUTODETECT")
 
-    logging_categories: StringProperty(name="Debug Log Categories",
+    logging_categories: StringProperty(name="Debug Log Categories",  # type: ignore
                                        description="Space-separated string of debug categories for logging.",
                                        default="ALL")
 
@@ -123,12 +123,12 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
     bl_idname = "import_scene.gmd_skinned"
     bl_label = "Import Yakuza Skinned GMD for Modelling"
 
-    import_hierarchy: BoolProperty(name="Import Hierarchy",
+    import_hierarchy: BoolProperty(name="Import Hierarchy",  # type: ignore
                                    description="If True, will import the full node hierarchy including skeleton bones. "
                                                "This is required if you want to export the scene later. "
                                                "Skinned meshes will be imported with bone weights.",
                                    default=True)
-    import_objects: BoolProperty(name="Import Objects",
+    import_objects: BoolProperty(name="Import Objects",  # type: ignore
                                  description="If True, will import the full object hierarchy. "
                                              "This is required if you want to export the scene later.",
                                  default=True)

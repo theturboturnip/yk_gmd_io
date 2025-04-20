@@ -3,6 +3,8 @@ import re
 from dataclasses import dataclass
 from typing import TypeVar, Tuple, List, Dict, Iterable, Callable, Set, Union
 
+import mathutils
+
 from mathutils import Matrix
 from ...abstract.gmd_attributes import GMDMaterial, GMDAttributeSet
 from ...abstract.gmd_mesh import GMDSkinnedMesh, GMDMesh
@@ -67,7 +69,7 @@ T = TypeVar('T')
 TKey = TypeVar('TKey')
 
 
-def build_index_mapping(pool: List[T], key: Callable[[T], TKey] = lambda x: x) -> Dict[TKey, int]:
+def build_index_mapping(pool: List[T], key: Callable[[T], TKey]) -> Dict[TKey, int]:
     return {
         key(x): i
         for i, x in enumerate(pool)
@@ -111,19 +113,19 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     # many bones flag is important, but so are the others - look into which ones are supposed to be there
     # is relative-indexing set in a flag?
 
-    ordered_nodes = []
-    ordered_matrices = []
-    ordered_skinned_objects = []
-    ordered_unskinned_objects = []
+    ordered_nodes: List[Tuple[GMDNode, NodeStackOp]] = []
+    ordered_matrices: List[mathutils.Matrix] = []
+    ordered_skinned_objects: List[GMDSkinnedObject] = []
+    ordered_unskinned_objects: List[GMDUnskinnedObject] = []
 
     root_node_indices = []
     node_id_to_node_index = {}
     node_id_to_object_index = {}
     node_id_to_matrix_index = {}
 
-    texture_names = set()
-    shader_names = set()
-    node_names = set()
+    texture_names_set = set()
+    shader_names_set = set()
+    node_names_set = set()
 
     # Order the nodes
     # Depth-first indexing
@@ -134,7 +136,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
         # if has parent and all other children of your parent have been touched - stackop += pop
         # the depth_first_iterate iterates through children in order
         #   -> if we are the last child, all others must have been touched
-        want_pop = bool(gmd_node.parent) and gmd_node.parent.children[-1] is gmd_node
+        want_pop = (gmd_node.parent is not None) and gmd_node.parent.children[-1] is gmd_node
         # if not leaf: stackop += push
         want_push = bool(gmd_node.children)
 
@@ -189,7 +191,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
             root_node_indices.append(i)
 
         # Add name to node names
-        node_names.add(gmd_node.name)
+        node_names_set.add(gmd_node.name)
 
     # Put unskinned objects before skinned ones
     # Skinned objects don't have matrices, so don't put them before things that do,
@@ -208,28 +210,28 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     ]
 
     for mesh in meshes:
-        shader_names.add(mesh.attribute_set.shader.name)
+        shader_names_set.add(mesh.attribute_set.shader.name)
 
         if mesh.attribute_set.texture_diffuse:
-            texture_names.add(mesh.attribute_set.texture_diffuse)
+            texture_names_set.add(mesh.attribute_set.texture_diffuse)
         if mesh.attribute_set.texture_refl:
-            texture_names.add(mesh.attribute_set.texture_refl)
+            texture_names_set.add(mesh.attribute_set.texture_refl)
         if mesh.attribute_set.texture_multi:
-            texture_names.add(mesh.attribute_set.texture_multi)
+            texture_names_set.add(mesh.attribute_set.texture_multi)
         if mesh.attribute_set.texture_rm:
-            texture_names.add(mesh.attribute_set.texture_rm)
+            texture_names_set.add(mesh.attribute_set.texture_rm)
         if mesh.attribute_set.texture_rs:
-            texture_names.add(mesh.attribute_set.texture_rs)
+            texture_names_set.add(mesh.attribute_set.texture_rs)
         if mesh.attribute_set.texture_normal:
-            texture_names.add(mesh.attribute_set.texture_normal)
+            texture_names_set.add(mesh.attribute_set.texture_normal)
         if mesh.attribute_set.texture_rt:
-            texture_names.add(mesh.attribute_set.texture_rt)
+            texture_names_set.add(mesh.attribute_set.texture_rt)
         if mesh.attribute_set.texture_rd:
-            texture_names.add(mesh.attribute_set.texture_rd)
+            texture_names_set.add(mesh.attribute_set.texture_rd)
 
     # build texture, node name pools
-    texture_names, texture_names_index = build_pools(texture_names)
-    node_names, node_names_index = build_pools(node_names)
+    texture_names, texture_names_index = build_pools(texture_names_set)
+    node_names, node_names_index = build_pools(node_names_set)
 
     # Order attributesets first.
     #  then, order meshes based only on attributesets.
@@ -243,8 +245,9 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     # This will achieve the requested ordering for prefixes, but not for other things.
     # However, we only care about ordering transparent shaders together at the end.
     def compare_attr_sets(a1: GMDAttributeSet, a2: GMDAttributeSet):
-        a1_prefix = re.match(r'^[a-z]+_[a-z]', a1.shader.name).group(0)
-        a2_prefix = re.match(r'^[a-z]+_[a-z]', a2.shader.name).group(0)
+        # type ignore because we assume there is always a match
+        a1_prefix = re.match(r'^[a-z]+_[a-z]', a1.shader.name).group(0)  # type: ignore
+        a2_prefix = re.match(r'^[a-z]+_[a-z]', a2.shader.name).group(0)  # type: ignore
 
         if a1_prefix < a2_prefix:
             # sort by inverted prefix first
@@ -264,10 +267,11 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     # Order the attribute sets, and get a nice order for shaders too
     expected_attribute_set_order = sorted({id(m.attribute_set): m.attribute_set for m in meshes}.values(),
                                           key=functools.cmp_to_key(compare_attr_sets))
-    shader_names = [a.shader.name for a in expected_attribute_set_order]
+    # Redefine shader_names as a list so we get insertion order
+    shader_names_ordered = [a.shader.name for a in expected_attribute_set_order]
     # remove dupes
-    shader_names = list(dict.fromkeys(shader_names))
-    shader_names, shader_names_index = build_pools(shader_names)
+    shader_names_ordered = list(dict.fromkeys(shader_names_ordered))
+    shader_names, shader_names_index = build_pools(shader_names_ordered)
 
     known_vertex_layouts_set: Set[GMDVertexBufferLayout] = {
         mesh.vertices_data.layout
@@ -289,7 +293,7 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
     ordered_meshes.sort(key=lambda m: expected_attribute_set_order.index(m.attribute_set))
     mesh_id_to_index = build_index_mapping(ordered_meshes, key=id)
 
-    mesh_id_to_object_index = {}
+    mesh_id_to_object_index: Dict[int, int] = {}
     # These are only for skinned meshes
     mesh_id_to_matrixlist = {}
     mesh_matrixlist_set = set()
@@ -308,14 +312,14 @@ def arrange_data_for_export(scene: GMDScene, error: ErrorReporter) -> Rearranged
                 mesh_matrixlist_set.add(matrixlist)
 
     mesh_matrixlist = list(mesh_matrixlist_set)
-    mesh_matrixlist_index = build_index_mapping(mesh_matrixlist)
+    mesh_matrixlist_index = build_index_mapping(mesh_matrixlist, key=lambda x: x)
 
     if set(mesh_id_to_index.keys()) != set(mesh_id_to_object_index.keys()):
         error.fatal("Somehow the mapping of mesh -> mesh index maps different meshes than the mesh -> object index")
 
     # Order the attribute sets
     attribute_set_id_to_mesh_index_range = {}
-    ordered_attribute_sets = []
+    ordered_attribute_sets: List[GMDAttributeSet] = []
     attr_index_start = -1
     for i, m in enumerate(ordered_meshes):
         if not ordered_attribute_sets:

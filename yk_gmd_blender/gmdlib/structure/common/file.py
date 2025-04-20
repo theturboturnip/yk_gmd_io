@@ -4,6 +4,7 @@ from typing import Type, Union, Tuple, List, Generic, TypeVar
 
 from .array_pointer import ArrayPointerStruct
 from .checksum_str import ChecksumStrStruct
+from .header import GMDHeaderStruct
 from .sized_pointer import SizedPointerStruct
 from ..endianness import check_is_file_big_endian, check_are_vertices_big_endian
 from ..version import VersionProperties, \
@@ -65,8 +66,8 @@ class FileData_Common:
         ]
 
 
-TFileData = TypeVar("TFileData", bound="FileData_Common")
-THeaderStruct = TypeVar("THeaderStruct", bound="GMDHeaderStruct")
+TFileData = TypeVar("TFileData", bound=FileData_Common)
+THeaderStruct = TypeVar("THeaderStruct", bound=GMDHeaderStruct)
 
 
 # TODO: Generics?
@@ -135,7 +136,7 @@ class FilePacker(Generic[TFileData, THeaderStruct]):
 
         header = self.header_packer.python_type(
             **header_copies,
-            **element_pointers,
+            **element_pointers,  # type: ignore
 
             file_size=header_size + len(collective_data),
             padding=0

@@ -90,6 +90,7 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
                                           error: ErrorReporter,
                                           bone_remapper: Optional[Mapping[int, int]] = None) -> GMDSkinnedVertexBuffer:
     assert attr_set.shader.assume_skinned
+    assert attr_set.shader.vertex_buffer_layout.bones_storage is not None
 
     layer_names = AttribSetLayerNames.build_from(attr_set.shader.vertex_buffer_layout, is_skinned=True)
     layers = layer_names.try_retrieve_from(mesh, error)
@@ -103,6 +104,8 @@ def extract_vertices_for_skinned_material(mesh: bpy.types.Mesh, attr_set: GMDAtt
         )
     else:
         layout = attr_set.shader.vertex_buffer_layout
+
+    assert layout.bones_storage is not None
 
     vertices = GMDSkinnedVertexBuffer.build_empty(layout, len(loops))
 

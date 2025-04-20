@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import List
 
+from ..common.material_base import MaterialBaseStruct
 from ....structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from ....structurelib.primitives import *
-from ..common.material_base import MaterialBaseStruct
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class MaterialStruct_Kenzan(MaterialBaseStruct):
     diffuse: List[int]
     opacity: float

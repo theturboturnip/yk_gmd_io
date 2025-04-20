@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    error_reporter = LenientErrorReporter({})
+    error_reporter = LenientErrorReporter()
 
     version_props, header, file_data = read_gmd_structures(args.input_dir / args.file_to_poke, error_reporter)
     scene = read_abstract_scene_from_filedata_object(

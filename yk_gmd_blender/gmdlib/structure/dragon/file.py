@@ -233,12 +233,13 @@ class DragonFilePacker(FilePacker[FileData_Dragon, GMDHeader_Dragon]):
         if value.flags[5] & 256:
             blendshape_spec, _ = BlendshapeSpec_Unpack.unpack(big_endian, data,
                                                               offset + GMDHeader_Dragon_Unpack.sizeof())
-            blendshape_names = ArrayPointerStruct(
+            blendshape_names: List[ChecksumStrStruct] = ArrayPointerStruct(
                 SizedPointerStruct(
                     offset + blendshape_spec.blendshape_name_array_ptr,
                     blendshape_spec.num_blendshapes
                 )
-            ).extract(ChecksumStrStruct_Unpack, big_endian, data)
+                # (not sure why it expects BaseUnpacker[Never] here, but whatever)
+            ).extract(ChecksumStrStruct_Unpack, big_endian, data)  # type: ignore
             voffset_start = offset + blendshape_spec.blendshape_vertex_buffer_array_ptr
             voffset_end = voffset_start + (
                     blendshape_spec.per_blendshape_vertex_buffer_size * blendshape_spec.num_blendshapes

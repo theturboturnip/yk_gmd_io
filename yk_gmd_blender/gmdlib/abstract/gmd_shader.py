@@ -60,17 +60,17 @@ class GMDVertexBuffer(Sized):
         return GMDVertexBuffer(
             layout=self.layout,
 
-            pos=self.pos[indices, :].copy(),
+            pos=self.pos[indices, :].copy(),  # type: ignore
 
-            bone_data=self.bone_data[indices, :].copy() if self.bone_data is not None else None,
-            weight_data=self.weight_data[indices, :].copy() if self.weight_data is not None else None,
-            normal=self.normal[indices, :].copy() if self.normal is not None else None,
-            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,
-            unk=self.unk[indices, :].copy() if self.unk is not None else None,
-            col0=self.col0[indices, :].copy() if self.col0 is not None else None,
-            col1=self.col1[indices, :].copy() if self.col1 is not None else None,
+            bone_data=self.bone_data[indices, :].copy() if self.bone_data is not None else None,  # type: ignore
+            weight_data=self.weight_data[indices, :].copy() if self.weight_data is not None else None,  # type: ignore
+            normal=self.normal[indices, :].copy() if self.normal is not None else None,  # type: ignore
+            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,  # type: ignore
+            unk=self.unk[indices, :].copy() if self.unk is not None else None,  # type: ignore
+            col0=self.col0[indices, :].copy() if self.col0 is not None else None,  # type: ignore
+            col1=self.col1[indices, :].copy() if self.col1 is not None else None,  # type: ignore
             uvs=[
-                uv[indices, :].copy()
+                uv[indices, :].copy()  # type: ignore
                 for uv in self.uvs
             ],
         )
@@ -150,17 +150,17 @@ class GMDSkinnedVertexBuffer(GMDVertexBuffer):
         return GMDSkinnedVertexBuffer(
             layout=self.layout,
 
-            pos=self.pos[indices, :].copy(),
+            pos=self.pos[indices, :].copy(),  # type: ignore
 
-            bone_data=self.bone_data[indices, :].copy(),
-            weight_data=self.weight_data[indices, :].copy(),
-            normal=self.normal[indices, :].copy() if self.normal is not None else None,
-            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,
-            unk=self.unk[indices, :].copy() if self.unk is not None else None,
-            col0=self.col0[indices, :].copy() if self.col0 is not None else None,
-            col1=self.col1[indices, :].copy() if self.col1 is not None else None,
+            bone_data=self.bone_data[indices, :].copy(),  # type: ignore
+            weight_data=self.weight_data[indices, :].copy(),  # type: ignore
+            normal=self.normal[indices, :].copy() if self.normal is not None else None,  # type: ignore
+            tangent=self.tangent[indices, :].copy() if self.tangent is not None else None,  # type: ignore
+            unk=self.unk[indices, :].copy() if self.unk is not None else None,  # type: ignore
+            col0=self.col0[indices, :].copy() if self.col0 is not None else None,  # type: ignore
+            col1=self.col1[indices, :].copy() if self.col1 is not None else None,  # type: ignore
             uvs=[
-                uv[indices, :].copy()
+                uv[indices, :].copy()  # type: ignore
                 for uv in self.uvs
             ],
         )

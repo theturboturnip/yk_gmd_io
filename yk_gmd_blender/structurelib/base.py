@@ -1,6 +1,6 @@
 import struct
 from dataclasses import dataclass
-from typing import Union, Tuple, Type, Optional, TypeVar, Generic, List, get_type_hints, Dict, Callable
+from typing import Union, Tuple, Type, Optional, TypeVar, Generic, List, get_type_hints, Dict, Callable, Sequence
 
 __all__ = [
     "BaseUnpacker",
@@ -9,6 +9,7 @@ __all__ = [
     "FixedSizeASCIIUnpacker",
     "ValueAdaptor",
     "structure_data",
+    "PackingValidationError",
 ]
 
 T = TypeVar('T')
@@ -136,11 +137,11 @@ class FixedSizeASCIIUnpacker(BaseUnpacker[str]):
         self.length = length
         self.encoding = encoding
 
-    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[T, int]:
+    def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[str, int]:
         str_data: bytes = data[offset:offset + self.length]
         return str_data.decode(self.encoding).rstrip('\x00'), offset + self.length
 
-    def pack(self, big_endian: bool, value: T, append_to: bytearray):
+    def pack(self, big_endian: bool, value: str, append_to: bytearray):
         self.validate_value(value)
         str_data: bytes = value.encode(self.encoding)
         if len(str_data) < self.length:
@@ -150,13 +151,13 @@ class FixedSizeASCIIUnpacker(BaseUnpacker[str]):
     def validate_value(self, value: str):
         encoded = value.encode(self.encoding)
         if len(encoded) > self.length:
-            raise PackingValidationError(f"Encoded string {encoded} is {len(encoded)}, must be <= {self.length}")
+            raise PackingValidationError(f"Encoded string {encoded!r} is {len(encoded)}, must be <= {self.length}")
 
     def sizeof(self):
         return self.length
 
 
-class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
+class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[Sequence[T]]):
     elem_type: BaseUnpacker[T]
     count: int
 
@@ -166,13 +167,13 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
         self.count = count
 
     def unpack(self, big_endian: bool, data: Union[bytes, bytearray], offset: int) -> Tuple[List[T], int]:
-        value = []
+        value: List[T] = []
         while len(value) < self.count:
             next_val, offset = self.elem_type.unpack(big_endian, data, offset)
             value.append(next_val)
         return value, offset
 
-    def pack(self, big_endian: bool, value: List[TPackable], append_to: bytearray):
+    def pack(self, big_endian: bool, value: Sequence[T], append_to: bytearray):
         self.validate_value(value)
         for item in value:
             self.elem_type.pack(big_endian=big_endian, value=item, append_to=append_to)
@@ -180,7 +181,7 @@ class FixedSizeArrayUnpacker(Generic[T], BaseUnpacker[List[T]]):
     def sizeof(self):
         return self.elem_type.sizeof() * self.count
 
-    def validate_value(self, value: List[T]):
+    def validate_value(self, value: Sequence[T]):
         elem_type = self.elem_type
         if len(value) != self.count:
             raise PackingValidationError(f"List has {len(value)} items, expected {self.count}")
@@ -209,7 +210,7 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
     _load_validate: Optional[Callable[[TDataclass], None]]
 
     def __init__(self, python_type: Type[TDataclass], fields: List[Tuple[str, BaseUnpacker]],
-                 base_class_unpackers: Dict[Type, 'StructureUnpacker'] = None,
+                 base_class_unpackers: Optional[Dict[Type, 'StructureUnpacker']] = None,
                  load_validate: Optional[Callable[[TDataclass], None]] = None):
         super().__init__(python_type)
 
@@ -260,7 +261,7 @@ class StructureUnpacker(BaseUnpacker[TDataclass]):
             if field_type is not unpacked_type:
                 # Allow generics from the same origin to be represented by the same packer
                 # i.e. ArrayPointer[float] and ArrayPointer[int] can both be unpacked by an unpacker for ArrayPointer
-                if not (hasattr(field_type, "__origin__") and field_type.__origin__ is unpacked_type):
+                if not (hasattr(field_type, "__origin__") and field_type.__origin__ is unpacked_type):  # type: ignore
                     raise TypeError(
                         f"Field {python_type.__name__}.{field_name} expects {field_type} but is unpacked as {unpacked_type}")
 

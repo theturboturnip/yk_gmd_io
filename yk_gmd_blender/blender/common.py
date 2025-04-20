@@ -102,23 +102,26 @@ class GMDGame(IntEnum):
 class YakuzaHierarchyNodeData(PropertyGroup):
     # Has this PropertyGroup been initialized from a GMD file?
     # Used to hide data for normal Blender objects
-    inited: BoolProperty(name="Initialized", default=False)
+    inited: BoolProperty(name="Initialized", default=False)  # type: ignore
     # The original imported node matrix
-    imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0] * 16, size=16, subtype="MATRIX")
+    imported_matrix: FloatVectorProperty(name="Imported Node Matrix", default=[0.0] * 16, size=16,  # type: ignore
+                                         subtype="MATRIX")
 
     # The animation axis for the node imported from the GMD
-    anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0] * 4, size=4, subtype="QUATERNION")
+    anim_axis: FloatVectorProperty(name="Animation Axis (Quaternion)", default=[0.0] * 4, size=4,  # type: ignore
+                                   subtype="QUATERNION")
     # The local rotation of the bone imported from the GMD
-    bone_local_rot: FloatVectorProperty(name="Bone Local Rot (Quaternion)", default=[0.0] * 4, size=4,
+    bone_local_rot: FloatVectorProperty(name="Bone Local Rot (Quaternion)", default=[0.0] * 4, size=4,  # type: ignore
                                         subtype="QUATERNION")
     # Node flags - currently unknown. Stored as JSON because IntVectorProperty doesn't support unsigned 32-bit integers
-    flags_json: StringProperty(name="Imported Node Flags (JSON)", default="[0,0,0,0]")
+    flags_json: StringProperty(name="Imported Node Flags (JSON)", default="[0,0,0,0]")  # type: ignore
 
     # The order of this node with respect to siblings
-    sort_order: IntProperty(name="Sort Order", default=0,
+    sort_order: IntProperty(name="Sort Order", default=0,  # type: ignore
                             description="Order of this node with respect to siblings. Applied on export.")
-    relative_import_mesh: BoolProperty(name="Mesh from a Relative GMD", default=False,
-                                       description="Was imported from a file that is likely a 'relative GMD', which affects the export process.")
+    relative_import_mesh: BoolProperty(name="Mesh from a Relative GMD", default=False,  # type: ignore
+                                       description="Was imported from a file that is likely a 'relative GMD', "
+                                                   "which affects the export process.")
 
 
 def yakuza_hierarchy_node_data_sort_key(x) -> int:
@@ -201,19 +204,27 @@ class BONE_PT_yakuza_hierarchy_node_data_panel(Panel):
 
 
 class YakuzaFileRootData(PropertyGroup):
-    is_valid_root: BoolProperty(name="Is Valid Root", default=False)
+    is_valid_root: BoolProperty(name="Is Valid Root", default=False)  # type: ignore
     # GMD version this file was imported from
-    imported_version: EnumProperty(items=GMDGame.blender_props(), name="Imported File Version", default=None)
+    imported_version: EnumProperty(  # type: ignore
+        items=GMDGame.blender_props(),
+        name="Imported File Version",
+        default=None
+    )
     # scene flags
-    flags_json: StringProperty(name="Imported Scene Flags (JSON)", default="[0,0,0,0,0,0]")
+    flags_json: StringProperty(name="Imported Scene Flags (JSON)", default="[0,0,0,0,0,0]")  # type: ignore
     # how this file was imported
-    import_mode: EnumProperty(items=[
-        ("SKINNED", "Skinned",
-         "Imported as a top-level armature with direct children objects, manipulated via skinning. Exportable."),
-        ("UNSKINNED", "Unskinned", "Imported as a hierarchy of unskinned objects. Exportable."),
-        ("ANIMATION", "Animation-friendly",
-         "Imported with every mesh attached to a bone, for animation purposes. NOT exportable.")
-    ], name="Import Mode", default=None)
+    import_mode: EnumProperty(  # type: ignore
+        items=[
+            ("SKINNED", "Skinned",
+             "Imported as a top-level armature with direct children objects, manipulated via skinning. Exportable."),
+            ("UNSKINNED", "Unskinned", "Imported as a hierarchy of unskinned objects. Exportable."),
+            ("ANIMATION", "Animation-friendly",
+             "Imported with every mesh attached to a bone, for animation purposes. NOT exportable.")
+        ],
+        name="Import Mode",
+        default=None
+    )
 
 
 class OBJECT_PT_yakuza_file_root_data_panel(Panel):
@@ -576,8 +587,8 @@ class AttribSetLayers_bmesh:
 
 
 class YakuzaShapeKeyData(PropertyGroup):
-    is_yakuza: BoolProperty(name="Uses Yakuza Blendshapes", default=False)
-    blendshape_attribute_set_flags: StringProperty(name="Blendshape Attribute Layout Flags")
+    is_yakuza: BoolProperty(name="Uses Yakuza Blendshapes", default=False)  # type: ignore
+    blendshape_attribute_set_flags: StringProperty(name="Blendshape Attribute Layout Flags")  # type: ignore
 
 
 class KEY_PT_yakuza_shape_key_data_panel(Panel):

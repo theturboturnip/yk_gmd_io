@@ -26,24 +26,24 @@ class YakuzaPropertyGroup(PropertyGroup):
 
     # Has this PropertyGroup been initialized from a GMD file?
     # Used to hide data for normal Blender materials
-    inited: BoolProperty(name="Initialized", default=False)
+    inited: BoolProperty(name="Initialized", default=False)  # type: ignore
 
-    shader_name: StringProperty(name="Shader Name")
+    shader_name: StringProperty(name="Shader Name")  # type: ignore
     # These flags are stored as a hex-string encoding a 64-bit unsigned number.
     # It can't be stored as an int because blender uses primitive C types and would try to store it in 32 bits.
-    shader_vertex_layout_flags: StringProperty(name="Vertex Layout Flags")
-    assume_skinned: BoolProperty(name="Assumes Skinned Context",
+    shader_vertex_layout_flags: StringProperty(name="Vertex Layout Flags")  # type: ignore
+    assume_skinned: BoolProperty(name="Assumes Skinned Context",  # type: ignore
                                  description="Was imported from a skinned mesh and requires bone-weight pairs")
-    cached_expected_uv_layers: StringProperty(name="Uses UV Layers", set=None)
-    cached_expected_color_layers: StringProperty(name="Uses Vertex Color Layers", set=None)
+    cached_expected_uv_layers: StringProperty(name="Uses UV Layers", set=None)  # type: ignore
+    cached_expected_color_layers: StringProperty(name="Uses Vertex Color Layers", set=None)  # type: ignore
 
-    attribute_set_flags: StringProperty(name="Attribute Layout Flags")
+    attribute_set_flags: StringProperty(name="Attribute Layout Flags")  # type: ignore
 
-    unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)
-    unk14: FloatVectorProperty(name="GMD Unk14 Data", size=32)
-    attribute_set_floats: FloatVectorProperty(name="GMD Attribute Set Floats", size=16)
-    material_origin_type: IntProperty(name="GMDMaterial origin type")
-    material_json: StringProperty(name="GMDMaterial data JSON")
+    unk12: FloatVectorProperty(name="GMD Unk12 Data", size=32)  # type: ignore
+    unk14: FloatVectorProperty(name="GMD Unk14 Data", size=32)  # type: ignore
+    attribute_set_floats: FloatVectorProperty(name="GMD Attribute Set Floats", size=16)  # type: ignore
+    material_origin_type: IntProperty(name="GMDMaterial origin type")  # type: ignore
+    material_json: StringProperty(name="GMDMaterial data JSON")  # type: ignore
 
 
 class YakuzaPropertyPanel(bpy.types.Panel):
@@ -140,10 +140,10 @@ class MATERIAL_OT_yakuza_update_expected_layers(bpy.types.Operator):
 # potentially using a different file format.
 class YakuzaTexturePropertyGroup(PropertyGroup):
     # Has this PropertyGroup been initialized from a GMD file?
-    inited: BoolProperty(name="Initialized", default=False)
+    inited: BoolProperty(name="Initialized", default=False)  # type: ignore
 
     # Name of the texture from the GMD file
-    yk_name: StringProperty(name="Texture Name (from GMD)")
+    yk_name: StringProperty(name="Texture Name (from GMD)")  # type: ignore
 
 
 # Inspired by XNALara importer code - https://github.com/johnzero7/XNALaraMesh/blob/eaccfddf39aef8d3cb60a50c05f2585398fe26ca/material_creator.py#L527

@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Optional, Union, cast
+from typing import Dict, Optional, Union
 
 import bpy
 from mathutils import Matrix, Vector, Quaternion
@@ -190,7 +190,6 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
         for _, gmd_node in self.gmd_scene.overall_hierarchy.depth_first_iterate():
             if not isinstance(gmd_node, GMDSkinnedObject):
                 continue
-            gmd_node: GMDSkinnedObject = cast(GMDSkinnedObject, gmd_node)
 
             mesh_obj = self.build_mesh_object(collection, gmd_node, vertex_group_indices)
 

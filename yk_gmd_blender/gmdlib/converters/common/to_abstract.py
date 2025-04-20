@@ -3,7 +3,7 @@ import abc
 import array
 import time
 from enum import Enum
-from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional, Dict
+from typing import List, Tuple, cast, Union, TypeVar, Generic, Optional, Dict, Sequence
 
 from mathutils import Matrix
 from ...abstract.gmd_attributes import GMDAttributeSet, GMDUnk14, GMDUnk12, GMDMaterial
@@ -17,18 +17,22 @@ from ...errors.error_reporter import ErrorReporter
 from ...structure.common.attribute import AttributeStruct
 from ...structure.common.checksum_str import ChecksumStrStruct
 from ...structure.common.file import FileData_Common
-from ...structure.common.material_base import MaterialBaseStruct
 from ...structure.common.mesh import IndicesStruct, MeshStruct
 from ...structure.common.node import NodeType, NodeStruct, NodeStackOp
 from ...structure.common.unks import Unk14Struct, Unk12Struct
 from ...structure.common.vertex_buffer_layout import VertexBufferLayoutStruct
 from ...structure.dragon.blendshapes import BlendshapeSpec
+from ...structure.kenzan.material import MaterialStruct_Kenzan
 from ...structure.version import VersionProperties
+from ...structure.y3.material import MaterialStruct_Y3
 from ....structurelib.base import FixedSizeArrayUnpacker
 from ....structurelib.primitives import c_uint16, c_uint8
 
 
 class ParentStack:
+    stack: List[GMDNode]
+    error: ErrorReporter
+
     def __init__(self, error: ErrorReporter):
         self.stack = []
         self.error = error
@@ -95,7 +99,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
     def build_vertex_buffers_from_structs(self,
 
-                                          vertex_layout_arr: List[VertexBufferLayoutStruct], vertex_bytes: bytes,
+                                          vertex_layout_arr: Sequence[VertexBufferLayoutStruct], vertex_bytes: bytes,
                                           blendshapes: Optional[Tuple[BlendshapeSpec, bytes]],
 
                                           profile: bool = False) \
@@ -195,7 +199,7 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                    abstract_vertex_buffers: List[GMDVertexBuffer],
 
-                                   mesh_arr: List[MeshStruct], attribute_arr: List[AttributeStruct],
+                                   mesh_arr: Sequence[MeshStruct], attribute_arr: Sequence[AttributeStruct],
                                    shader_name_arr: List[ChecksumStrStruct]) \
             -> List[GMDShader]:
         shader_vertex_layout_map = {}
@@ -228,7 +232,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
                                      abstract_shaders: List[GMDShader],
 
-                                     attribute_arr: List[AttributeStruct], material_arr: List[MaterialBaseStruct],
+                                     attribute_arr: Sequence[AttributeStruct],
+                                     material_arr: Sequence[Union[MaterialStruct_Y3, MaterialStruct_Kenzan]],
                                      unk12_arr: List[Unk12Struct], unk14_arr: List[Unk14Struct],
                                      texture_name_arr: List[ChecksumStrStruct]) \
             -> List[GMDAttributeSet]:
@@ -239,15 +244,25 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             GMDMaterial(origin_version=self.version_props.major_version, origin_data=mat)
             for mat in material_arr
         ]
-        if unk12_arr:
+        gmd_unk12s = [
+            GMDUnk12(float_data=unk12.data)
+            for unk12 in unk12_arr
+        ]
+        gmd_unk14s = [
+            GMDUnk14(int_data=unk14.data)
+            for unk14 in unk14_arr
+        ]
+
+        if len(attribute_arr) != len(gmd_unk12s) or len(attribute_arr) != len(gmd_unk14s):
+            self.error.recoverable("GMD File did not include enough UNK12 or UNK14s for the attributes. "
+                                   "Disable Strict Import to continue, overwriting UNK12 and UNK14 with all-zero.")
             gmd_unk12s = [
-                GMDUnk12(float_data=unk12.data)
-                for unk12 in unk12_arr
+                GMDUnk12(float_data=[0.0] * 32)
+                for i in range(len(attribute_arr))
             ]
-        if unk14_arr:
             gmd_unk14s = [
-                GMDUnk14(int_data=unk14.data)
-                for unk14 in unk14_arr
+                GMDUnk14(int_data=[0] * 32)
+                for i in range(len(attribute_arr))
             ]
 
         for i, attribute_struct in enumerate(attribute_arr):
@@ -264,8 +279,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 texture_rd=parse_texture_index(attribute_struct.texture_rd),
 
                 material=gmd_materials[attribute_struct.material_index],
-                unk12=gmd_unk12s[i] if unk12_arr else None,
-                unk14=gmd_unk14s[i] if unk14_arr else None,
+                unk12=gmd_unk12s[i],
+                unk14=gmd_unk14s[i],
 
                 attr_flags=attribute_struct.flags,
                 attr_extra_properties=attribute_struct.extra_properties,
@@ -410,7 +425,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                   abstract_vertex_buffers: List[GMDVertexBuffer],
                                   abstract_nodes_ordered: Dict[int, GMDNode],
 
-                                  mesh_arr: List[MeshStruct], index_buffer: List[int], mesh_matrix_bytestrings: bytes,
+                                  mesh_arr: Sequence[MeshStruct], index_buffer: List[int],
+                                  mesh_matrix_bytestrings: bytes,
                                   bytestrings_are_16bit: bool,
                                   blendshapes: Dict[str, GMDVertexBuffer],
                                   ) \
@@ -428,9 +444,9 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             actual_len, offset = unpack_type.unpack(self.file_is_big_endian, mesh_matrix_bytestrings, offset=start_byte)
             if actual_len != length:
                 actual_bytes = mesh_matrix_bytestrings[start_byte:start_byte + actual_len * unpack_type.sizeof()]
-                actual_bytes = [f"{x:02x}" for x in actual_bytes]
+                actual_bytes_str = [f"{x:02x}" for x in actual_bytes]
                 self.error.fatal(
-                    f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes}")
+                    f"Bytestring length mismatch: expected {length}, got {actual_len}. bytes: {actual_bytes_str}")
 
             data, _ = FixedSizeArrayUnpacker(unpack_type, length).unpack(self.file_is_big_endian,
                                                                          mesh_matrix_bytestrings, offset=offset)
@@ -481,7 +497,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 indices.append(index)
             return indices, min_index, max_index
 
-        meshes = []
+        triangle_indices: array.array[int]
+        triangle_strip_noreset_indices: Optional[array.array[int]]
+        triangle_strip_reset_indices: Optional[array.array[int]]
+
+        meshes: List[Union[GMDSkinnedMesh, GMDMesh]] = []
         for mesh_struct in mesh_arr:
             if self.vertex_import_mode == VertexImportMode.NO_VERTICES:
                 triangle_indices = array.array("H")
@@ -493,10 +513,13 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                 self.error.debug("MESH_PROPS", "index props: none, because importing with NO_VERTICES")
             else:
                 # Actually import data
-                triangle_indices, min_index, max_index = process_indices(mesh_struct, mesh_struct.triangle_list_indices,
-                                                                         ignore_FFFF=False)
-                if triangle_indices is None:
+                maybe_triangle_indices, min_index, max_index = process_indices(mesh_struct,
+                                                                               mesh_struct.triangle_list_indices,
+                                                                               ignore_FFFF=False)
+                if maybe_triangle_indices is None:
                     self.error.fatal(f"Mesh does not declare a triangle list")
+                triangle_indices = maybe_triangle_indices
+
                 triangle_strip_noreset_indices, min_index, max_index = process_indices(mesh_struct,
                                                                                        mesh_struct.noreset_strip_indices,
                                                                                        min_index, max_index,
@@ -582,7 +605,8 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
 
     def connect_object_meshes(self,
 
-                              abstract_meshes: List[GMDMesh], abstract_attribute_sets: List[GMDAttributeSet],
+                              abstract_meshes: List[Union[GMDMesh, GMDSkinnedMesh]],
+                              abstract_attribute_sets: List[GMDAttributeSet],
                               abstract_nodes: Dict[int, GMDNode],
 
                               node_arr: List[NodeStruct],
@@ -617,5 +641,11 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                             f"Object {abstract_node.name} specifies an unexpected material/mesh pair in it's drawlist "
                             f"that doesn't match the mesh's requested material")
 
-                    abstract_node.add_mesh(abstract_mesh)
+                    if isinstance(abstract_node, GMDSkinnedObject) and isinstance(abstract_mesh, GMDSkinnedMesh):
+                        abstract_node.add_mesh(abstract_mesh)
+                    elif isinstance(abstract_node, GMDUnskinnedObject) and isinstance(abstract_mesh, GMDMesh):
+                        abstract_node.add_mesh(abstract_mesh)
+                    else:
+                        self.error.fatal("Tried to attach a mesh to an object with mismatched skinned-ness\n"
+                                         f"{type(abstract_node).__name__} <-> {type(abstract_mesh).__name__}")
                     pass

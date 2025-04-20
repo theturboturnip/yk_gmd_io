@@ -13,27 +13,27 @@ class YakuzaImageRelink(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     # Define this to tell 'fileselect_add' that we want a directoy
-    directory: bpy.props.StringProperty(
+    directory: bpy.props.StringProperty(  # type: ignore
         name="Texture Folder",
         description="Folder to pull textures from"
         # subtype='DIR_PATH' is not needed to specify the selection mode.
         # But this will be anyway a directory path.
     )
 
-    texture_formats: bpy.props.StringProperty(
+    texture_formats: bpy.props.StringProperty(  # type: ignore
         name="Texture Formats",
         description="Allowed texture formats, highest priority first."
                     "Comma-separated list.",
         default="png,jpg,jpeg,dds"
     )
 
-    overwrite_linked: bpy.props.BoolProperty(
+    overwrite_linked: bpy.props.BoolProperty(  # type: ignore
         name="Overwrite Linked Images",
         description="If True, will try to relink images that are already linked to a file (if a valid file exists).",
         default=True
     )
 
-    case_sensitive: bpy.props.BoolProperty(
+    case_sensitive: bpy.props.BoolProperty(  # type: ignore
         name="Case Sensitive",
         default=False,
         description="By default, relinking is case-insensitive, so 'c_cm_SZ_avenger.dds' will match 'c_cm_sz_avenger'."

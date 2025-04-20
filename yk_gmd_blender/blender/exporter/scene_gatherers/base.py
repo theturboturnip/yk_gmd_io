@@ -149,7 +149,7 @@ class BaseGMDSceneGatherer(abc.ABC):
         # If the scene we're exporting came from the same engine as the file we're exporting over, keep those flags
         if yakuza_file_root_data.is_valid_root and (imported_ver & self.config.game != 0):
             self.flags = json.loads(yakuza_file_root_data.flags_json)
-            if len(self.flags) != 6 or any(not isinstance(x, int) for x in self.flags):
+            if self.flags is None or len(self.flags) != 6 or any(not isinstance(x, int) for x in self.flags):
                 self.error.fatal(f"File root has invalid flags {self.flags} - must be a list of 6 integers")
             self.error.info(f"Taking flags from previously imported file root")
         else:

@@ -1,18 +1,11 @@
 from dataclasses import dataclass
-from typing import List
 
+from ..common.attribute import AttributeStruct, TextureIndexStruct
 from ....structurelib.base import StructureUnpacker, FixedSizeArrayUnpacker
 from ....structurelib.primitives import c_uint16, c_int16, c_uint32, c_float32, Optional, c_uint64
 
-
-@dataclass(frozen=True)
-class TextureIndexStruct_Dragon:
-    tex_index: int
-    padding: int = 0
-
-
 TextureIndexStruct_Dragon_Unpack = StructureUnpacker(
-    TextureIndexStruct_Dragon,
+    TextureIndexStruct,
     fields=[
         ("tex_index", c_int16),
         ("padding", c_uint16),
@@ -21,36 +14,7 @@ TextureIndexStruct_Dragon_Unpack = StructureUnpacker(
 
 
 @dataclass(frozen=True)
-class AttributeStruct_Dragon:
-    index: int
-    material_index: int
-    shader_index: int
-
-    # Which meshes use this material - offsets in the Mesh_YK1 array
-    mesh_indices_start: int
-    mesh_indices_count: int
-
-    # The number of texture slots to initialize == the largest index of a set texture
-    texture_init_count: int
-    # Observed to be 0x0000, 0x0001, 0x2001, 0x8001
-    flags: int
-
-    texture_diffuse: TextureIndexStruct_Dragon  # Usually has textures with _di postfix
-    texture_multi: TextureIndexStruct_Dragon
-    texture_normal: TextureIndexStruct_Dragon  # Usually has textures with _tn postfix
-    texture_rd: TextureIndexStruct_Dragon  # Usually has textures with _rd postfix
-    # Never filled
-    texture_rm: TextureIndexStruct_Dragon
-    texture_rt: TextureIndexStruct_Dragon  # Usually has textures with _rt postfix
-    texture_ts: TextureIndexStruct_Dragon  # Only present in "rs" shaders
-    texture_refl: TextureIndexStruct_Dragon  # Observed to have a cubemap texture for one eye-related material
-
-    extra_properties: List[float]  # Could be scale (x,y) pairs for the textures, although 0 is present a lot.
-
-    unk1_always_1: int = 1
-    unk2_always_0: int = 0
-    unk3_always_0: int = 0
-
+class AttributeStruct_Dragon(AttributeStruct):
     @staticmethod
     def calculate_texture_count(texture_diffuse: Optional[str],
                                 texture_multi: Optional[str],

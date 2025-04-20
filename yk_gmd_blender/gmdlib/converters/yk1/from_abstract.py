@@ -1,7 +1,8 @@
+from typing import List, Tuple
+
 from mathutils import Quaternion, Vector
 from ..common.from_abstract import RearrangedData, arrange_data_for_export, \
     pack_mesh_matrix_strings
-from ...abstract.gmd_attributes import GMDUnk12
 from ...abstract.gmd_mesh import GMDSkinnedMesh
 from ...abstract.gmd_scene import GMDScene
 from ...abstract.nodes.gmd_bone import GMDBone
@@ -12,7 +13,7 @@ from ...structure.common.checksum_str import ChecksumStrStruct
 from ...structure.common.mesh import IndicesStruct
 from ...structure.common.node import NodeStruct, NodeType
 from ...structure.common.unks import Unk12Struct, Unk14Struct
-from ...structure.version import VersionProperties
+from ...structure.version import VersionProperties, GMDVersion
 from ...structure.y3.mesh import MeshStruct_Y3
 from ...structure.y3.vertex_buffer_layout import VertexBufferLayoutStruct_Y3
 from ...structure.yk1.bbox import BoundsDataStruct_YK1
@@ -95,7 +96,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
     vertex_buffer_arr = []
     vertex_data_bytearray = bytearray()
-    index_buffer = []
+    index_buffer: List[int] = []
     # Dict of GMDMesh id -> (buffer_id, vertex_offset_from_index, min_index, vertex_count)
     mesh_buffer_stats = {}
     for buffer_idx, (gmd_buffer_layout, packing_flags, meshes_for_buffer) in enumerate(
@@ -152,7 +153,8 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
         pass
 
-    mesh_arr = []
+    mesh_arr: List[MeshStruct_Y3] = []
+    matrix_list: Tuple[int, ...]
     for gmd_mesh in rearranged_data.ordered_meshes:
         object_index = rearranged_data.mesh_id_to_object_index[id(gmd_mesh)]
         node = rearranged_data.ordered_objects[object_index]
@@ -162,7 +164,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
         if isinstance(gmd_mesh, GMDSkinnedMesh):
             matrix_list = rearranged_data.mesh_id_to_matrixlist[id(gmd_mesh)]
         else:
-            matrix_list = []
+            matrix_list = ()
 
         if version_properties.relative_indices_used:
             pack_index = lambda x: x
@@ -242,7 +244,7 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
 
     material_arr = []
     for gmd_material in rearranged_data.ordered_materials:
-        material_arr.append(gmd_material.port_to_version(version_properties.major_version).origin_data)
+        material_arr.append(gmd_material.origin_data_as_version(GMDVersion.Kiwami1))
     unk12_arr = []
     unk14_arr = []
     attribute_arr = []
@@ -250,11 +252,9 @@ def pack_abstract_contents_YK1(version_properties: VersionProperties, file_big_e
     for i, gmd_attribute_set in enumerate(rearranged_data.ordered_attribute_sets):
         unk12_arr.append(Unk12Struct(
             data=gmd_attribute_set.unk12.float_data  # .port_to_version(version_properties.major_version).float_data
-            if gmd_attribute_set.unk12 else GMDUnk12.get_default()
         ))
         unk14_arr.append(Unk14Struct(
             data=gmd_attribute_set.unk14.int_data  # port_to_version(version_properties.major_version).int_data
-            if gmd_attribute_set.unk14 else GMDUnk12.get_default()
         ))
 
         mesh_range = rearranged_data.attribute_set_id_to_mesh_index_range[id(gmd_attribute_set)]
