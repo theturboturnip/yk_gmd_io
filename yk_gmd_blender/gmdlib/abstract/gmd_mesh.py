@@ -128,9 +128,8 @@ class GMDSkinnedMesh(GMDMesh):
 
     def __post_init__(self):
         super().__post_init__()
-        referenced_bone_indices = set(np.unique(
-            np.where(self.vertices_data.weight_data > 0, self.vertices_data.bone_data, -1)).flatten())
-        referenced_bone_indices.discard(-1)
+        valid_bones = self.vertices_data.bone_data[self.vertices_data.weight_data > 0]
+        referenced_bone_indices = set(np.unique(valid_bones).flatten())
         # This is allowed: under non-strict circumstances,
         # particularly with GMDVertexBufferLayout.force_bpv_positions_only,
         # we can end up importing a vertex buffer that doesn't actually reference bones.
