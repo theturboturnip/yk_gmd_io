@@ -53,6 +53,8 @@ class BaseImportGMD:
                                       ("COLLECTION_TEXTURE", "[Collection]_[Texture]",
                                        "Collection name and Diffuse Texture name"),
                                       ("TEXTURE", "[Texture]", "Diffuse Texture name"),
+                                      ("SHADER_TEXTURE_COLOR", "[Shader]_[Tex]_rd[Rd]_rt[Rt]_c[RGB]",
+                                       "Shader, Diffuse Texture, RD/RT textures, and diffuse color hex"),
                                   ],
                                   default="COLLECTION_TEXTURE")
 
@@ -72,6 +74,13 @@ class BaseImportGMD:
                             items=GMDGame.blender_props() + [
                                 ("AUTODETECT", "Autodetect", "Autodetect version from GMD file")],
                             default="AUTODETECT")
+
+    texture_search_path: StringProperty(
+        name="Texture Search Path",
+        description="Additional directory to search for textures. Textures not found near the GMD "
+                    "will also be looked up in this folder. Useful for level assets with shared texture pools.",
+        subtype='DIR_PATH',
+    )
 
     logging_categories: StringProperty(name="Debug Log Categories",
                                        description="Space-separated string of debug categories for logging.",
@@ -104,6 +113,7 @@ class BaseImportGMD:
             "COLLECTION_SHADER": MaterialNamingType.Collection_Shader,
             "COLLECTION_TEXTURE": MaterialNamingType.Collection_DiffuseTexture,
             "TEXTURE": MaterialNamingType.DiffuseTexture,
+            "SHADER_TEXTURE_COLOR": MaterialNamingType.Shader_DiffuseTexture_Color,
         }
 
         return GMDSceneCreatorConfig(
@@ -114,6 +124,7 @@ class BaseImportGMD:
 
             fuse_vertices=self.fuse_vertices,
             custom_split_normals=self.custom_split_normals,
+            texture_search_path=self.texture_search_path if self.texture_search_path else None,
         )
 
 
@@ -147,6 +158,8 @@ class ImportSkinnedGMD(BaseImportGMD, Operator, ImportHelper):
         layout.prop(self, 'material_naming')
         layout.prop(self, 'fuse_vertices')
         layout.prop(self, 'custom_split_normals')
+
+        layout.prop(self, 'texture_search_path')
 
         layout.prop(self, 'import_hierarchy')
         layout.prop(self, 'import_objects')
@@ -235,6 +248,7 @@ class ImportUnskinnedGMD(BaseImportGMD, Operator, ImportHelper):
         layout.prop(self, 'material_naming')
         layout.prop(self, 'fuse_vertices')
         layout.prop(self, 'custom_split_normals')
+        layout.prop(self, 'texture_search_path')
 
     def execute(self, context):
         error = self.create_logger()

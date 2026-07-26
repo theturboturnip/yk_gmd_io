@@ -190,17 +190,47 @@ def create_proxy_texture(name: str, filename: str, color: Tuple[float, float, fl
     return image
 
 
-def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_name: str,
+# Extensions to try when loading textures, in order of preference.
+# Dragon Engine level textures are often .png after conversion from DDS.
+_SUPPORTED_TEXTURE_EXTENSIONS = (".dds", ".png", ".jpg", ".jpeg", ".tga")
+
+
+def _find_texture_file(folder: str, tex_name: str) -> Optional[str]:
+    """
+    Search for a texture file with multiple extension fallbacks.
+    Returns the full path if found, None otherwise.
+    Tries .dds, .png, .jpg, .jpeg, .tga in order.
+    """
+    for ext in _SUPPORTED_TEXTURE_EXTENSIONS:
+        candidate = os.path.join(folder, f"{tex_name}{ext}")
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _find_texture_file_in_folders(tex_name: str, folders):
+    """
+    Search for a texture file with multiple extension fallbacks across several directories.
+    Returns the full path if found, None otherwise. Tries each folder in order.
+    """
+    for folder in folders:
+        found = _find_texture_file(folder, tex_name)
+        if found:
+            return found
+    return None
+
+
+def load_texture_from_name(node_tree: bpy.types.NodeTree, texture_folders, tex_name: str,
                            color_if_not_found=(1, 0, 1, 1)) -> ShaderNodeTexImage:
     """
     Given a GMD texture name, find or create the Blender counterpart and add a texture node to the given material tree
     using that texture.
-    It will try to load the image from the gmd_folder if possible, but if it's not there then a dummy image
+    It will try to load the image from each folder in texture_folders if possible, but if it's not there then a dummy image
     will be created filled with a specific color.
     Yakuza dummy textures "dummy_{black,white,multi,nmap}" will be created with the correct colors,
-    and won't be searched for in the gmd_folder.
+    and won't be searched for on disk.
     :param node_tree: The node tree to add the texture node to.
-    :param gmd_folder: The folder to search for as-yet-not-found textures.
+    :param texture_folders: List of directories to search for textures, tried in order.
     :param tex_name: The name of the texture.
     :param color_if_not_found: The color to fill the dummy image with, if an actual texture cannot be found.
     :return: A Texture node containing an image relevant to the name tex_name.
@@ -209,53 +239,64 @@ def load_texture_from_name(node_tree: bpy.types.NodeTree, gmd_folder: str, tex_n
     # Always create the image node
     image_node = node_tree.nodes.new('ShaderNodeTexImage')
 
-    # use the texture basename i.e. "c_am_kiryu_suit_di.dds" with the dds extension always.
-    # bpy.data.images.load() uses this convension, so when we look up images in bpy.data.images we have to match.
-    tex_filepath_basename = f"{tex_name}.dds"
-    if tex_filepath_basename in bpy.data.images:
-        # The texture already exists, just use that one
-        image_node.image = bpy.data.images[tex_filepath_basename]
-    elif tex_name == "dummy_black":
-        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (0, 0, 0, 1))
+    # Check for known dummy textures first — these are created internally and never loaded from disk.
+    if tex_name == "dummy_black":
+        image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", (0, 0, 0, 1))
     elif tex_name == "dummy_white":
-        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, (1, 1, 1, 1))
+        image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", (1, 1, 1, 1))
     elif tex_name == "default_z":
-        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_Z_COLOR)
+        image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", DEFAULT_Z_COLOR)
     elif tex_name == "dummy_multi":
-        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_MULTI_COLOR)
+        image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", DEFAULT_MULTI_COLOR)
     elif tex_name == "dummy_nmap":
-        image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, DEFAULT_NORMAL_COLOR)
+        image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", DEFAULT_NORMAL_COLOR)
     else:
-        # The texture doesn't already exist, and isn't a dummy texture we can create ourselves.
-        # Try to find it in the gmd_folder.
-        tex_filepath = os.path.join(gmd_folder, tex_filepath_basename)
-        if not os.path.isfile(tex_filepath):
-            # The texture doesn't exist.
-            image_node.image = create_proxy_texture(tex_name, tex_filepath_basename, color_if_not_found)
+        # Check if any already-loaded image matches (try all supported extensions).
+        found_image = None
+        for ext in _SUPPORTED_TEXTURE_EXTENSIONS:
+            candidate = f"{tex_name}{ext}"
+            if candidate in bpy.data.images:
+                found_image = bpy.data.images[candidate]
+                break
+
+        if found_image:
+            image_node.image = found_image
         else:
-            # The texture does exist, load it!
-            image = bpy.data.images.load(tex_filepath, check_existing=True)
-            image.colorspace_settings.name = "Non-Color"
-            image.yakuza_data.inited = True
-            image.yakuza_data.yk_name = tex_name
-            image_node.image = image
+            # Try to find on disk with multiple extension fallbacks across all search folders.
+            tex_filepath = _find_texture_file_in_folders(tex_name, texture_folders)
+            if not tex_filepath:
+                # The texture doesn't exist anywhere.
+                image_node.image = create_proxy_texture(tex_name, f"{tex_name}.dds", color_if_not_found)
+            else:
+                image = bpy.data.images.load(tex_filepath, check_existing=True)
+                image.colorspace_settings.name = "Non-Color"
+                image.yakuza_data.inited = True
+                image.yakuza_data.yk_name = tex_name
+                image_node.image = image
 
     return cast(ShaderNodeTexImage, image_node)
 
 
 def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, yakuza_inputs: bpy.types.NodeInputs,
-                                                 attribute_set: GMDAttributeSet, gmd_folder: str):
+                                                 attribute_set: GMDAttributeSet, texture_folders):
     """
     Given a material and an attribute set, attach all of the relevant data from the attribute set to the material.
     :param material: The material to update
     :param yakuza_inputs: The inputs to the Yakuza Shader node in the material
     :param attribute_set: The GMDAttributeSet this Material represents.
-    :param gmd_folder: The folder to examine for new textures.
+    :param texture_folders: List of directories to search for textures, tried in order.
+                           Can also be a single string (deprecated) for backward compatibility.
     :return: None
     """
+    # Normalize: accept a single str for backward compat, but treat as a list internally.
+    if isinstance(texture_folders, str):
+        texture_folders = [texture_folders]
 
     layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout,
                                                  attribute_set.shader.assume_skinned)
+
+    # All GMD textures use the same primary UV map. Detect which one it is so we can wire it.
+    primary_uv_names = layer_names.get_blender_uv_layers()  # e.g. ["UV_Primary"]
 
     # Setup the yakuza_data inside the material
     material.yakuza_data.inited = True
@@ -270,6 +311,8 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     material.yakuza_data.attribute_set_floats = attribute_set.attr_extra_properties
     material.yakuza_data.material_origin_type = attribute_set.material.origin_version.value
     material.yakuza_data.material_json = json.dumps(vars(attribute_set.material.origin_data))
+
+    print('THIS MATERIAL: ' + str(material.yakuza_data.shader_name) + ' EXPECTS: ' + str(material.yakuza_data.cached_expected_uv_layers))
 
     # TODO detect if yakuza 8 is used, because that apparently uses roughness instead of glossiness (notyoshi)
 
@@ -310,6 +353,19 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     yakuza_inputs["Specular color"].default_value[1] = attribute_set.material.origin_data.specular[1] / 255
     yakuza_inputs["Specular color"].default_value[2] = attribute_set.material.origin_data.specular[2] / 255
     yakuza_inputs["Specular power"].default_value = attribute_set.material.origin_data.power
+
+    # Wire the material's diffuse RGB color multiplier.
+    # Dragon Engine building assets use unit-white textures with actual color stored
+    # in MaterialStruct_YK1.diffuse (3 uint8 bytes). The shader node group has no native
+    # tint socket so we multiply this into the texture path for asset shaders.
+    origin_data = attribute_set.material.origin_data
+    mat_diffuse_r = origin_data.diffuse[0] / 255
+    mat_diffuse_g = origin_data.diffuse[1] / 255
+    mat_diffuse_b = origin_data.diffuse[2] / 255
+    is_asset_shader = bool(re.search(r'^r_', attribute_set.shader.name) or
+                          re.search(r'^rs_', attribute_set.shader.name))
+    # Only multiply when the color is not white (1,1,1) — skip if already neutral.
+    needs_tint = is_asset_shader and not (mat_diffuse_r == 1.0 and mat_diffuse_g == 1.0 and mat_diffuse_b == 1.0)
     yakuza_inputs["Is Y3 [rs] shader"].default_value = 1.0 if "[rd]" not in attribute_set.shader.name and "[rs]" \
                                                               in attribute_set.shader.name else 0.0
 
@@ -319,19 +375,57 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
 
     # Convenience function for creating a texture node for an Optional texture
     def set_texture(set_into: NodeSocketColor, tex_name: Optional[str],
-                    next_image_y: int = 0, color_if_not_found=(1, 0, 1, 1)) -> Tuple[Optional[ShaderNodeTexImage], int]:
+                    next_image_y: int = 0, color_if_not_found=(1, 0, 1, 1), multiply_color=None) \
+            -> Tuple[Optional[ShaderNodeTexImage], int]:
         if not tex_name:
             return None, next_image_y
-        image_node = load_texture_from_name(material.node_tree, gmd_folder, tex_name, color_if_not_found)
+        image_node = load_texture_from_name(material.node_tree, texture_folders, tex_name, color_if_not_found)
         image_node.location = (-500, next_image_y)
         # image_node.label = tex_name
         image_node.hide = True
-        material.node_tree.links.new(image_node.outputs["Color"], set_into)
+
+        # Wire the correct UV map to this texture node's Vector input.
+        if uv_vector_source is not None:
+            material.node_tree.links.new(uv_vector_source, image_node.inputs["Vector"])
+
+        if multiply_color is not None:
+            # Insert a MixRGB (Multiply) node to tint the texture with the material's color.
+            mix_node = material.node_tree.nodes.new("ShaderNodeMixRGB")
+            mix_node.blend_type = "MULTIPLY"
+            mix_node.location = (-350, next_image_y)
+            mix_node.inputs["Color2"].default_value = (*multiply_color, 1.0)
+            material.node_tree.links.new(image_node.outputs["Color"], mix_node.inputs["Color1"])
+            material.node_tree.links.new(mix_node.outputs["Color"], set_into)
+        else:
+            material.node_tree.links.new(image_node.outputs["Color"], set_into)
+
         next_image_y -= 100
+        image_node.label = set_into.name
         return image_node, next_image_y
 
-    # Create the diffuse texture
-    diffuse_tex, next_y = set_texture(yakuza_inputs["texture_diffuse"], attribute_set.texture_diffuse)
+    # Shared UV source for all texture nodes - ensures the correct UV map is used
+    # instead of whichever happens to be active on the mesh.
+    uv_vector_source = None
+    if primary_uv_names:
+        tc_node = material.node_tree.nodes.new("ShaderNodeTexCoord")
+        tc_node.location = (-900, 0)
+        tc_node.hide = True
+        uv_vector_source = tc_node.outputs["UV"]
+
+    # Create the diffuse texture, optionally tinted by the material's intrinsic color.
+    diffuse_color_multiplier = (mat_diffuse_r, mat_diffuse_g, mat_diffuse_b) if needs_tint else None
+    diffuse_tex, next_y = set_texture(yakuza_inputs["texture_diffuse"], attribute_set.texture_diffuse,
+                                      multiply_color=diffuse_color_multiplier)
+
+    # If no diffuse texture was connected (index == -1 or not found), fall back to the material's
+    # intrinsic diffuse color instead of leaving the socket at its default white.
+    if not diffuse_tex:
+        yakuza_inputs["texture_diffuse"].default_value = (mat_diffuse_r, mat_diffuse_g, mat_diffuse_b, 1.0)
+        # Also set base_color inputs if they exist on the shader node group,
+        # so assets without a diffuse texture still show the correct material color.
+        for socket_name in ("base_color", "Base Color"):
+            if socket_name in yakuza_inputs:
+                yakuza_inputs[socket_name].default_value = (mat_diffuse_r, mat_diffuse_g, mat_diffuse_b, 1.0)
 
     transparent_shaders = ["_a", "_b", "_c", "_d", "_m", "_p"]
 
@@ -345,9 +439,14 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
                 material.node_tree.links.new(diffuse_tex.outputs["Alpha"], yakuza_inputs["Diffuse Alpha"])
                 if "_c" in attribute_set.shader.name:
                     material.blend_method = "HASHED"
+                    diffuse_tex.label = diffuse_tex.label + '_clip'
                 else:
                     material.blend_method = "BLEND"
-                material.shadow_method = "NONE"
+                    diffuse_tex.label = diffuse_tex.label + '_blend'
+                if hasattr(material, "shadow_method"):
+                    material.shadow_method = "NONE"
+                else:
+                    material.use_transparent_shadow = False
 
     # Attach the other textures.
     multi_tex, next_y = set_texture(yakuza_inputs["texture_multi"], attribute_set.texture_multi, next_y,

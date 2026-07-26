@@ -31,6 +31,8 @@ class MaterialNamingType(Enum):
     Collection_DiffuseTexture = 1
     # Just DiffuseTexture name, for @Haruka-Chan
     DiffuseTexture = 2
+    # BeamNG - unique per attribute set (includes rd/rt textures and diffuse color)
+    Shader_DiffuseTexture_Color = 3
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class GMDSceneCreatorConfig:
 
     fuse_vertices: bool
     custom_split_normals: bool
+
+    texture_search_path: str = None
 
 
 class BaseGMDSceneCreator(abc.ABC):
@@ -162,6 +166,14 @@ class BaseGMDSceneCreator(abc.ABC):
             material_name = f"{collection.name_full}_{gmd_attribute_set.texture_diffuse or 'no_tex'}"
         elif self.config.material_naming_convention == MaterialNamingType.DiffuseTexture:
             material_name = f"{gmd_attribute_set.texture_diffuse or 'no_tex'}"
+        elif self.config.material_naming_convention == MaterialNamingType.Shader_DiffuseTexture_Color:
+            shader_name = gmd_attribute_set.shader.name
+            tex_name = gmd_attribute_set.texture_diffuse or "no_tex"
+            rd_name = gmd_attribute_set.texture_rd or "none"
+            rt_name = gmd_attribute_set.texture_rt or "none"
+            color_rgb = gmd_attribute_set.material.origin_data.diffuse
+            color_hex = f"{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}"
+            material_name = f"{shader_name}_{tex_name}_rd{rd_name}_rt{rt_name}_c{color_hex}"
         else:
             self.error.fatal(
                 f"config.material_naming_convention not valid - "
@@ -183,11 +195,17 @@ class BaseGMDSceneCreator(abc.ABC):
         material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
 
         # Set up the group inputs and material data based on the attribute set.
+        # Build a list of search paths: GMD's own directory first, then optional texture pool.
+        gmd_folder = os.path.dirname(self.filepath)
+        texture_folders = [gmd_folder]
+        if self.config.texture_search_path:
+            texture_folders.append(self.config.texture_search_path)
+
         set_yakuza_shader_material_from_attributeset(
             material,
             yakuza_shader_node_group.inputs,
             gmd_attribute_set,
-            os.path.dirname(self.filepath)
+            texture_folders
         )
 
         # check engine
