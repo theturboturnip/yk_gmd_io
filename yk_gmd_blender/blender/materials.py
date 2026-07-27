@@ -334,10 +334,11 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     # variable for checking if glossiness should be inverted
     yakuza_inputs["[rough]"].default_value = 1.0 if "[rough]" in attribute_set.shader.name else 0.0
 
-    # variable for checking if the shader actually utilizes the rd or rt slots as those, if not then it
-    # shouldnt be previewed. useful for skin materials in both OE and DE.
-    yakuza_inputs["Disable RD/RT"].default_value = 0.0 if any([x in attribute_set.shader.name for x in rdrt_shaders]) \
-        else 1.0
+    # Disable RD/RT when neither the shader name indicates rd/rt usage nor are actual
+    # rt/rd textures assigned in the attribute set. Set to 0.0 (enabled) if either is true.
+    has_rd_rt_shaders = any(x in attribute_set.shader.name for x in rdrt_shaders)
+    has_rd_rt_textures = bool(attribute_set.texture_rt or attribute_set.texture_rd)
+    yakuza_inputs["Disable RD/RT"].default_value = 0.0 if has_rd_rt_shaders or has_rd_rt_textures else 1.0
 
     # check if asset shader
     yakuza_inputs["Asset shader"].default_value = 1.0 if re.search(r'^r_', attribute_set.shader.name) or \
@@ -382,7 +383,12 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
         image_node = load_texture_from_name(material.node_tree, texture_folders, tex_name, color_if_not_found)
         image_node.location = (-500, next_image_y)
         # image_node.label = tex_name
-        image_node.hide = True
+
+        # Hide the node unless it has real image data (FILE source). Generated/dummy placeholders stay hidden.
+        if image_node.image and image_node.image.source == 'FILE':
+            image_node.hide = False
+        else:
+            image_node.hide = True
 
         # Wire the correct UV map to this texture node's Vector input.
         if uv_vector_source is not None:
