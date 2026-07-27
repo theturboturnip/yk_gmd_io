@@ -246,15 +246,28 @@ class BaseGMDSceneCreator(abc.ABC):
             uv_scaler_node.inputs[5].default_value = 1.0 if enginever == GMDVersion.Dragon else 0.0
 
             uv_scaler_node.location = (-750, -300)
+
+            def find_texture_node_for_slot(slot_name: str):
+                for link in material.node_tree.links:
+                    if link.to_socket.name == slot_name:
+                        return link.from_node
+                return None
+
             for x in material.node_tree.links:
                 rdrm_textures = ["texture_rd", "texture_rm", "texture_rs"]
                 if "skin" not in mat_yk_data.shader_name and any([y in x.to_socket.name
                                                                   for y in rdrm_textures]):
-                    material.node_tree.links.new(uv_scaler_node.outputs[1], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot(x.to_socket.name)
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[1], tex_node.inputs["Vector"])
                 if x.to_socket.name == "texture_rt":
-                    material.node_tree.links.new(uv_scaler_node.outputs[2], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot("texture_rt")
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[2], tex_node.inputs["Vector"])
                 if x.to_socket.name == "texture_refl" and "h2dz" in mat_yk_data.shader_name:
-                    material.node_tree.links.new(uv_scaler_node.outputs[0], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot("texture_refl")
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[0], tex_node.inputs["Vector"])
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material

@@ -295,9 +295,6 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     layer_names = AttribSetLayerNames.build_from(attribute_set.shader.vertex_buffer_layout,
                                                  attribute_set.shader.assume_skinned)
 
-    # All GMD textures use the same primary UV map. Detect which one it is so we can wire it.
-    primary_uv_names = layer_names.get_blender_uv_layers()  # e.g. ["UV_Primary"]
-
     # Setup the yakuza_data inside the material
     material.yakuza_data.inited = True
     material.yakuza_data.shader_name = attribute_set.shader.name
@@ -374,6 +371,36 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     yakuza_inputs["SP shader"].default_value = 1.0 if any([x in attribute_set.shader.name for x in sp_shaders]) \
                                                       and engine == 0 else 0.0
 
+    # Build a mapping from texture slot name to the GMD UV set index it should use.
+    tex_slot_to_uv_index = {
+        "texture_diffuse": 0,
+        "texture_multi": 0,
+        "texture_normal": 0,
+        "texture_refl": 0,
+        "texture_rm": 1,
+        "texture_rs": 1,
+        "texture_rt": 1,
+        "texture_rd": 1,
+    }
+
+    # Collect available Blender UV layer names. Each GMD UV set that has 2 components
+    blender_uv_names = [spec.name for spec in layer_names.uv_layers if spec.storage.n_comps == 2]
+
+    # Helper: wire a specific UV layer to a destination vector input.
+    # ShaderNodeUVMap selects the named UV layer directly (no passthrough needed).
+    def wire_uv_for_slot(slot_name: str, dest_input, y_pos: int):
+        gmd_uv_i = tex_slot_to_uv_index.get(slot_name, 0)
+        if not blender_uv_names or gmd_uv_i >= len(blender_uv_names):
+            return
+        uvmap = material.node_tree.nodes.new("ShaderNodeUVMap")
+        uvmap.name = f"UVSelect_{slot_name}"
+        if hasattr(uvmap, "uv_map"):
+            uvmap.uv_map = blender_uv_names[gmd_uv_i]
+        elif hasattr(uvmap, "map_name"):
+            uvmap.map_name = blender_uv_names[gmd_uv_i]
+        uvmap.location = (-800, y_pos)
+        material.node_tree.links.new(uvmap.outputs["UV"], dest_input)
+
     # Convenience function for creating a texture node for an Optional texture
     def set_texture(set_into: NodeSocketColor, tex_name: Optional[str],
                     next_image_y: int = 0, color_if_not_found=(1, 0, 1, 1), multiply_color=None) \
@@ -390,9 +417,8 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
         else:
             image_node.hide = True
 
-        # Wire the correct UV map to this texture node's Vector input.
-        if uv_vector_source is not None:
-            material.node_tree.links.new(uv_vector_source, image_node.inputs["Vector"])
+        # Wire the correct UV map to this texture node's Vector input using the per-slot selector.
+        wire_uv_for_slot(set_into.name, image_node.inputs["Vector"], next_image_y)
 
         if multiply_color is not None:
             # Insert a MixRGB (Multiply) node to tint the texture with the material's color.
@@ -408,15 +434,6 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
         next_image_y -= 100
         image_node.label = set_into.name
         return image_node, next_image_y
-
-    # Shared UV source for all texture nodes - ensures the correct UV map is used
-    # instead of whichever happens to be active on the mesh.
-    uv_vector_source = None
-    if primary_uv_names:
-        tc_node = material.node_tree.nodes.new("ShaderNodeTexCoord")
-        tc_node.location = (-900, 0)
-        tc_node.hide = True
-        uv_vector_source = tc_node.outputs["UV"]
 
     # Create the diffuse texture, optionally tinted by the material's intrinsic color.
     diffuse_color_multiplier = (mat_diffuse_r, mat_diffuse_g, mat_diffuse_b) if needs_tint else None
