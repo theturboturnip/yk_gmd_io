@@ -331,10 +331,14 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     # variable for checking if glossiness should be inverted
     yakuza_inputs["[rough]"].default_value = 1.0 if "[rough]" in attribute_set.shader.name else 0.0
 
+    # Helper: a texture name that contains "none" is a placeholder and should be treated as empty.
+    def _is_valid_texture(name):
+        return name is not None and "none" not in name.lower()
+
     # Disable RD/RT when neither the shader name indicates rd/rt usage nor are actual
     # rt/rd textures assigned in the attribute set. Set to 0.0 (enabled) if either is true.
     has_rd_rt_shaders = any(x in attribute_set.shader.name for x in rdrt_shaders)
-    has_rd_rt_textures = bool(attribute_set.texture_rt or attribute_set.texture_rd)
+    has_rd_rt_textures = bool(_is_valid_texture(attribute_set.texture_rt) or _is_valid_texture(attribute_set.texture_rd))
     yakuza_inputs["Disable RD/RT"].default_value = 0.0 if has_rd_rt_shaders or has_rd_rt_textures else 1.0
 
     # check if asset shader
@@ -405,7 +409,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     def set_texture(set_into: NodeSocketColor, tex_name: Optional[str],
                     next_image_y: int = 0, color_if_not_found=(1, 0, 1, 1), multiply_color=None) \
             -> Tuple[Optional[ShaderNodeTexImage], int]:
-        if not tex_name:
+        if not _is_valid_texture(tex_name):
             return None, next_image_y
         image_node = load_texture_from_name(material.node_tree, texture_folders, tex_name, color_if_not_found)
         image_node.location = (-500, next_image_y)
