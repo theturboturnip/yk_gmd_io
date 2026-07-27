@@ -199,8 +199,8 @@ class GMDSkinnedSceneCreator(BaseGMDSceneCreator):
 
             # Set the GMDNode position, rotation, scale
             mesh_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
-            # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            mesh_obj.rotation_quaternion = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y))
+            mesh_obj.rotation_mode = 'QUATERNION'
+            mesh_obj.rotation_quaternion = transform_rotation_gmd_to_blender(gmd_node.rot)
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             mesh_obj.scale = gmd_node.scale.xzy

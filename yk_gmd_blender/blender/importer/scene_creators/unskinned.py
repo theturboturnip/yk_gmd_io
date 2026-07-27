@@ -2,6 +2,7 @@ import json
 
 import bpy
 from mathutils import Quaternion
+from yk_gmd_blender.blender.coordinate_converter import transform_rotation_gmd_to_blender
 from yk_gmd_blender.blender.importer.scene_creators.base import BaseGMDSceneCreator, GMDSceneCreatorConfig, \
     root_name_for_gmd_file
 from yk_gmd_blender.gmdlib.abstract.gmd_scene import GMDScene
@@ -72,9 +73,8 @@ class GMDUnskinnedSceneCreator(BaseGMDSceneCreator):
 
             # Set the GMDNode position, rotation, scale
             node_obj.location = self.gmd_to_blender_world @ gmd_node.pos.xyz
-            # TODO: Use a proper function for this - I hate that the matrix multiply doesn't work
-            # No Idea why quat does not work but euler is fine
-            node_obj.rotation_euler = Quaternion((gmd_node.rot.w, -gmd_node.rot.x, gmd_node.rot.z, gmd_node.rot.y)).to_euler()
+            node_obj.rotation_mode = 'QUATERNION'
+            node_obj.rotation_quaternion = transform_rotation_gmd_to_blender(gmd_node.rot)
             # TODO - When applying gmd_to_blender_world to (1,1,1) you get (-1,1,1) out. This undoes the previous scaling applied to the vertices.
             #  .xzy is used to swap the components for now, but there's probably a better way?
             node_obj.scale = gmd_node.scale.xzy
