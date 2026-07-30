@@ -252,10 +252,10 @@ def _extract_tangents_from_layer(loops: List[MeshLoopIdx], tangent_layer: Option
     if tangent_layer is None:
         return  # Data is zero-initialized
 
-    # Copy raw data (in 0..1 range)
+    n_comps = data.shape[1]
+    # Copy raw data (in 0..1 range), only writing as many components as the buffer has
     for (i, loop_idx) in enumerate(loops):
-        # TODO watch out for what happens if data[i] has <4 components
-        data[i] = tangent_layer.data[loop_idx].color
+        data[i] = tangent_layer.data[loop_idx].color[:n_comps]
     # Correct data for (-1..1) range
     data *= 2
     data -= 1

@@ -196,12 +196,15 @@ def gmd_meshes_to_bmesh(
 
             if layers.tangent_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
+                tangent_n_comps = gmd_mesh.vertices_data.layout.tangent_storage.n_comps
                 for (v_i, loop) in verts_with_loops:
                     tangent = gmd_mesh.vertices_data.tangent[v_i]
                     # Convert from [-1, 1] to [0, 1]
-                    # Not sure why, presumably numbers <0 aren't valid in a color? unsure tho
-                    loop[layers.tangent_layer] = (
-                        (tangent[0] + 1) / 2, (tangent[1] + 1) / 2, (tangent[2] + 1) / 2, (tangent[3] + 1) / 2)
+                    t_x = (tangent[0] + 1) / 2
+                    t_y = (tangent[1] + 1) / 2
+                    t_z = (tangent[2] + 1) / 2
+                    t_w = (tangent[3] + 1) / 2 if tangent_n_comps >= 4 else 1.0
+                    loop[layers.tangent_layer] = (t_x, t_y, t_z, t_w)
 
             if layers.tangent_w_layer:
                 assert gmd_mesh.vertices_data.tangent is not None
