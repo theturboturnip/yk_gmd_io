@@ -172,8 +172,49 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
                                      unk12_arr: List[Unk12Struct], unk14_arr: List[Unk14Struct],
                                      texture_name_arr: List[ChecksumStrStruct]) \
             -> List[GMDAttributeSet]:
+        """Build GMDAttributeSets from binary attribute structs.
+
+        Uses texture_init_count to mask texture slots that the engine would ignore.
+        Dragon Engine slot order:  diffuse(0) multi(1) normal(2) rd(3) rm(4) rt(5) ts(6) refl(7)
+        Common/Kenzan/YK1 order:  diffuse(0) refl(1) multi(2) rm(3) ts(4) normal(5) rt(6) rd(7)
+        """
         attributes = []
-        parse_texture_index = lambda idx: None if idx.tex_index == -1 else texture_name_arr[idx.tex_index].text
+
+        # Detect engine variant from first attribute struct class name.
+        is_dragon = 'Dragon' in type(attribute_arr[0]).__name__ if attribute_arr else False
+
+        # Binary slot indices for each texture field, keyed by abstract name.
+        # (common_index, dragon_index) pairs.
+        _SLOT_MAP = {
+            'texture_diffuse': (0, 0),
+            'texture_refl':    (1, 7),
+            'texture_multi':   (2, 1),
+            'texture_rm':      (3, 4),
+            'texture_ts':      (4, 6),   # abstracted as texture_rs
+            'texture_normal':  (5, 2),
+            'texture_rt':      (6, 5),
+            'texture_rd':      (7, 3),
+        }
+
+        def _safe_tex(idx_struct, slot_name: str):
+            """Return texture name if valid."""
+            if idx_struct is None:
+                return None
+            tex_idx = getattr(idx_struct, 'tex_index', -1)
+            if tex_idx == -1:
+                return None
+            name = texture_name_arr[tex_idx].text
+            if name is not None and "none" in name.lower():
+                return None
+            return name
+
+        def _masked_tex(idx_struct, slot_name: str, init_limit: int):
+            """Like _safe_tex but also respects the texture_init_count gate."""
+            ci, di = _SLOT_MAP[slot_name]
+            limit_idx = di if is_dragon else ci
+            if limit_idx >= init_limit:
+                return None
+            return _safe_tex(idx_struct, slot_name)
 
         gmd_materials = [
             GMDMaterial(origin_version=self.version_props.major_version, origin_data=mat)
@@ -191,17 +232,19 @@ class GMDAbstractor_Common(abc.ABC, Generic[TFileData]):
             ]
 
         for i, attribute_struct in enumerate(attribute_arr):
+            init_limit = attribute_struct.texture_init_count
+
             attributes.append(GMDAttributeSet(
                 shader=abstract_shaders[attribute_struct.shader_index],
 
-                texture_diffuse=parse_texture_index(attribute_struct.texture_diffuse),
-                texture_refl=parse_texture_index(attribute_struct.texture_refl),
-                texture_multi=parse_texture_index(attribute_struct.texture_multi),
-                texture_rm=parse_texture_index(attribute_struct.texture_rm),
-                texture_rs=parse_texture_index(attribute_struct.texture_ts),
-                texture_normal=parse_texture_index(attribute_struct.texture_normal),
-                texture_rt=parse_texture_index(attribute_struct.texture_rt),
-                texture_rd=parse_texture_index(attribute_struct.texture_rd),
+                texture_diffuse=_masked_tex(attribute_struct.texture_diffuse, 'texture_diffuse', init_limit),
+                texture_refl=_masked_tex(attribute_struct.texture_refl, 'texture_refl', init_limit),
+                texture_multi=_masked_tex(attribute_struct.texture_multi, 'texture_multi', init_limit),
+                texture_rm=_masked_tex(attribute_struct.texture_rm, 'texture_rm', init_limit),
+                texture_rs=_masked_tex(attribute_struct.texture_ts, 'texture_ts', init_limit),
+                texture_normal=_masked_tex(attribute_struct.texture_normal, 'texture_normal', init_limit),
+                texture_rt=_masked_tex(attribute_struct.texture_rt, 'texture_rt', init_limit),
+                texture_rd=_masked_tex(attribute_struct.texture_rd, 'texture_rd', init_limit),
 
                 material=gmd_materials[attribute_struct.material_index],
                 unk12=gmd_unk12s[i] if unk12_arr else None,

@@ -21,6 +21,31 @@ from yk_gmd_blender.gmdlib.structure.version import VersionProperties
 from yk_gmd_blender.structurelib.base import PackingValidationError
 from yk_gmd_blender.structurelib.primitives import c_uint16
 
+def _calc_init_count(attr_set):
+    """Calculate texture_init_count for Common/Kenzan/YK1 slot ordering.
+
+    Slot order: diffuse(0) refl(1) multi(2) rm(3) ts(4) normal(5) rt(6) rd(7)
+    Returns the highest occupied slot index + 1, or 0 if no textures.
+    """
+    count = 0
+    if attr_set.texture_diffuse:
+        count = 1
+    if attr_set.texture_refl:
+        count = 2
+    if attr_set.texture_multi:
+        count = 3
+    if attr_set.texture_rm:
+        count = 4
+    if attr_set.texture_rs:
+        count = 5
+    if attr_set.texture_normal:
+        count = 6
+    if attr_set.texture_rt:
+        count = 7
+    if attr_set.texture_rd:
+        count = 8
+    return count
+
 
 def kenzan_bounds_from_gmd(gmd_bounds: GMDBoundingBox) -> BoundsDataStruct_Kenzan:
     return BoundsDataStruct_Kenzan(
@@ -268,7 +293,7 @@ def pack_abstract_contents_Kenzan(version_properties: VersionProperties, file_bi
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=8,  # TODO: Set this properly?
+            texture_init_count=_calc_init_count(gmd_attribute_set),
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 

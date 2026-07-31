@@ -297,44 +297,44 @@ class GMDVertexBufferLayout:
         uv_count = extract_bits(28, 4)
         uv_storages = []
         if uv_count:
-            if uv_en:
-                # Iterate over all uv bits, checking for active UV slots
-                for i in range(8):
-                    uv_slot_bits = extract_bits(32 + (i * 4), 4)
-                    if uv_slot_bits == 0xF:
-                        continue
+            # Parse UV slot descriptors. Do this even when uv_en is clear, because
+            # some GMD files have uv_count > 0 with uv_en = 0 but still pack UV
+            # data into the vertex buffer.
+            for i in range(8):
+                uv_slot_bits = extract_bits(32 + (i * 4), 4)
+                if uv_slot_bits == 0xF:
+                    continue
 
-                    # format_bits is a value between 0 and 3
-                    format_bits = (uv_slot_bits >> 2) & 0b11
-                    if format_bits in [2, 3]:
-                        uv_storages.append(VecStorage(VecCompFmt.Byte_0_1, 4))
-                    else:  # format_bits are 0 or 1
-                        bit_count_idx = uv_slot_bits & 0b11
-                        bit_count = (2, 3, 4, 1)[bit_count_idx]
+                # format_bits is a value between 0 and 3
+                format_bits = (uv_slot_bits >> 2) & 0b11
+                if format_bits in [2, 3]:
+                    uv_storages.append(VecStorage(VecCompFmt.Byte_0_1, 4))
+                else:  # format_bits are 0 or 1
+                    bit_count_idx = uv_slot_bits & 0b11
+                    bit_count = (2, 3, 4, 1)[bit_count_idx]
 
-                        # Component format is float16 or float32
-                        uv_comp_fmt = VecCompFmt.Float16 if format_bits else VecCompFmt.Float32
+                    # Component format is float16 or float32
+                    uv_comp_fmt = VecCompFmt.Float16 if format_bits else VecCompFmt.Float32
 
-                        if bit_count == 1:
-                            error.fatal(f"UV with 1 element encountered - unsure how to proceed")
-                        else:
-                            uv_storages.append(VecStorage(uv_comp_fmt, n_comps=bit_count))
+                    if bit_count == 1:
+                        error.fatal(f"UV with 1 element encountered - unsure how to proceed")
+                    else:
+                        uv_storages.append(VecStorage(uv_comp_fmt, n_comps=bit_count))
 
-                    if len(uv_storages) == uv_count:
-                        # Touch the rest of the bits
-                        touch_bits(range(32 + ((i + 1) * 4), 64))
-                        break
+                if len(uv_storages) == uv_count:
+                    # Touch the rest of the bits
+                    touch_bits(range(32 + ((i + 1) * 4), 64))
+                    break
 
-                if len(uv_storages) != uv_count:
-                    error.recoverable(
-                        f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs "
-                        f"but specified {len(uv_storages)}")
-            else:
-                # Touch all of the uv bits, without doing anything with them
-                touch_bits(range(32, 64))
-                error.fatal(
+            if not uv_en and uv_count:
+                error.recoverable(
                     f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs "
-                    f"but UVs are disabled")
+                    f"but UVs are disabled — parsing UV slots anyway")
+
+            if len(uv_storages) != uv_count:
+                error.recoverable(
+                    f"Layout Flags {vertex_packing_flags:016x} claimed to have {uv_count} UVs "
+                    f"but specified {len(uv_storages)}")
         else:
             # No UVs at all
             touch_bits(range(32, 64))

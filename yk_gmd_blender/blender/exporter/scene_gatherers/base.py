@@ -226,12 +226,21 @@ class BaseGMDSceneGatherer(abc.ABC):
             input = yakuza_shader_node.inputs[texture_name]
             if not input.links:
                 return None
-            if not isinstance(input.links[0].from_node, ShaderNodeTexImage):
-                self.error.fatal(
-                    f"Material {material.name} on object {referencing_object.name} has an input {texture_name} "
-                    f"which is linked to a {type(input.links[0])} node.\n"
-                    f"All the texture inputs on a Yakuza Shader node should either be linked to an Image Texture node or not linked at all.")
-            teximage_node: ShaderNodeTexImage = input.links[0].from_node
+            # Walk through intermediate nodes (e.g. MixRGB multiply for diffuse color tint)
+            # to find the actual image texture node.
+            teximage_node = input.links[0].from_node
+            while not isinstance(teximage_node, ShaderNodeTexImage):
+                # Find the first connected color input on the intermediate node.
+                upstream = None
+                for sock in teximage_node.inputs:
+                    if sock.type == "RGBA" and sock.links:
+                        upstream = sock.links[0].from_node
+                        break
+                if upstream is None:
+                    self.error.fatal(
+                        f"Material {material.name} on object {referencing_object.name} has an input {texture_name} "
+                        f"which traces through a {teximage_node.bl_idname} node but doesn't reach an image texture.")
+                teximage_node = upstream
             import os
             image_name, ext = os.path.splitext(teximage_node.image.name)
             if ext not in ['', '.dds']:

@@ -1,9 +1,10 @@
 import abc
+import json
 import os
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import bpy
 from mathutils import Vector, Matrix
@@ -31,6 +32,8 @@ class MaterialNamingType(Enum):
     Collection_DiffuseTexture = 1
     # Just DiffuseTexture name, for @Haruka-Chan
     DiffuseTexture = 2
+    # BeamNG - unique per attribute set (includes rd/rt textures and diffuse color)
+    Shader_DiffuseTexture_Color = 3
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,56 @@ class GMDSceneCreatorConfig:
 
     fuse_vertices: bool
     custom_split_normals: bool
+
+    texture_search_path: str = None
+
+
+def _attribute_set_matches_material(gmd_attr: GMDAttributeSet, yk_data: YakuzaPropertyGroup) -> bool:
+    """
+    Check whether the stored YakuzaPropertyGroup on a Blender material matches
+    the data from an incoming GMDAttributeSet.  Returns False on any mismatch
+    so we don't accidentally merge materials that just happen to share a name.
+    """
+    # Shader identity
+    if yk_data.shader_name != gmd_attr.shader.name:
+        return False
+    stored_flags = f"{gmd_attr.shader.vertex_buffer_layout.packing_flags:016x}"
+    if yk_data.shader_vertex_layout_flags != stored_flags:
+        return False
+    if yk_data.assume_skinned != gmd_attr.shader.assume_skinned:
+        return False
+
+    # Attribute flags
+    stored_af = f"{gmd_attr.attr_flags:016x}"
+    if yk_data.attribute_set_flags != stored_af:
+        return False
+
+    # Material origin version
+    if yk_data.material_origin_type != gmd_attr.material.origin_version.value:
+        return False
+
+    # Material struct data (compared via the JSON serialization)
+    stored_json = json.dumps(vars(gmd_attr.material.origin_data))
+    if yk_data.material_json != stored_json:
+        return False
+
+    # Extra float arrays
+    unk12 = gmd_attr.unk12.float_data if gmd_attr.unk12 else [0] * 32
+    if list(yk_data.unk12) != unk12:
+        return False
+
+    unk14 = gmd_attr.unk14.int_data if gmd_attr.unk14 else [0] * 32
+    # yk_data.unk14 is a FloatVectorProperty so compare as floats
+    if list(yk_data.unk14) != [float(v) for v in unk14]:
+        return False
+
+    attr_floats = gmd_attr.attr_extra_properties
+    if list(yk_data.attribute_set_floats) != attr_floats:
+        return False
+
+    # Texture slot names are not stored in yakuza_data.  If all the above
+    # properties match, the material data is identical for our purposes.
+    return True
 
 
 class BaseGMDSceneCreator(abc.ABC):
@@ -156,16 +209,42 @@ class BaseGMDSceneCreator(abc.ABC):
             node.node_tree = get_yakuza_shader_node_group(self.error)
             return node
 
+        # Build the material name for this attribute set.
         if self.config.material_naming_convention == MaterialNamingType.Collection_Shader:
             material_name = f"{collection.name_full}_{gmd_attribute_set.shader.name}"
         elif self.config.material_naming_convention == MaterialNamingType.Collection_DiffuseTexture:
             material_name = f"{collection.name_full}_{gmd_attribute_set.texture_diffuse or 'no_tex'}"
         elif self.config.material_naming_convention == MaterialNamingType.DiffuseTexture:
             material_name = f"{gmd_attribute_set.texture_diffuse or 'no_tex'}"
+        elif self.config.material_naming_convention == MaterialNamingType.Shader_DiffuseTexture_Color:
+            shader_name = gmd_attribute_set.shader.name
+            tex_name = gmd_attribute_set.texture_diffuse or "no_tex"
+            color_rgb = gmd_attribute_set.material.origin_data.diffuse
+            color_hex = f"{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}"
+            name_parts = [shader_name, tex_name]
+            rd_name = gmd_attribute_set.texture_rd
+            if rd_name and "none" not in rd_name.lower():
+                name_parts.append(f"rd{rd_name}")
+            rt_name = gmd_attribute_set.texture_rt
+            if rt_name and "none" not in rt_name.lower():
+                name_parts.append(f"rt{rt_name}")
+            name_parts.append(f"c{color_hex}")
+            material_name = "_".join(name_parts)
         else:
             self.error.fatal(
                 f"config.material_naming_convention not valid - "
                 f"expected a MaterialNamingType, got {self.config.material_naming_convention}")
+
+        # Reuse an existing Yakuza material with the same name if one already exists.
+        existing = bpy.data.materials.get(material_name)
+        if (
+            existing is not None
+            and hasattr(existing, "yakuza_data")
+            and existing.yakuza_data.inited
+            and _attribute_set_matches_material(gmd_attribute_set, existing.yakuza_data)
+        ):
+            self.material_id_to_blender[id(gmd_attribute_set)] = existing
+            return existing
 
         material = bpy.data.materials.new(material_name)
         # They all have to use nodes, of course
@@ -183,11 +262,17 @@ class BaseGMDSceneCreator(abc.ABC):
         material.node_tree.links.new(yakuza_shader_node_group.outputs["Shader"], output_node.inputs["Surface"])
 
         # Set up the group inputs and material data based on the attribute set.
+        # Build a list of search paths: GMD's own directory first, then optional texture pool.
+        gmd_folder = os.path.dirname(self.filepath)
+        texture_folders = [gmd_folder]
+        if self.config.texture_search_path:
+            texture_folders.append(self.config.texture_search_path)
+
         set_yakuza_shader_material_from_attributeset(
             material,
             yakuza_shader_node_group.inputs,
             gmd_attribute_set,
-            os.path.dirname(self.filepath)
+            texture_folders
         )
 
         # check engine
@@ -228,15 +313,28 @@ class BaseGMDSceneCreator(abc.ABC):
             uv_scaler_node.inputs[5].default_value = 1.0 if enginever == GMDVersion.Dragon else 0.0
 
             uv_scaler_node.location = (-750, -300)
+
+            def find_texture_node_for_slot(slot_name: str):
+                for link in material.node_tree.links:
+                    if link.to_socket.name == slot_name:
+                        return link.from_node
+                return None
+
             for x in material.node_tree.links:
                 rdrm_textures = ["texture_rd", "texture_rm", "texture_rs"]
                 if "skin" not in mat_yk_data.shader_name and any([y in x.to_socket.name
                                                                   for y in rdrm_textures]):
-                    material.node_tree.links.new(uv_scaler_node.outputs[1], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot(x.to_socket.name)
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[1], tex_node.inputs["Vector"])
                 if x.to_socket.name == "texture_rt":
-                    material.node_tree.links.new(uv_scaler_node.outputs[2], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot("texture_rt")
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[2], tex_node.inputs["Vector"])
                 if x.to_socket.name == "texture_refl" and "h2dz" in mat_yk_data.shader_name:
-                    material.node_tree.links.new(uv_scaler_node.outputs[0], x.from_node.inputs[0])
+                    tex_node = find_texture_node_for_slot("texture_refl")
+                    if tex_node:
+                        material.node_tree.links.new(uv_scaler_node.outputs[0], tex_node.inputs["Vector"])
 
         self.material_id_to_blender[id(gmd_attribute_set)] = material
         return material

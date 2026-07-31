@@ -321,7 +321,7 @@ def pack_abstract_contents_Dragon(version_properties: VersionProperties, file_bi
             mesh_indices_start=mesh_range[0],
             mesh_indices_count=mesh_range[1] - mesh_range[0],
 
-            texture_init_count=texture_index,  # TODO: Set this properly?
+            texture_init_count=texture_index,
             flags=gmd_attribute_set.attr_flags,
             extra_properties=gmd_attribute_set.attr_extra_properties,
 
