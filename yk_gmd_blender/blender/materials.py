@@ -339,7 +339,7 @@ def set_yakuza_shader_material_from_attributeset(material: bpy.types.Material, y
     # rt/rd textures assigned in the attribute set. Set to 0.0 (enabled) if either is true.
     has_rd_rt_shaders = any(x in attribute_set.shader.name for x in rdrt_shaders)
     has_rd_rt_textures = bool(_is_valid_texture(attribute_set.texture_rt) or _is_valid_texture(attribute_set.texture_rd))
-    yakuza_inputs["Disable RD/RT"].default_value = 0.0 if has_rd_rt_shaders or has_rd_rt_textures else 1.0
+    yakuza_inputs["Disable RD/RT"].default_value = 0.2 if has_rd_rt_shaders or has_rd_rt_textures else 1.0
 
     # check if asset shader
     yakuza_inputs["Asset shader"].default_value = 1.0 if re.search(r'^r_', attribute_set.shader.name) or \
